@@ -1,0 +1,4 @@
+User-Agent: *
+Disallow: /content_library/modal/
+
+Sitemap: https://www.visa.co.in/sitemap.xml
