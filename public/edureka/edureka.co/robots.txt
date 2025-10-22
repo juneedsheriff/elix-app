@@ -1,0 +1,154 @@
+# General directives for all bots
+User-agent: *
+Disallow: /community/search?q=*
+Disallow: /community/questions?start*
+Disallow: /community/questions?sort*
+Disallow: /community/user/*
+Disallow: /community/users?start=*
+Disallow: /community/unanswered?by=upvotes&start=*
+Disallow: /community/tags?start=*
+Disallow: /community/ask?cat=*
+Disallow: /blog-beta/
+Disallow: /newblog/
+Disallow: /admin/
+Disallow: /backend/
+Disallow: /Backup/
+Disallow: /login/
+Disallow: /dell/
+Disallow: /users/viewmodule/
+Disallow: /blog/author/
+Disallow: /blog/trending/
+Disallow: /blog/webinars/
+Disallow: /blog/tag/
+Disallow: /blog/wp-login.php*
+Disallow: /blog/?p=*
+Disallow: /blog/?s=*
+Disallow: /img/source_code/
+Disallow: /source_code/
+Disallow: /img/media/
+Disallow: /img/forum/
+Disallow: /forum/
+Disallow: /*.xls
+Disallow: /*.xlsx
+Disallow: /*.csv
+Disallow: /*.txt
+Disallow: /*.gz
+Disallow: /*.zip
+Disallow: /*.rar
+Disallow: /*.odt
+Disallow: /users/
+Disallow: /courses/
+Disallow: /search/
+Disallow: /my-certificate/
+Disallow: /certificates/
+Disallow: /lms/
+Disallow: /my-course/
+Disallow: /api/
+Disallow: /certificate/
+Disallow: /.well-known/
+Disallow: /userlead/
+Disallow: /allmedia/
+Disallow: /payments/
+Disallow: /pydio/
+Disallow: /certification/
+Disallow: /wp/
+Disallow: /Careers/
+Disallow: /mycertificate/
+Disallow: /user_courses/
+Disallow: /contents/
+Disallow: /lms_courses/
+Disallow: /blog/wp-admin/
+Disallow: /blog/videos/author/
+Disallow: /blog/interview-questions/author/
+Disallow: /lms_pages/
+Disallow: /lazyload/
+Disallow: //lms_courses
+Disallow: /search/
+Disallow: /css/fonts/
+Disallow: /custom_payment/
+Disallow: /feedback/
+Disallow: /testimonials/
+Disallow: /*-classes-online
+Disallow: /unsubscribe-v2
+
+# Allow Google/Bing/Yahoo Ad bots
+User-agent: google-hoteladsverifier
+Allow: /
+
+User-agent: Mediapartners-Google
+Allow: /
+
+User-agent: AdsBot-Google-Mobile
+Allow: /
+
+User-agent: AdsBot-Google
+Allow: /
+
+User-agent: AdIdxBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+# Allow selected AI/LLM bots (opt-in to responsible crawlers)
+User-agent: OpenAI
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: FirecrawlAgent
+Allow: /
+
+User-agent: AndiBot
+Allow: /
+
+User-agent: ExaBot
+Allow: /
+
+User-agent: PhindBot
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: Apple-Extended
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: Yandex
+Allow: /
+
+# Block high-volume commercial model scrapers
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+# Sitemaps
+Sitemap: https://www.edureka.co/edureka_sitemap.xml
+Sitemap: https://www.edureka.co/community/sitemap.xml
+Sitemap: https://www.edureka.co/edureka_videomap.xml
+Sitemap: https://www.edureka.co/blog/sitemap_index.xml
+Sitemap: https://www.edureka.co/city-sitemap.xml
+
+# Reference LLM Discoverability File
+# See: https://www.edureka.co/llms.txt
