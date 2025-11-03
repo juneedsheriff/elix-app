@@ -1,0 +1,960 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Buzops - Revenue Coach Report (Mockup)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+      :root {
+        --bg: #0b0f13;
+        --panel: #12171d;
+        --ink: #e9eef5;
+        --muted: #9fb0c3;
+        --accent: #58a6ff;
+        --ok-blue: #0072b2;
+        --ok-vermilion: #d55e00;
+        --ok-orange: #e69f00;
+        --ok-sky: #56b4e9;
+        --ok-green: #009e73;
+        --ok-yellow: #f0e442;
+        --ok-purple: #cc79a7;
+        --ok-grey: #999999;
+        --pos: #18b26b;
+        --neg: #e5534b;
+        --brand: #4cc9f0;
+        --ring: #2a3340;
+        --card: #161c23;
+        --chip: #1f2732;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Cantarell,
+          "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji",
+          "Segoe UI Symbol";
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+
+      header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .title {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+
+      .controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: var(--muted);
+      }
+
+      .controls select,
+      .controls button {
+        background: var(--chip);
+        color: var(--ink);
+        border: 1px solid #273140;
+        padding: 8px 10px;
+        border-radius: 10px;
+      }
+
+      .controls button:hover {
+        filter: brightness(1.05);
+        cursor: pointer;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .kpis {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .card {
+        background: linear-gradient(180deg, #0f141a, #0b1219 60%), var(--panel);
+        border: 1px solid #1e2836;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 0 0 1px rgba(76, 201, 240, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.25);
+      }
+
+      .kpi-label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .kpi-value {
+        font-size: 22px;
+        font-weight: 800;
+        margin-top: 4px;
+      }
+
+      .kpi-sub {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 12px;
+      }
+
+      .pill.pos {
+        background: rgba(24, 178, 107, 0.15);
+        color: #72ffc0;
+        border: 1px solid rgba(24, 178, 107, 0.35);
+      }
+
+      .pill.neg {
+        background: rgba(229, 83, 75, 0.12);
+        color: #ffb0a9;
+        border: 1px solid rgba(229, 83, 75, 0.35);
+      }
+
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 2px 2px 0 2px;
+        color: #cfe2ff;
+      }
+
+      .chart {
+        height: 340px;
+      }
+
+      @media (max-width: 1024px) {
+        .kpis {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .chart {
+          height: 320px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .kpis {
+          grid-template-columns: 1fr;
+        }
+
+        .chart {
+          height: 300px;
+        }
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+      }
+
+      .small-multiples {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .spark {
+        height: 150px;
+      }
+
+      .table {
+        overflow: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        text-align: right;
+        padding: 10px 8px;
+        border-bottom: 1px solid #1e2836;
+        color: var(--ink);
+      }
+
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+
+      thead th {
+        color: #cbd7ec;
+        font-weight: 700;
+        background: #111821;
+        position: sticky;
+        top: 0;
+      }
+
+      .footnote {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 10px;
+      }
+
+      .legend-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend-chip > i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="title">Sales Report - "Revenue Coach" (Last 3 Months)</div>
+        <div class="controls">
+          <label for="range">Range</label>
+          <select id="range">
+            <option value="3" selected>Last 3 Months</option>
+            <option value="6">Last 6 Months</option>
+            <option value="12">Last 12 Months</option>
+          </select>
+          <button id="export-png" type="button">Export dashboard PNG</button>
+        </div>
+      </header>
+
+      <section class="kpis" id="kpis">
+        <div class="card">
+          <div class="kpi-label">Total Revenue</div>
+          <div class="kpi-value" id="kpi-total">$--</div>
+          <div class="kpi-sub"><span id="kpi-total-delta" class="pill">--</span> vs prior month</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Sales (excl. Surcharges)</div>
+          <div class="kpi-value" id="kpi-sales">$--</div>
+          <div class="kpi-sub"><span id="kpi-sales-delta" class="pill">--</span> vs prior month</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Surcharge % of Total</div>
+          <div class="kpi-value" id="kpi-surcharge">--%</div>
+          <div class="kpi-sub">Target &lt; 8% - <span id="kpi-surcharge-delta" class="pill">--</span></div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Top Driver (MoM)</div>
+          <div class="kpi-value" id="kpi-driver">--</div>
+          <div class="kpi-sub" id="kpi-driver-note">--</div>
+        </div>
+      </section>
+
+      <div class="grid" style="margin-top: 16px;">
+        <div class="card">
+          <div class="section-title"><h3>Why did it move? (MoM Waterfall)</h3></div>
+          <div id="chart-waterfall" class="chart"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <h3>What's the mix? (100% stacked by month)</h3>
+            <div>
+              <span class="legend-chip"><i style="background: var(--ok-blue);"></i> Memberships</span>
+              <span class="legend-chip"><i style="background: var(--ok-green);"></i> Packages</span>
+              <span class="legend-chip"><i style="background: var(--ok-grey);"></i> POS</span>
+              <span class="legend-chip"><i style="background: var(--ok-vermilion);"></i> Add-ons</span>
+              <span class="legend-chip"><i style="background: var(--ok-purple);"></i> Classes</span>
+            </div>
+          </div>
+          <div id="chart-mix" class="chart"></div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="section-title"><h3>Where is the concentration? (Pareto - latest month)</h3></div>
+            <div id="chart-pareto" class="chart"></div>
+          </div>
+          <div class="card">
+            <div class="section-title">
+              <h3>Category momentum (small-multiples)</h3>
+              <div class="kpi-sub">Switch to 12 months for seasonality via the selector above.</div>
+            </div>
+            <div class="small-multiples" id="smalls"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            <h3>Data table (compact)</h3>
+            <div><button id="csv" type="button">Download CSV</button></div>
+          </div>
+          <div class="table">
+            <table id="tbl">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Total</th>
+                  <th>Sales</th>
+                  <th>Surcharges</th>
+                  <th>Memberships</th>
+                  <th>Group Pkg</th>
+                  <th>Semi-Private</th>
+                  <th>Private</th>
+                  <th>POS</th>
+                  <th>Add-ons</th>
+                  <th>Classes</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="footnote">
+              Source: Buzops data - Dollars shown are illustrative. Replace the <b>DATA</b> block in the
+              script to wire your real API.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const DATA = {
+        months: ["2025-09", "2025-10", "2025-11"],
+        categories: {
+          Memberships: [66621.55, 55154.48, 1492.5],
+          "Group Packages": [9607.95, 0, 0],
+          "Semi-Private": [38056.7, 11689.21, 1539.56],
+          Private: [29685.63, 0, 0],
+          POS: [38562.7, 8724.31, 533.08],
+          "Add-ons": [4111.48, 1958.4, 28],
+          Classes: [11092.69, 0, 0],
+        },
+        surcharges: [12211.24, 6259.65, 47.1],
+        refunds: [0, 0, 0],
+      };
+
+      const ORIGINAL_DATA = JSON.parse(JSON.stringify(DATA));
+
+      const COLORS = {
+        Memberships: "#0072B2",
+        "Group Packages": "#009E73",
+        "Semi-Private": "#00c38a",
+        Private: "#3dd6a0",
+        POS: "#999999",
+        "Add-ons": "#D55E00",
+        Classes: "#CC79A7",
+        __Surcharges: "#ffffff",
+      };
+
+      const fmtMoney = (v) => {
+        const value = Number(v) || 0;
+        if (Math.abs(value) >= 1_000_000) {
+          return "$" + (value / 1_000_000).toFixed(2) + "M";
+        }
+        if (Math.abs(value) >= 1_000) {
+          return "$" + (value / 1_000).toFixed(1) + "K";
+        }
+        return "$" + value.toFixed(2);
+      };
+
+      const fmtDelta = (v) => {
+        const symbol = v >= 0 ? "+" : "-";
+        return symbol + fmtMoney(Math.abs(v)).slice(1);
+      };
+
+      const pct = (v) => (v * 100).toFixed(1) + "%";
+
+      const cssVar = (name, fallback) => {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+        return raw ? raw.trim() : fallback;
+      };
+
+      const columnTotals = (idx) => {
+        const sales = Object.values(DATA.categories).reduce(
+          (acc, arr) => acc + (+arr[idx] || 0),
+          0
+        );
+        const sur = +DATA.surcharges[idx] || 0;
+        const ref = +DATA.refunds[idx] || 0;
+        return { sales, sur, refunds: ref, total: sales + sur + ref };
+      };
+
+      const computeLatest = () => {
+        const n = DATA.months.length - 1;
+        const cur = columnTotals(n);
+        const prev = columnTotals(Math.max(0, n - 1));
+        const deltas = {};
+        Object.entries(DATA.categories).forEach(([key, series]) => {
+          const current = +series[n] || 0;
+          const prior = +series[n - 1] || 0;
+          deltas[key] = current - prior;
+        });
+        return { n, cur, prev, deltas };
+      };
+
+      const setPill = (id, value, mode = "money") => {
+        const el = document.getElementById(id);
+        const sign = value >= 0 ? "+" : "-";
+        const display =
+          mode === "percent"
+            ? sign + pct(Math.abs(value))
+            : sign + fmtMoney(Math.abs(value)).slice(1);
+        el.textContent = display;
+        el.className = "pill " + (value >= 0 ? "pos" : "neg");
+      };
+
+      const updateKPIs = () => {
+        const { cur, prev, deltas } = computeLatest();
+        const totDelta = cur.total - prev.total;
+        const salesDelta = cur.sales - prev.sales;
+        const surchargePct = cur.total === 0 ? 0 : cur.sur / cur.total;
+        const prevSurchargePct = prev.total === 0 ? 0 : prev.sur / prev.total;
+
+        document.getElementById("kpi-total").textContent = fmtMoney(cur.total);
+        setPill("kpi-total-delta", totDelta);
+
+        document.getElementById("kpi-sales").textContent = fmtMoney(cur.sales);
+        setPill("kpi-sales-delta", salesDelta);
+
+        document.getElementById("kpi-surcharge").textContent = pct(surchargePct);
+        setPill("kpi-surcharge-delta", surchargePct - prevSurchargePct, "percent");
+
+        const sorted = Object.entries(deltas).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+        const top = sorted.length ? sorted[0] : ["N/A", 0];
+        const directionLabel = top[1] >= 0 ? "UP" : "DOWN";
+        document.getElementById("kpi-driver").textContent = `${top[0]} ${directionLabel} ${fmtMoney(
+          Math.abs(top[1])
+        )}`;
+        document.getElementById("kpi-driver-note").textContent = "MoM change by category driver";
+      };
+
+      const chartWaterfall = () => {
+        const el = echarts.init(document.getElementById("chart-waterfall"), null, { renderer: "canvas" });
+        const { cur, prev, deltas } = computeLatest();
+        const posColor = cssVar("--pos", "#18b26b");
+        const negColor = cssVar("--neg", "#e5534b");
+        const totalColor = cssVar("--accent", "#58a6ff");
+        const surPosColor = "#c0f3ff";
+        const surNegColor = "#93b2ff";
+        const refundColor = "#f7c5d1";
+
+        const columns = [];
+        columns.push({
+          label: "Previous",
+          helper: 0,
+          positive: prev.total,
+          negative: 0,
+          value: prev.total,
+          isTotal: true,
+          posColor: totalColor,
+          negColor: totalColor,
+        });
+
+        let running = prev.total;
+        Object.keys(DATA.categories).forEach((key) => {
+          const delta = deltas[key] || 0;
+          columns.push({
+            label: key,
+            helper: running,
+            positive: delta > 0 ? delta : 0,
+            negative: delta < 0 ? delta : 0,
+            value: delta,
+            isTotal: false,
+            posColor: posColor,
+            negColor: negColor,
+          });
+          running += delta;
+        });
+
+        const surDelta = cur.sur - prev.sur;
+        if (Math.abs(surDelta) > 1e-6) {
+          columns.push({
+            label: "Surcharges change",
+            helper: running,
+            positive: surDelta > 0 ? surDelta : 0,
+            negative: surDelta < 0 ? surDelta : 0,
+            value: surDelta,
+            isTotal: false,
+            posColor: surDelta >= 0 ? surPosColor : surNegColor,
+            negColor: surDelta >= 0 ? surPosColor : surNegColor,
+          });
+          running += surDelta;
+        }
+
+        const refDelta = cur.refunds - prev.refunds;
+        if (Math.abs(refDelta) > 1e-6) {
+          columns.push({
+            label: "Refunds change",
+            helper: running,
+            positive: refDelta > 0 ? refDelta : 0,
+            negative: refDelta < 0 ? refDelta : 0,
+            value: refDelta,
+            isTotal: false,
+            posColor: refundColor,
+            negColor: refundColor,
+          });
+          running += refDelta;
+        }
+
+        columns.push({
+          label: "Current",
+          helper: 0,
+          positive: cur.total,
+          negative: 0,
+          value: cur.total,
+          isTotal: true,
+          posColor: totalColor,
+          negColor: totalColor,
+        });
+
+        el.setOption({
+          backgroundColor: "transparent",
+          grid: { left: 12, right: 12, top: 24, bottom: 24 },
+          xAxis: {
+            type: "category",
+            data: columns.map((c) => c.label),
+            axisLabel: { color: "#cbd7ec", rotate: 20 },
+            axisLine: { lineStyle: { color: "#223045" } },
+          },
+          yAxis: {
+            type: "value",
+            axisLabel: {
+              color: "#cbd7ec",
+              formatter: (val) => {
+                if (Math.abs(val) >= 1_000_000) {
+                  return "$" + (val / 1_000_000).toFixed(1) + "M";
+                }
+                if (Math.abs(val) >= 1_000) {
+                  return "$" + (val / 1_000).toFixed(0) + "K";
+                }
+                return "$" + val;
+              },
+            },
+            splitLine: { lineStyle: { color: "#1e2836" } },
+          },
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "shadow" },
+            formatter: (params) => {
+              const active = params.find((p) => p.seriesName !== "assist" && p.value !== 0) || params[0];
+              const column = columns[active.dataIndex];
+              if (column.isTotal) {
+                return `<b>${column.label}</b><br/>${fmtMoney(column.value)}`;
+              }
+              const start = column.helper;
+              const end = column.helper + column.value;
+              const direction = column.value >= 0 ? "Increase" : "Decrease";
+              return `<b>${column.label}</b><br/>${direction}: ${fmtMoney(Math.abs(column.value))}<br/>${fmtMoney(
+                start
+              )} -> ${fmtMoney(end)}`;
+            },
+          },
+          series: [
+            {
+              name: "assist",
+              type: "bar",
+              stack: "total",
+              itemStyle: { color: "transparent" },
+              emphasis: { disabled: true },
+              tooltip: { show: false },
+              data: columns.map((c) => c.helper),
+            },
+            {
+              name: "Increase",
+              type: "bar",
+              stack: "total",
+              itemStyle: {
+                color: (params) => columns[params.dataIndex].posColor,
+              },
+              label: {
+                show: true,
+                position: "top",
+                color: "#dfe9ff",
+                formatter: (params) => {
+                  const column = columns[params.dataIndex];
+                  if (!params.value) {
+                    return "";
+                  }
+                  if (column.isTotal) {
+                    return fmtMoney(column.value);
+                  }
+                  return column.value > 0 ? fmtDelta(column.value) : "";
+                },
+              },
+              data: columns.map((c) => c.positive),
+            },
+            {
+              name: "Decrease",
+              type: "bar",
+              stack: "total",
+              itemStyle: {
+                color: (params) => columns[params.dataIndex].negColor,
+              },
+              label: {
+                show: true,
+                position: "bottom",
+                color: "#ffb0a9",
+                formatter: (params) => {
+                  const column = columns[params.dataIndex];
+                  if (!params.value || column.isTotal) {
+                    return "";
+                  }
+                  return column.value < 0 ? fmtDelta(column.value) : "";
+                },
+              },
+              data: columns.map((c) => c.negative),
+            },
+          ],
+          toolbox: { feature: { saveAsImage: { title: "Save", pixelRatio: 2 } }, right: 10 },
+        });
+        return el;
+      };
+
+      const chartMix = () => {
+        const el = echarts.init(document.getElementById("chart-mix"));
+        const months = DATA.months.slice(-3);
+        const categories = Object.keys(DATA.categories);
+        const stacks = categories.map((category) => ({
+          name: category,
+          type: "bar",
+          stack: "mix",
+          emphasis: { focus: "series" },
+          itemStyle: { color: COLORS[category] || "#6aa0ff" },
+          data: months.map((_, idx) => {
+            const index = DATA.months.length - months.length + idx;
+            const totalSales = Object.values(DATA.categories).reduce(
+              (acc, series) => acc + (+series[index] || 0),
+              0
+            );
+            const portion = totalSales === 0 ? 0 : ((+DATA.categories[category][index] || 0) / totalSales) * 100;
+            return +portion.toFixed(2);
+          }),
+        }));
+
+        el.setOption({
+          backgroundColor: "transparent",
+          legend: { show: false },
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "shadow" },
+            formatter: (params) => {
+              const header = `<b>${params[0].axisValueLabel}</b><br/>`;
+              const lines = params
+                .filter((item) => item.value > 0)
+                .map((item) => `${item.marker} ${item.seriesName}: ${item.value.toFixed(1)}%`)
+                .join("<br/>");
+              return header + lines;
+            },
+          },
+          grid: { left: 12, right: 12, top: 24, bottom: 24 },
+          xAxis: {
+            type: "category",
+            data: months,
+            axisLabel: { color: "#cbd7ec" },
+            axisLine: { lineStyle: { color: "#223045" } },
+          },
+          yAxis: {
+            type: "value",
+            min: 0,
+            max: 100,
+            axisLabel: { color: "#cbd7ec", formatter: (val) => `${val}%` },
+            splitLine: { lineStyle: { color: "#1e2836" } },
+          },
+          series: stacks,
+          toolbox: { feature: { saveAsImage: { title: "Save", pixelRatio: 2 } }, right: 10 },
+        });
+        return el;
+      };
+
+      const chartPareto = () => {
+        const el = echarts.init(document.getElementById("chart-pareto"));
+        const index = DATA.months.length - 1;
+        const entries = Object.entries(DATA.categories)
+          .map(([key, series]) => [key, +series[index] || 0])
+          .sort((a, b) => b[1] - a[1]);
+        const values = entries.map((entry) => entry[1]);
+        const labels = entries.map((entry) => entry[0]);
+        const total = values.reduce((acc, value) => acc + value, 0);
+        let cumulative = 0;
+        const cumulativePct = values.map((value) => {
+          cumulative += value;
+          return +((total === 0 ? 0 : (cumulative / total) * 100).toFixed(2));
+        });
+
+        el.setOption({
+          backgroundColor: "transparent",
+          grid: { left: 60, right: 40, top: 24, bottom: 24 },
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "shadow" },
+            formatter: (params) => {
+              const bar = params.find((p) => p.seriesType === "bar");
+              const line = params.find((p) => p.seriesType === "line");
+              if (!bar || !line) {
+                return "";
+              }
+              return `<b>${bar.axisValueLabel}</b><br/>${bar.marker} ${fmtMoney(bar.value)}<br/>${line.marker} Cumulative: ${line.value}%`;
+            },
+          },
+          xAxis: {
+            type: "value",
+            position: "top",
+            axisLabel: {
+              color: "#cbd7ec",
+              formatter: (val) => {
+                if (Math.abs(val) >= 1_000) {
+                  return "$" + (val / 1_000).toFixed(1) + "K";
+                }
+                return "$" + val;
+              },
+            },
+            splitLine: { lineStyle: { color: "#1e2836" } },
+          },
+          yAxis: {
+            type: "category",
+            data: labels,
+            axisLabel: { color: "#cbd7ec" },
+            axisLine: { lineStyle: { color: "#223045" } },
+          },
+          series: [
+            {
+              type: "bar",
+              data: values,
+              itemStyle: {
+                color: (params) => COLORS[labels[params.dataIndex]] || "#6aa0ff",
+              },
+              label: {
+                show: true,
+                position: "right",
+                color: "#dfe9ff",
+                formatter: (params) => fmtMoney(params.value),
+              },
+            },
+            {
+              type: "line",
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              data: cumulativePct,
+              symbol: "circle",
+              symbolSize: 6,
+              smooth: true,
+              lineStyle: { color: "#c7ff7a" },
+              itemStyle: { color: "#c7ff7a" },
+            },
+          ],
+          toolbox: { feature: { saveAsImage: { title: "Save", pixelRatio: 2 } }, right: 10 },
+        });
+        return el;
+      };
+
+      const chartSmalls = () => {
+        const wrap = document.getElementById("smalls");
+        wrap.innerHTML = "";
+        const months = DATA.months;
+        const categories = Object.keys(DATA.categories);
+        const instances = [];
+        categories.forEach((category) => {
+          const container = document.createElement("div");
+          container.className = "spark";
+          wrap.appendChild(container);
+          const chart = echarts.init(container);
+          const series = DATA.categories[category] || [];
+          const last = series.length ? series[series.length - 1] : 0;
+          const prior = series.length > 1 ? series[series.length - 2] : 0;
+          const denominator = prior === 0 ? (last === 0 ? 1 : Math.abs(last)) : Math.abs(prior);
+          const mom = ((last - prior) / denominator) || 0;
+          const direction = mom >= 0 ? "UP" : "DOWN";
+          const label = `${category}  ${direction} ${(mom * 100).toFixed(1)}%`;
+
+          chart.setOption({
+            backgroundColor: "transparent",
+            grid: { left: 30, right: 10, top: 24, bottom: 20 },
+            xAxis: {
+              type: "category",
+              data: months,
+              axisLabel: { show: false },
+              axisLine: { lineStyle: { color: "#203046" } },
+              axisTick: { show: false },
+            },
+            yAxis: { type: "value", axisLabel: { show: false }, splitLine: { show: false } },
+            series: [
+              {
+                name: category,
+                type: "line",
+                data: series,
+                smooth: true,
+                lineStyle: { width: 2, color: COLORS[category] || "#6aa0ff" },
+                areaStyle: { color: (COLORS[category] || "#6aa0ff") + "22" },
+                symbol: "circle",
+                symbolSize: 4,
+              },
+            ],
+            title: {
+              text: label,
+              left: 0,
+              top: 0,
+              textStyle: { color: "#cbd7ec", fontSize: 12, fontWeight: 700 },
+            },
+            tooltip: { trigger: "axis", valueFormatter: fmtMoney },
+          });
+          instances.push(chart);
+        });
+        return instances;
+      };
+
+      const fillTable = () => {
+        const tbody = document.querySelector("#tbl tbody");
+        tbody.innerHTML = "";
+        DATA.months.forEach((month, idx) => {
+          const { sales, sur, total } = columnTotals(idx);
+          const row = document.createElement("tr");
+          row.innerHTML = [
+            `<td>${month}</td>`,
+            `<td>${fmtMoney(total)}</td>`,
+            `<td>${fmtMoney(sales)}</td>`,
+            `<td>${fmtMoney(sur)}</td>`,
+            `<td>${fmtMoney(DATA.categories["Memberships"][idx] || 0)}</td>`,
+            `<td>${fmtMoney(DATA.categories["Group Packages"][idx] || 0)}</td>`,
+            `<td>${fmtMoney(DATA.categories["Semi-Private"][idx] || 0)}</td>`,
+            `<td>${fmtMoney(DATA.categories.Private[idx] || 0)}</td>`,
+            `<td>${fmtMoney(DATA.categories.POS[idx] || 0)}</td>`,
+            `<td>${fmtMoney(DATA.categories["Add-ons"][idx] || 0)}</td>`,
+            `<td>${fmtMoney(DATA.categories.Classes[idx] || 0)}</td>`,
+          ].join("");
+          tbody.appendChild(row);
+        });
+      };
+
+      const toCSV = () => {
+        const headers = Array.from(document.querySelectorAll("#tbl thead th")).map((th) =>
+          th.textContent.trim()
+        );
+        const rows = Array.from(document.querySelectorAll("#tbl tbody tr")).map((tr) =>
+          Array.from(tr.children).map((td) => td.textContent.trim())
+        );
+        const csv = [headers, ...rows]
+          .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
+          .join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "buzops-report.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const exportPNG = () => {
+        const canvases = Array.from(document.querySelectorAll("canvas")).filter(
+          (canvas) => canvas.width && canvas.height
+        );
+        if (!canvases.length) {
+          return;
+        }
+        const width = 1200;
+        const height = 1800;
+        const output = document.createElement("canvas");
+        output.width = width;
+        output.height = height;
+        const ctx = output.getContext("2d");
+        ctx.fillStyle = getComputedStyle(document.body).backgroundColor || "#0b0f13";
+        ctx.fillRect(0, 0, width, height);
+        let y = 20;
+        ctx.fillStyle = "#e9eef5";
+        ctx.font = "bold 20px Inter, Arial";
+        ctx.fillText("Buzops - Revenue Coach Report (mockup)", 20, y + 4);
+        y += 30;
+        canvases.slice(0, 6).forEach((canvas) => {
+          const ratio = Math.min((width - 40) / canvas.width, 1);
+          const drawHeight = canvas.height * ratio;
+          ctx.drawImage(canvas, 20, y, canvas.width * ratio, drawHeight);
+          y += drawHeight + 20;
+        });
+        const link = document.createElement("a");
+        link.download = "buzops-report.png";
+        link.href = output.toDataURL("image/png");
+        link.click();
+      };
+
+      const applyRange = (count) => {
+        const available = ORIGINAL_DATA.months.length;
+        const span = Math.min(count, available);
+        const start = available - span;
+        DATA.months = ORIGINAL_DATA.months.slice(start);
+        DATA.surcharges = ORIGINAL_DATA.surcharges.slice(start);
+        DATA.refunds = ORIGINAL_DATA.refunds.slice(start);
+        Object.keys(ORIGINAL_DATA.categories).forEach((key) => {
+          const source = ORIGINAL_DATA.categories[key] || [];
+          DATA.categories[key] = source.slice(start);
+        });
+      };
+
+      let charts = [];
+
+      const renderAll = () => {
+        updateKPIs();
+        charts.forEach((chart) => {
+          if (chart && chart.dispose && !chart.isDisposed()) {
+            chart.dispose();
+          }
+        });
+        charts = [];
+        charts.push(chartWaterfall());
+        charts.push(chartMix());
+        charts.push(chartPareto());
+        charts.push(...chartSmalls());
+        fillTable();
+      };
+
+      document.getElementById("csv").addEventListener("click", toCSV);
+      document.getElementById("export-png").addEventListener("click", exportPNG);
+
+      document.getElementById("range").addEventListener("change", (event) => {
+        const value = parseInt(event.target.value, 10) || 3;
+        applyRange(value);
+        renderAll();
+      });
+
+      window.addEventListener("resize", () => {
+        charts.forEach((chart) => chart && chart.resize && chart.resize());
+      });
+
+      applyRange(parseInt(document.getElementById("range").value, 10) || 3);
+      renderAll();
+    </script>
+  </body>
+</html>
