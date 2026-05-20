@@ -66,12 +66,6 @@ export default function AppShell({
 
   return (
     <div className='mobile-shell'>
-      <div className='status-bar' aria-hidden>
-        <span>9:41</span>
-        <span className='status-bar-notch' />
-        <span className='status-dots'>●●●</span>
-      </div>
-
       <section className={`workspace ${menuOpen ? 'menu-open' : ''}`}>
         <header className='topbar mobile-header'>
           <button

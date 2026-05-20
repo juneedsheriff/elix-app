@@ -105,8 +105,9 @@ text-align: center;
   padding: 0.7rem 0;
   background: transparent;
   color: var(--text);
+  outline: none !important;
 }
-
+ 
 .input-field.grow {
   flex: 1;
   min-width: 0;
@@ -130,32 +131,6 @@ text-align: center;
 
 .mobile-shell--stage {
   overflow-y: auto;
-}
-
-.status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.45rem 1rem 0.2rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-soft);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.status-bar-notch {
-  width: 88px;
-  height: 22px;
-  border-radius: 0 0 14px 14px;
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-top: 0;
-}
-
-.status-dots {
-  letter-spacing: 0.12em;
-  font-size: 0.55rem;
 }
 
 .icon-btn {
@@ -1704,9 +1679,6 @@ select {
       0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
   }
 
-  .status-bar {
-    border-radius: 32px 32px 0 0;
-  }
 }
 
 @keyframes fadeIn {
