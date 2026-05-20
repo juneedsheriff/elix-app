@@ -794,6 +794,140 @@ select {
   font-size: 0.86rem;
 }
 
+.doctors-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.doctors-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.doctors-table caption {
+  padding: 0;
+}
+
+.doctors-table th,
+.doctors-table td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+
+.doctors-table thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+  background: var(--surface);
+}
+
+.doctors-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.doctors-table tbody tr:hover {
+  background: rgba(9, 171, 192, 0.06);
+}
+
+.doctors-table-doctor {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.doctors-table-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+
+.doctors-table-name {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.doctors-table-meta {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.doctors-table-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.doctors-table-fee-col {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.doctors-table-fee {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--accent, #09abc0);
+}
+
+@media (max-width: 720px) {
+  .doctors-table {
+    min-width: 0;
+  }
+
+  .doctors-table thead {
+    display: none;
+  }
+
+  .doctors-table tbody tr {
+    display: block;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .doctors-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .doctors-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    border-bottom: none;
+    padding: 0.35rem 0.85rem;
+  }
+
+  .doctors-table td::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-soft);
+    flex-shrink: 0;
+  }
+
+  .doctors-table td:first-child::before {
+    content: none;
+  }
+
+  .doctors-table-fee-col {
+    text-align: right;
+  }
+}
+
 .doctor-grid {
   display: grid;
   gap: 0.75rem;

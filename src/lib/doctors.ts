@@ -4,6 +4,16 @@ import { supabase } from './supabase';
 const doctorColumns =
   'id, full_name, specialty, years_experience, hospital, rating, languages, fee_usd, image_url, country, bio, email, phone';
 
+/** Display consultation fee from doctors.fee_usd (whole US dollars). */
+export function formatConsultationFeeUsd(feeUsd: number): string {
+  const amount = Number.isFinite(feeUsd) ? Math.max(0, Math.round(feeUsd)) : 0;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0
+  }).format(amount);
+}
+
 /** Supabase may return numeric columns as strings; normalize for UI. */
 export function normalizeDoctor(row: Doctor): Doctor {
   return {

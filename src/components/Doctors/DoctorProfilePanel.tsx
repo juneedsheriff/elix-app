@@ -1,5 +1,6 @@
 import { Loader2, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { formatConsultationFeeUsd } from '../../lib/doctors';
 import type { Doctor } from '../../types/doctor';
 
 type DoctorProfilePanelProps = {
@@ -45,7 +46,7 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
               <div className='tag-row'>
                 <span className='tag'>{doctor.country}</span>
                 <span className='tag'>{doctor.languages}</span>
-                <span className='tag'>${doctor.fee_usd} consult</span>
+                <span className='tag'>{formatConsultationFeeUsd(doctor.fee_usd)} consult</span>
               </div>
             </div>
           </div>
@@ -73,7 +74,7 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
             </div>
             <div>
               <dt>Consultation fee</dt>
-              <dd>${doctor.fee_usd} USD</dd>
+              <dd>{formatConsultationFeeUsd(doctor.fee_usd)}</dd>
             </div>
             <div>
               <dt>Rating</dt>
