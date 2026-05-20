@@ -27,7 +27,7 @@ export default function OnboardingPage({
         <div className='onboarding-main'>
           <header className='onboarding-hero'>
              <img src="/logo-small-2.png" alt="elix" />
-            <h3 className='onboarding-title'>{welcome}</h3>
+            <h1 className='onboarding-title'>{welcome}</h1>
            </header>
 
           <ul className='onboarding-steps' aria-label='App highlights'>
