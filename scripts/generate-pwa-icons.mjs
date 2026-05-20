@@ -8,8 +8,11 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
-const svgPath = join(root, 'public', 'icons', 'icon.svg');
 const outDir = join(root, 'public', 'icons');
+const sources = [
+  { file: 'icon.svg', outputs: [192, 512] },
+  { file: 'icon-maskable.svg', outputs: [{ name: 'icon-maskable-512.png', size: 512 }] }
+];
 
 let sharp;
 try {
@@ -19,15 +22,18 @@ try {
   process.exit(1);
 }
 
-if (!existsSync(svgPath)) {
-  console.error('Missing', svgPath);
-  process.exit(1);
-}
-
-const svg = readFileSync(svgPath);
-
-for (const size of [192, 512]) {
-  const out = join(outDir, `icon-${size}.png`);
-  await sharp(svg).resize(size, size).png().toFile(out);
-  console.log('Wrote', out);
+for (const { file, outputs } of sources) {
+  const svgPath = join(outDir, file);
+  if (!existsSync(svgPath)) {
+    console.error('Missing', svgPath);
+    process.exit(1);
+  }
+  const svg = readFileSync(svgPath);
+  for (const outSpec of outputs) {
+    const size = typeof outSpec === 'number' ? outSpec : outSpec.size;
+    const name = typeof outSpec === 'number' ? `icon-${outSpec}.png` : outSpec.name;
+    const out = join(outDir, name);
+    await sharp(svg).resize(size, size).png().toFile(out);
+    console.log('Wrote', out);
+  }
 }
