@@ -1,4 +1,4 @@
-import { type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Stethoscope } from 'lucide-react';
 import { Lock, Mail } from '../../navIcons';
 
@@ -7,10 +7,11 @@ export type LoginMode = 'patient' | 'doctor';
 type AuthPageProps = {
   loginMode: LoginMode;
   configured: boolean;
+  passwordRecovery: boolean;
   email: string;
   password: string;
-  patientName: string;
   authError: string | null;
+  authSuccess: string | null;
   authBusy: boolean;
   defaultPasswordHint: string;
   copy: {
@@ -27,36 +28,116 @@ type AuthPageProps = {
   onLoginModeChange: (mode: LoginMode) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
-  onPatientNameChange: (value: string) => void;
   onSignIn: () => void;
-  onSignUp: () => void;
+  onShowPatientSignup: () => void;
   onForgotPassword: () => void;
+  onResendConfirmation: () => void;
+  onSetNewPassword: (newPassword: string, confirmPassword: string) => void;
+  onCancelPasswordRecovery: () => void;
   onDemoEnter: () => void;
 };
 
 export default function AuthPage({
   loginMode,
   configured,
+  passwordRecovery,
   email,
   password,
-  patientName,
   authError,
+  authSuccess,
   authBusy,
   defaultPasswordHint,
   copy,
   onLoginModeChange,
   onEmailChange,
   onPasswordChange,
-  onPatientNameChange,
   onSignIn,
-  onSignUp,
+  onShowPatientSignup,
   onForgotPassword,
+  onResendConfirmation,
+  onSetNewPassword,
+  onCancelPasswordRecovery,
   onDemoEnter
 }: AuthPageProps) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const showResendConfirmation =
+    Boolean(authError) &&
+    /expired|confirm|verification|invalid.+link/i.test(authError ?? '');
+
+  if (passwordRecovery) {
+    return (
+      <div className='mobile-shell mobile-shell--stage'>
+        <section className='auth-stage'>
+        
+          <h2>Set new password</h2>
+          <p className='muted'>Enter a new password for your account.</p>
+
+          <form
+            className='auth-form'
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              onSetNewPassword(newPassword, confirmPassword);
+            }}
+          >
+            <label className='input-field'>
+              <Lock size={18} aria-hidden />
+              <input
+                type='password'
+                placeholder='New password'
+                aria-label='New password'
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                autoComplete='new-password'
+                minLength={8}
+                required
+              />
+            </label>
+            <label className='input-field'>
+              <Lock size={18} aria-hidden />
+              <input
+                type='password'
+                placeholder='Confirm new password'
+                aria-label='Confirm new password'
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete='new-password'
+                minLength={8}
+                required
+              />
+            </label>
+
+            {authError ? (
+              <p className='auth-error' role='alert'>
+                {authError}
+              </p>
+            ) : null}
+            {authSuccess ? (
+              <p className='auth-success' role='status'>
+                {authSuccess}
+              </p>
+            ) : null}
+
+            <button type='submit' className='primary-btn' disabled={authBusy || !configured}>
+              {authBusy ? '…' : 'Save new password'}
+            </button>
+            <button type='button' className='text-btn' onClick={onCancelPasswordRecovery} disabled={authBusy}>
+              Back to sign in
+            </button>
+          </form>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className='mobile-shell mobile-shell--stage'>
       <section className='auth-stage'>
-        <h2>{loginMode === 'doctor' ? copy.doctorSignIn : copy.signIn}</h2>
+        <div className='logo-badge'>
+          <img src='/logo-small-2.png' alt='elix' />
+        </div>
+        <h2 style={{textAlign: 'center'}}>{loginMode === 'doctor' ? copy.doctorSignIn : copy.signIn}</h2>
         {configured ? (
           <p className='muted db-status'>{copy.connected}</p>
         ) : (
@@ -84,12 +165,10 @@ export default function AuthPage({
         </div>
         {loginMode === 'doctor' ? (
           <p className='muted doctor-login-hint'>
-            Use your <strong>@elixapp.health</strong> email. Default password: <strong>{defaultPasswordHint}</strong>
-          </p>
+           </p>
         ) : (
           <p className='muted doctor-login-hint'>
-            Sign in with your <strong>email</strong> and <strong>password</strong>. Demo:{' '}
-            <strong>alex.morgan@elixapp.health</strong> / <strong>{defaultPasswordHint}</strong>
+            
           </p>
         )}
         <form
@@ -126,30 +205,40 @@ export default function AuthPage({
               {authError}
             </p>
           ) : null}
+          {authSuccess ? (
+            <p className='auth-success' role='status'>
+              {authSuccess}
+            </p>
+          ) : null}
           <button type='submit' className='primary-btn' disabled={authBusy || !configured}>
             {authBusy ? '…' : loginMode === 'doctor' ? copy.signInAsDoctor : copy.signInAsPatient}
           </button>
           {loginMode === 'patient' ? (
-            <>
-              <label className='input-field'>
-                <span className='sr-only'>{copy.fullNamePlaceholder}</span>
-                <input
-                  type='text'
-                  placeholder={copy.fullNamePlaceholder}
-                  aria-label='Full name'
-                  value={patientName}
-                  onChange={(event) => onPatientNameChange(event.target.value)}
-                  autoComplete='name'
-                />
-              </label>
-              <button type='button' className='secondary-btn' disabled={authBusy || !configured} onClick={onSignUp}>
-                {authBusy ? '…' : copy.createPatientAccount}
-              </button>
-            </>
+            <button
+              type='button'
+              className='secondary-btn'
+              disabled={authBusy}
+              onClick={onShowPatientSignup}
+            >
+              {copy.createPatientAccount}
+            </button>
           ) : null}
-          <button type='button' className='text-btn' onClick={onForgotPassword} disabled={authBusy}>
+          <button
+            type='button'
+            className='text-btn'
+            onClick={(e) => {
+              e.preventDefault();
+              onForgotPassword();
+            }}
+            disabled={authBusy || !configured}
+          >
             Forgot password?
           </button>
+          {loginMode === 'patient' && showResendConfirmation ? (
+            <button type='button' className='text-btn' onClick={onResendConfirmation} disabled={authBusy || !configured}>
+              Resend confirmation email
+            </button>
+          ) : null}
         </form>
         {!configured ? (
           <button type='button' className='primary-btn wide' onClick={onDemoEnter}>

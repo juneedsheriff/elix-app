@@ -8,6 +8,7 @@ import {
   type ReactNode
 } from 'react';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
+import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { fetchDoctorByAuthUserId, fetchDoctorByEmail, fetchDoctorById } from '../lib/doctors';
 import { ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -34,8 +35,16 @@ type SupabaseContextValue = {
     email: string,
     password: string,
     profile?: Partial<PatientUpsertInput>
-  ) => Promise<{ error: AuthError | null; patient: Patient | null }>;
+  ) => Promise<{
+    error: AuthError | null;
+    patient: Patient | null;
+    needsEmailConfirmation: boolean;
+    profileSaved: boolean;
+  }>;
   signOut: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<{ error: AuthError | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
+  resendSignupConfirmation: (email: string) => Promise<{ error: AuthError | null }>;
   refreshDoctorProfile: () => Promise<Doctor | null>;
   refreshPatientProfile: () => Promise<Patient | null>;
   ensurePatientProfile: (profile?: Partial<PatientUpsertInput>) => Promise<Patient | null>;
@@ -210,12 +219,18 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string, profile?: Partial<PatientUpsertInput>) => {
     if (!isSupabaseConfigured) {
-      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError, patient: null };
+      return {
+        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
+        patient: null,
+        needsEmailConfirmation: false,
+        profileSaved: false
+      };
     }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: getAuthRedirectUrl('/'),
         data: {
           role: 'patient',
           full_name: profile?.full_name ?? email.split('@')[0]
@@ -223,17 +238,36 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    if (error) return { error, patient: null };
+    if (error) {
+      return { error, patient: null, needsEmailConfirmation: false, profileSaved: false };
+    }
+
+    const needsEmailConfirmation = Boolean(data.user && !data.session);
 
     let patient: Patient | null = null;
-    if (data.user) {
+    let profileSaved = false;
+
+    if (data.user && data.session) {
       const ensured = await ensurePatientProfile(data.user, { email, ...profile });
       patient = ensured.data;
+      profileSaved = Boolean(ensured.data);
+      if (ensured.error) {
+        return {
+          error: {
+            message: `Account created but patient profile failed: ${ensured.error.message}`,
+            name: 'AuthError',
+            status: 500
+          } as AuthError,
+          patient: null,
+          needsEmailConfirmation: false,
+          profileSaved: false
+        };
+      }
       setPatientProfile(patient);
     }
 
     if (data.session) setSession(data.session);
-    return { error: null, patient };
+    return { error: null, patient, needsEmailConfirmation, profileSaved };
   }, []);
 
   const signOut = useCallback(async () => {
@@ -241,6 +275,36 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setDoctorProfile(null);
     setPatientProfile(null);
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: getAuthRedirectUrl('/')
+    });
+    return { error };
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error };
+  }, []);
+
+  const resendSignupConfirmation = useCallback(async (email: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+    }
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: { emailRedirectTo: getAuthRedirectUrl('/') }
+    });
+    return { error };
   }, []);
 
   const appRole: AppRole = doctorProfile ? 'doctor' : patientProfile || session ? 'patient' : null;
@@ -259,6 +323,9 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
+      requestPasswordReset,
+      updatePassword,
+      resendSignupConfirmation,
       refreshDoctorProfile,
       refreshPatientProfile,
       ensurePatientProfile: ensurePatientProfileForSession
@@ -272,6 +339,9 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
+      requestPasswordReset,
+      updatePassword,
+      resendSignupConfirmation,
       refreshDoctorProfile,
       refreshPatientProfile,
       ensurePatientProfileForSession

@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppShell from './layout/AppShell';
 import AuthPage, { type LoginMode } from './pages/auth/AuthPage';
+import PatientSignupPage, { type PatientSignupPayload } from './pages/auth/PatientSignupPage';
 import OnboardingPage from './pages/auth/OnboardingPage';
 import SplashPage from './pages/auth/SplashPage';
 import { getNavItems, TRANSLATIONS, type Language, type Role as AppRole } from './i18n/appTranslations';
 import { getBottomTabs } from './lib/navigation/bottomTabs';
 import { useSupabase } from './context/SupabaseProvider';
+import {
+  authHashErrorMessage,
+  clearAuthHashFromUrl,
+  isPasswordRecoveryCallback,
+  parseAuthHashError
+} from './lib/authRedirect';
 import { supabase } from './lib/supabase';
 
 type Role = AppRole;
 type Theme = 'light' | 'dark';
 type Stage = 'splash' | 'onboarding' | 'auth' | 'app';
+type AuthView = 'signin' | 'signup';
 
 const DEFAULT_PASSWORD_HINT = 'Elix@123';
 
@@ -25,7 +33,10 @@ function App() {
     isDoctor,
     signIn,
     signUp,
-    signOut
+    signOut,
+    requestPasswordReset,
+    updatePassword,
+    resendSignupConfirmation
   } = useSupabase();
 
   const [theme, setTheme] = useState<Theme>('light');
@@ -38,8 +49,10 @@ function App() {
   const [languageModalOpen, setLanguageModalOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [patientName, setPatientName] = useState('');
+  const [authView, setAuthView] = useState<AuthView>('signin');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
 
@@ -97,78 +110,206 @@ function App() {
   }, [configured, session]);
 
   useEffect(() => {
+    if (!configured) return;
+
+    const hashError = parseAuthHashError();
+    if (hashError) {
+      setStage('auth');
+      setPasswordRecovery(false);
+      setAuthError(authHashErrorMessage(hashError.code, hashError.description));
+      setAuthSuccess(null);
+      clearAuthHashFromUrl();
+      return;
+    }
+
+    if (isPasswordRecoveryCallback()) {
+      setStage('auth');
+      setPasswordRecovery(true);
+      setAuthError(null);
+      setAuthSuccess('Choose a new password below.');
+      return;
+    }
+  }, [configured]);
+
+  useEffect(() => {
+    if (!configured) return;
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setStage('auth');
+        setPasswordRecovery(true);
+        setAuthError(null);
+        setAuthSuccess('Choose a new password below.');
+        clearAuthHashFromUrl();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [configured]);
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  const handleAuth = async (mode: 'signin' | 'signup') => {
+  const clearAuthForm = () => {
+    setEmail('');
+    setPassword('');
     setAuthError(null);
+    setAuthSuccess(null);
+    setPasswordRecovery(false);
+    setAuthView('signin');
+  };
+
+  const handleLoginModeChange = (mode: LoginMode) => {
+    if (mode === loginMode) return;
+    setLoginMode(mode);
+    clearAuthForm();
+  };
+
+  const handleSignIn = async () => {
+    setAuthError(null);
+    setAuthSuccess(null);
     if (!email.trim() || !password) {
       setAuthError('Enter email and password.');
       return;
     }
-    if (loginMode === 'doctor' && mode === 'signup') {
-      setAuthError('Doctor accounts are created by the platform. Use your assigned email to sign in.');
-      return;
-    }
     setAuthBusy(true);
-    if (mode === 'signin') {
-      const { error, doctor, patient } = await signIn(email.trim(), password);
-      setAuthBusy(false);
-      if (error) {
-        setAuthError(error.message);
-        return;
-      }
-      if (loginMode === 'doctor' && !doctor) {
-        await signOut();
-        setAuthError('No doctor account found for this email. Use a doctor @elixapp.health address.');
-        return;
-      }
-      if (loginMode === 'patient' && doctor) {
-        setAuthError('This is a doctor account. Switch to the Doctor tab to sign in.');
-        await signOut();
-        return;
-      }
-      setRole(doctor ? 'doctor' : 'patient');
-      setActiveScreen(doctor ? 'doctor-dashboard' : getNavItems('patient', language)[0]?.id ?? 'patient-dashboard');
-      setStage('app');
-      setAuthError(null);
-      return;
-    }
-    const displayName =
-      patientName.trim() ||
-      email
-        .trim()
-        .split('@')[0]
-        .replace(/[._-]+/g, ' ');
-    const { error, patient } = await signUp(email.trim(), password, {
-      full_name: displayName,
-      email: email.trim()
-    });
+    const { error, doctor, patient } = await signIn(email.trim(), password);
     setAuthBusy(false);
     if (error) {
       setAuthError(error.message);
       return;
     }
-    if (patient) {
+    if (loginMode === 'doctor' && !doctor) {
+      await signOut();
+      setAuthError('No doctor account found for this email. Use a doctor @elixapp.health address.');
+      return;
+    }
+    if (loginMode === 'patient' && doctor) {
+      setAuthError('This is a doctor account. Switch to the Doctor tab to sign in.');
+      await signOut();
+      return;
+    }
+    setRole(doctor ? 'doctor' : 'patient');
+    setActiveScreen(doctor ? 'doctor-dashboard' : getNavItems('patient', language)[0]?.id ?? 'patient-dashboard');
+    setStage('app');
+    setAuthError(null);
+  };
+
+  const handlePatientSignup = async (payload: PatientSignupPayload) => {
+    setAuthError(null);
+    setAuthSuccess(null);
+    setAuthBusy(true);
+
+    const { error, patient, needsEmailConfirmation, profileSaved } = await signUp(
+      payload.email,
+      payload.password,
+      {
+        full_name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone || null,
+        country: payload.country || null,
+        preferred_language: language
+      }
+    );
+
+    setAuthBusy(false);
+
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+
+    if (patient && profileSaved) {
       setRole('patient');
+      setLoginMode('patient');
       setStage('app');
+      setAuthSuccess(null);
       setAuthError(null);
       return;
     }
-    setAuthError(
-      'Account created. If email confirmation is enabled in Supabase, confirm your email then sign in with the same password.'
-    );
+
+    if (needsEmailConfirmation) {
+      setAuthSuccess(
+        `Account created for ${payload.email}. Confirm your email, then sign in — your profile will be saved to the patients table on first login.`
+      );
+      setAuthView('signin');
+      setEmail(payload.email);
+      setPassword('');
+      return;
+    }
+
+    setAuthSuccess('Account created. Sign in with your email and password.');
+    setAuthView('signin');
+    setEmail(payload.email);
+    setPassword('');
   };
 
   const handleForgotPassword = async () => {
+    if (!configured) {
+      setAuthError('Connect Supabase in .env.local first.');
+      setAuthSuccess(null);
+      return;
+    }
     if (!email.trim()) {
       setAuthError('Enter your email first.');
+      setAuthSuccess(null);
       return;
     }
     setAuthBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+    setAuthError(null);
+    setAuthSuccess(null);
+    const { error } = await requestPasswordReset(email.trim());
     setAuthBusy(false);
-    setAuthError(error ? error.message : 'Password reset email sent.');
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+    setAuthSuccess(
+      `Password reset email sent to ${email.trim()}. Open the link on this device, then set a new password.`
+    );
+  };
+
+  const handleSetNewPassword = async (newPassword: string, confirmPassword: string) => {
+    if (!newPassword || newPassword.length < 8) {
+      setAuthError('Password must be at least 8 characters.');
+      setAuthSuccess(null);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setAuthError('Passwords do not match.');
+      setAuthSuccess(null);
+      return;
+    }
+    setAuthBusy(true);
+    setAuthError(null);
+    const { error } = await updatePassword(newPassword);
+    setAuthBusy(false);
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+    setPasswordRecovery(false);
+    setPassword('');
+    setAuthSuccess('Password updated. Sign in with your new password.');
+    void signOut();
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim()) {
+      setAuthError('Enter your email first, then resend the confirmation link.');
+      return;
+    }
+    setAuthBusy(true);
+    const { error } = await resendSignupConfirmation(email.trim());
+    setAuthBusy(false);
+    setAuthError(
+      error
+        ? error.message
+        : `Confirmation email sent to ${email.trim()}. Open the newest link (older links expire).`
+    );
   };
 
   const handleSignOut = async () => {
@@ -193,24 +334,53 @@ function App() {
         />
       ) : null}
 
-      {stage === 'auth' ? (
+      {stage === 'auth' && authView === 'signup' && !passwordRecovery ? (
+        <PatientSignupPage
+          configured={configured}
+          authBusy={authBusy}
+          authError={authError}
+          authSuccess={authSuccess}
+          copy={copy}
+          onSubmit={(payload) => void handlePatientSignup(payload)}
+          onBack={() => {
+            setAuthView('signin');
+            setAuthError(null);
+            setAuthSuccess(null);
+          }}
+        />
+      ) : null}
+
+      {stage === 'auth' && (authView === 'signin' || passwordRecovery) ? (
         <AuthPage
           loginMode={loginMode}
           configured={configured}
+          passwordRecovery={passwordRecovery}
           email={email}
           password={password}
-          patientName={patientName}
           authError={authError}
+          authSuccess={authSuccess}
           authBusy={authBusy}
           defaultPasswordHint={DEFAULT_PASSWORD_HINT}
           copy={copy}
-          onLoginModeChange={setLoginMode}
+          onLoginModeChange={handleLoginModeChange}
           onEmailChange={setEmail}
           onPasswordChange={setPassword}
-          onPatientNameChange={setPatientName}
-          onSignIn={() => void handleAuth('signin')}
-          onSignUp={() => void handleAuth('signup')}
+          onSignIn={() => void handleSignIn()}
+          onShowPatientSignup={() => {
+            setAuthView('signup');
+            setAuthError(null);
+            setAuthSuccess(null);
+            setPasswordRecovery(false);
+          }}
           onForgotPassword={() => void handleForgotPassword()}
+          onResendConfirmation={() => void handleResendConfirmation()}
+          onSetNewPassword={(newPassword, confirmPassword) => void handleSetNewPassword(newPassword, confirmPassword)}
+          onCancelPasswordRecovery={() => {
+            setPasswordRecovery(false);
+            setAuthSuccess(null);
+            setAuthError(null);
+            clearAuthHashFromUrl();
+          }}
           onDemoEnter={() => setStage('app')}
         />
       ) : null}

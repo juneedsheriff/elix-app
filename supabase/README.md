@@ -1,5 +1,24 @@
 # Supabase setup
 
+## Email confirmation / password reset redirects
+
+If verification links open `localhost:3000` with `otp_expired` or `access_denied`, fix **Authentication → URL Configuration** in the Supabase Dashboard:
+
+| Setting | Value |
+|---------|--------|
+| **Site URL** | `http://localhost:3000` (dev) or `https://your-app.vercel.app` (prod) |
+| **Redirect URLs** | Add every URL users may land on after clicking email links: |
+
+```
+http://localhost:3000/**
+https://your-app.vercel.app/**
+```
+
+- Run the dev server on port **3000**: `npm run dev` (see `vite.config.js`).
+- For production, set `VITE_APP_URL=https://your-app.vercel.app` in Vercel env vars.
+- Confirmation links expire (often ~1 hour). Use **Resend confirmation email** on the sign-in screen if a link is old.
+- Request a **new** signup or resend after changing redirect URLs; old emails still point at the previous URL.
+
 ## Quick fix: tables not created
 
 ### Option 1 — SQL Editor (recommended)
