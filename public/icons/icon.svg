@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Elix">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#09abc0"/>
+      <stop offset="100%" stop-color="#83c847"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path fill="#fff" d="M256 118c-52 0-94 42-94 94 0 36 20 67 49 83l-18 97 63-34c3 0 6 1 9 1 52 0 94-42 94-94s-42-94-94-94zm0 36c32 0 58 26 58 58s-26 58-58 58-58-26-58-58 26-58 58-58z"/>
+  <circle cx="256" cy="212" r="22" fill="#09abc0"/>
+</svg>
