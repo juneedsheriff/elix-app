@@ -1,11 +1,18 @@
- import React from 'react';
 import { Container, Title } from '@mantine/core';
+import { getDashboardHeaderTitle } from '../../lib/dashboardTitle';
 
-const Header: React.FC = () => {
+type HeaderProps = {
+  screenId?: string;
+  fallbackTitle?: string;
+};
+
+const Header = ({ screenId, fallbackTitle = 'Dashboard' }: HeaderProps) => {
+  const title = getDashboardHeaderTitle(screenId, fallbackTitle);
+
   return (
     <header>
-      <Container size="lg">
-        <Title order={1}>Dashboard Header</Title>
+      <Container size='lg'>
+        <Title order={1}>{title}</Title>
       </Container>
     </header>
   );

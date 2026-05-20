@@ -1,0 +1,1 @@
+export const DEFAULT_PATIENT_PASSWORD = process.env.PATIENT_DEFAULT_PASSWORD ?? 'Elix@123';
