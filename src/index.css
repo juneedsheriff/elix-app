@@ -311,6 +311,28 @@ html[dir='rtl'] .sidebar-backdrop {
   color: var(--text-soft);
 }
 
+.auth-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 1.25rem 0.85rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(9, 171, 192, 0.18), transparent 55%),
+    radial-gradient(ellipse 90% 60% at 100% 100%, rgba(131, 200, 71, 0.12), transparent 50%),
+    var(--surface-soft);
+}
+
+.auth-shell .auth-stage {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  flex-shrink: 0;
+}
+
 .auth-stage {
   width: calc(100% - 1.7rem);
   max-width: 100%;
@@ -322,6 +344,24 @@ html[dir='rtl'] .sidebar-backdrop {
   padding: 1.25rem;
   display: grid;
   gap: 1rem;
+}
+
+.auth-stage .logo-badge {
+  display: grid;
+  place-content: center;
+  margin: 0 auto 0.25rem;
+}
+
+.auth-stage .logo-badge img {
+  max-width: 120px;
+  height: auto;
+}
+
+.auth-stage h2 {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.25rem, 4vw, 1.55rem);
+  line-height: 1.3;
 }
 
 .auth-form {

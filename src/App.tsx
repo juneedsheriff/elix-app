@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from './layout/AppShell';
 import AuthPage, { type LoginMode } from './pages/auth/AuthPage';
 import PatientSignupPage, { type PatientSignupPayload } from './pages/auth/PatientSignupPage';
@@ -6,6 +7,13 @@ import OnboardingPage from './pages/auth/OnboardingPage';
 import SplashPage from './pages/auth/SplashPage';
 import { getNavItems, TRANSLATIONS, type Language, type Role as AppRole } from './i18n/appTranslations';
 import { getBottomTabs } from './lib/navigation/bottomTabs';
+import {
+  appScreenPath,
+  consumeReturnScreen,
+  parseAppScreenPath,
+  resolveScreenForRole,
+  saveReturnScreen
+} from './lib/navigation/appRoutes';
 import { useSupabase } from './context/SupabaseProvider';
 import {
   authHashErrorMessage,
@@ -23,6 +31,10 @@ type AuthView = 'signin' | 'signup';
 const DEFAULT_PASSWORD_HINT = 'Elix@123';
 
 function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const prevStageRef = useRef<Stage>('splash');
+
   const {
     configured,
     loading: authLoading,
@@ -44,7 +56,9 @@ function App() {
   const [loginMode, setLoginMode] = useState<LoginMode>('patient');
   const [stage, setStage] = useState<Stage>('splash');
   const [language, setLanguage] = useState<Language>('en');
-  const [activeScreen, setActiveScreen] = useState<string>('patient-dashboard');
+  const [activeScreen, setActiveScreen] = useState<string>(() =>
+    parseAppScreenPath(window.location.pathname) ?? 'patient-dashboard'
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [languageModalOpen, setLanguageModalOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -64,15 +78,64 @@ function App() {
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
   }, [language]);
 
-  useEffect(() => {
-    setActiveScreen(getNavItems(role, language)[0]?.id ?? 'patient-dashboard');
-    setMenuOpen(false);
-  }, [role, language]);
+  const goToScreen = useCallback(
+    (screenId: string) => {
+      const resolved = resolveScreenForRole(role, screenId);
+      setActiveScreen(resolved);
+      setMenuOpen(false);
+      if (stage === 'app') {
+        navigate(appScreenPath(resolved));
+      }
+    },
+    [role, stage, navigate]
+  );
 
-  const goToScreen = (screenId: string) => {
-    setActiveScreen(screenId);
+  useEffect(() => {
+    const resolved = resolveScreenForRole(role, activeScreen);
+    if (resolved !== activeScreen) {
+      setActiveScreen(resolved);
+      if (stage === 'app') {
+        navigate(appScreenPath(resolved), { replace: true });
+      }
+    }
     setMenuOpen(false);
-  };
+  }, [role, language, activeScreen, stage, navigate]);
+
+  useEffect(() => {
+    if (stage === 'app') return;
+    const fromUrl = parseAppScreenPath(location.pathname);
+    if (fromUrl) {
+      saveReturnScreen(fromUrl);
+      if (!location.pathname.startsWith('/auth')) {
+        navigate('/auth', { replace: true });
+      }
+    }
+  }, [stage, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (stage !== 'app') return;
+    const fromUrl = parseAppScreenPath(location.pathname);
+    if (!fromUrl) return;
+    const resolved = resolveScreenForRole(role, fromUrl);
+    if (resolved !== activeScreen) {
+      setActiveScreen(resolved);
+    }
+  }, [location.pathname, stage, role, activeScreen]);
+
+  useEffect(() => {
+    const prev = prevStageRef.current;
+    if (prev !== 'app' && stage === 'app') {
+      const fromUrl = parseAppScreenPath(location.pathname);
+      const saved = consumeReturnScreen();
+      const resolved = resolveScreenForRole(role, saved ?? fromUrl ?? activeScreen);
+      setActiveScreen(resolved);
+      const path = appScreenPath(resolved);
+      if (location.pathname !== path) {
+        navigate(path, { replace: true });
+      }
+    }
+    prevStageRef.current = stage;
+  }, [stage, role, activeScreen, location.pathname, navigate]);
 
   useEffect(() => {
     if (stage !== 'splash') return;
@@ -95,9 +158,16 @@ function App() {
   useEffect(() => {
     if (isDoctor && doctorProfile) {
       setRole('doctor');
-      setActiveScreen('doctor-dashboard');
+      const fromUrl = parseAppScreenPath(location.pathname);
+      const resolved = resolveScreenForRole('doctor', fromUrl ?? activeScreen);
+      if (resolved !== activeScreen) {
+        setActiveScreen(resolved);
+        if (stage === 'app') {
+          navigate(appScreenPath(resolved), { replace: true });
+        }
+      }
     }
-  }, [isDoctor, doctorProfile]);
+  }, [isDoctor, doctorProfile, location.pathname, activeScreen, stage, navigate]);
 
   useEffect(() => {
     if (!configured) {
@@ -192,9 +262,14 @@ function App() {
       await signOut();
       return;
     }
-    setRole(doctor ? 'doctor' : 'patient');
-    setActiveScreen(doctor ? 'doctor-dashboard' : getNavItems('patient', language)[0]?.id ?? 'patient-dashboard');
+    const nextRole = doctor ? 'doctor' : 'patient';
+    setRole(nextRole);
+    const saved = consumeReturnScreen();
+    const fromUrl = parseAppScreenPath(location.pathname);
+    const screen = resolveScreenForRole(nextRole, saved ?? fromUrl);
+    setActiveScreen(screen);
     setStage('app');
+    navigate(appScreenPath(screen), { replace: true });
     setAuthError(null);
   };
 
@@ -225,7 +300,10 @@ function App() {
     if (patient && profileSaved) {
       setRole('patient');
       setLoginMode('patient');
+      const screen = resolveScreenForRole('patient', parseAppScreenPath(location.pathname));
+      setActiveScreen(screen);
       setStage('app');
+      navigate(appScreenPath(screen), { replace: true });
       setAuthSuccess(null);
       setAuthError(null);
       return;
@@ -315,7 +393,7 @@ function App() {
   const handleSignOut = async () => {
     await signOut();
     setStage('auth');
-    setActiveScreen(getNavItems(role, language)[0]?.id ?? 'patient-dashboard');
+    navigate('/auth', { replace: true });
   };
 
   return (
@@ -381,7 +459,12 @@ function App() {
             setAuthError(null);
             clearAuthHashFromUrl();
           }}
-          onDemoEnter={() => setStage('app')}
+          onDemoEnter={() => {
+            const screen = resolveScreenForRole(role, parseAppScreenPath(location.pathname));
+            setActiveScreen(screen);
+            setStage('app');
+            navigate(appScreenPath(screen), { replace: true });
+          }}
         />
       ) : null}
 

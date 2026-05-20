@@ -68,9 +68,8 @@ export default function AuthPage({
 
   if (passwordRecovery) {
     return (
-      <div className='mobile-shell mobile-shell--stage'>
+      <div className='mobile-shell mobile-shell--stage auth-shell'>
         <section className='auth-stage'>
-        
           <h2>Set new password</h2>
           <p className='muted'>Enter a new password for your account.</p>
 
@@ -132,12 +131,12 @@ export default function AuthPage({
   }
 
   return (
-    <div className='mobile-shell mobile-shell--stage'>
+    <div className='mobile-shell mobile-shell--stage auth-shell'>
       <section className='auth-stage'>
         <div className='logo-badge'>
           <img src='/logo-small-2.png' alt='elix' />
         </div>
-        <h2 style={{textAlign: 'center'}}>{loginMode === 'doctor' ? copy.doctorSignIn : copy.signIn}</h2>
+        <h2>{loginMode === 'doctor' ? copy.doctorSignIn : copy.signIn}</h2>
         {configured ? (
           <p className='muted db-status'>{copy.connected}</p>
         ) : (

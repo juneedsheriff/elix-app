@@ -277,7 +277,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
   }
 };
 
-const NAV_IDS: Record<Role, string[]> = {
+export const NAV_IDS: Record<Role, string[]> = {
   patient: [
     'patient-dashboard',
     'upload-records',

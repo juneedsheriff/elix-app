@@ -11,7 +11,7 @@ export default function SettingsPage({
 }: ScreenPageProps) {
   return (
     <div className='screen-grid'>
-      <SectionCard title='Database' subtitle='Elix'>
+      <SectionCard title='Elix' subtitle='Second Opinion'>
         <div className='feature-row'>
           <Tag label={dbConnected ? 'Connected' : 'Not connected'} />
           {userEmail ? <Tag label={userEmail} /> : <Tag label='Guest / demo mode' />}
