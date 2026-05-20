@@ -1156,7 +1156,7 @@ function App() {
             {requests.map((request) => (
               <li key={request.id}>
                 <strong>
-                  {request.id} | {request.patientEmail} -> {request.doctorName}
+                    {request.id} | {request.patientEmail} {'->'} {request.doctorName}
                 </strong>
                 <span>
                   {request.status} | {request.recordIds.length} docs | {request.messages.length} chat messages
