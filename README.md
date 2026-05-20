@@ -40,6 +40,23 @@ Build:
 npm run build
 ```
 
+## Deploy on Vercel
+
+This repository is Vercel-ready via `vercel.json`.
+
+1. Import the GitHub repository into Vercel **or** use CLI:
+
+```bash
+npm i -g vercel
+vercel link
+vercel --prod
+```
+
+2. Vercel settings (already configured in `vercel.json`):
+   - Build command: `npm run build`
+   - Output directory: `dist`
+   - SPA rewrites enabled for React Router routes
+
 ## Architecture and Product Docs
 
 - Database schema: `docs/architecture/database-schema.sql`
