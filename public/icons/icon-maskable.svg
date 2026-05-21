@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Elix">
-  <rect width="512" height="512" fill="#09abc0"/>
-  <path fill="#fff" d="M256 148c-44 0-80 36-80 80 0 30 17 56 42 69l-15 82 53-28c3 0 6 1 9 1 44 0 80-36 80-80s-36-80-80-80zm0 30c28 0 50 22 50 50s-22 50-50 50-50-22-50-50 22-50 50-50z"/>
-  <circle cx="256" cy="228" r="18" fill="#83c847"/>
-</svg>

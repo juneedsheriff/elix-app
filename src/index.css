@@ -416,6 +416,14 @@ select {
   gap: 0.65rem;
 }
 
+.onboarding-logo {
+  width: min(220px, 72vw);
+  height: auto;
+  margin: 0 auto 0.5rem;
+  display: block;
+  object-fit: contain;
+}
+
 .onboarding-brand {
   position: relative;
   width: 4.5rem;

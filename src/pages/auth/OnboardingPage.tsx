@@ -14,7 +14,7 @@ type OnboardingPageProps = {
 
 export default function OnboardingPage({
   welcome,
- 
+  tagline,
   items,
   skipLabel,
   continueLabel,
@@ -26,9 +26,10 @@ export default function OnboardingPage({
       <div className='onboarding-page'>
         <div className='onboarding-main'>
           <header className='onboarding-hero'>
-             <img src="/logo-small-2.png" alt="elix" />
+            <img className='onboarding-logo' src='/icons/elix-logo-source.png' alt='Elix' width={200} height={80} />
             <h1 className='onboarding-title'>{welcome}</h1>
-           </header>
+            <p className='onboarding-tagline'>{tagline}</p>
+          </header>
 
           <ul className='onboarding-steps' aria-label='App highlights'>
             {items.map((item, index) => {
