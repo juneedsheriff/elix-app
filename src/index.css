@@ -74,7 +74,16 @@ select {
 }
 
 .logo-badge {
-text-align: center;
+  text-align: center;
+}
+
+.brand-logo,
+.onboarding-logo {
+  width: min(220px, 72vw);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  object-fit: contain;
 }
 
 .onboard-icon {

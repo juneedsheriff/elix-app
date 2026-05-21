@@ -8,7 +8,7 @@ export default function SplashPage({ welcome, tagline }: SplashPageProps) {
     <div className='mobile-shell mobile-shell--stage'>
       <section className='splash'>
         <div className='logo-badge'>
-          <img src='/logo-small-2.png' alt='elix' />
+          <img className='brand-logo' src='/icons/elix-logo-transparent.png' alt='Elix' width={200} height={80} />
         </div>
         <h2>{welcome}</h2>
         <p>{tagline}</p>

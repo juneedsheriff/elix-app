@@ -27,6 +27,29 @@ if (!existsSync(sourcePath)) {
   process.exit(1);
 }
 
+/** Wordmark for light UI — knocks out near-black pixels from the source asset. */
+async function writeTransparentWordmark() {
+  const BLACK_THRESHOLD = 40;
+  const { data, info } = await sharp(sourcePath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    if (r <= BLACK_THRESHOLD && g <= BLACK_THRESHOLD && b <= BLACK_THRESHOLD) {
+      data[i + 3] = 0;
+    }
+  }
+
+  const out = join(outDir, 'elix-logo-transparent.png');
+  await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 }
+  })
+    .png()
+    .toFile(out);
+  console.log('Wrote', out);
+}
+
 async function renderSquareIcon(size, { maskable = false, filename }) {
   const inset = maskable ? 0.2 : 0.1;
   const maxSide = Math.round(size * (1 - inset * 2));
@@ -55,6 +78,8 @@ async function renderSquareIcon(size, { maskable = false, filename }) {
 
   console.log('Wrote', out);
 }
+
+await writeTransparentWordmark();
 
 await renderSquareIcon(32, { filename: 'favicon-32.png' });
 await renderSquareIcon(180, { filename: 'apple-touch-icon.png' });
