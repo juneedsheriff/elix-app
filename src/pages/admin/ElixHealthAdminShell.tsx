@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import type { Admin } from '../../types/admin';
 import ElixHealthLayout from './ElixHealthLayout';
+import { ElixHealthStaffContext } from './ElixHealthStaffContext';
 import { navIdFromPathname, pageTitleFromPathname } from './elixHealthRoutes';
 
 type ElixHealthAdminShellProps = {
@@ -14,9 +15,11 @@ export default function ElixHealthAdminShell({ admin, onSignOut }: ElixHealthAdm
   const pageTitle = pageTitleFromPathname(location.pathname, location.search);
 
   return (
-    <ElixHealthLayout admin={admin} activeNav={activeNav} pageTitle={pageTitle} onSignOut={onSignOut}>
-      <Outlet />
-    </ElixHealthLayout>
+    <ElixHealthStaffContext.Provider value={admin}>
+      <ElixHealthLayout admin={admin} activeNav={activeNav} pageTitle={pageTitle} onSignOut={onSignOut}>
+        <Outlet />
+      </ElixHealthLayout>
+    </ElixHealthStaffContext.Provider>
   );
 }
 

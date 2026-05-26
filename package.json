@@ -21,7 +21,10 @@
     "db:apply-admin-policies": "node scripts/apply-admin-policies.mjs",
     "db:apply-doctor-profile": "node scripts/apply-doctor-profile.mjs",
     "db:apply-admin-update-policies": "node scripts/apply-admin-update-policies.mjs",
-    "db:seed-admin": "node scripts/seed-admin.mjs"
+    "db:apply-staff-roles": "node scripts/apply-staff-roles.mjs",
+    "db:setup-staff-roles": "node scripts/apply-staff-roles.mjs && node scripts/seed-admin.mjs && node scripts/seed-pse.mjs",
+    "db:seed-admin": "node scripts/seed-admin.mjs",
+    "db:seed-pse": "node scripts/seed-pse.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",

@@ -6,7 +6,7 @@ import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
 import { supabase } from './supabase';
 
-const adminColumns = 'id, auth_user_id, email, full_name, is_active, created_at, updated_at';
+const adminColumns = 'id, auth_user_id, email, full_name, role, is_active, created_at, updated_at';
 
 const patientAdminColumns =
   'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, created_at, updated_at';
@@ -41,7 +41,7 @@ export async function fetchAdminByAuthUserId(authUserId: string) {
     .maybeSingle();
 
   if (result.error) return { data: null, error: result.error };
-  return { data: result.data as Admin | null, error: null };
+  return { data: result.data ? normalizeAdmin(result.data as Admin) : null, error: null };
 }
 
 export async function fetchAdminByEmail(email: string) {
@@ -53,7 +53,7 @@ export async function fetchAdminByEmail(email: string) {
     .maybeSingle();
 
   if (result.error) return { data: null, error: result.error };
-  return { data: result.data as Admin | null, error: null };
+  return { data: result.data ? normalizeAdmin(result.data as Admin) : null, error: null };
 }
 
 export async function fetchAllAdmins() {
@@ -63,7 +63,26 @@ export async function fetchAllAdmins() {
     .order('created_at', { ascending: true });
 
   if (result.error) return { data: null, error: result.error };
-  return { data: (result.data ?? []) as Admin[], error: null };
+  return { data: (result.data ?? []).map(normalizeAdmin), error: null };
+}
+
+export async function fetchPatientServiceExecutives() {
+  const result = await supabase
+    .from('admins')
+    .select(adminColumns)
+    .eq('role', 'patient_service_executive')
+    .eq('is_active', true)
+    .order('full_name', { ascending: true });
+
+  if (result.error) return { data: null, error: result.error };
+  return { data: (result.data ?? []).map(normalizeAdmin), error: null };
+}
+
+function normalizeAdmin(row: Admin): Admin {
+  return {
+    ...row,
+    role: row.role === 'patient_service_executive' ? 'patient_service_executive' : 'administrator'
+  };
 }
 
 export async function fetchAllPatientsForAdmin() {
@@ -204,7 +223,7 @@ export async function adminSignIn(email: string, password: string) {
     await supabase.auth.signOut();
     return {
       error: {
-        message: 'This account is not authorized for Elix Health admin.',
+        message: 'This account is not authorized for Elix Health staff.',
         name: 'AuthError',
         status: 403
       } as AuthError,

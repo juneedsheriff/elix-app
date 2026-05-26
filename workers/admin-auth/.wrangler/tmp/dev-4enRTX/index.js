@@ -1,7 +1,7 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
-// .wrangler/tmp/bundle-YetBgz/strip-cf-connecting-ip-header.js
+// .wrangler/tmp/bundle-Gz962G/strip-cf-connecting-ip-header.js
 function stripCfConnectingIPHeader(input, init) {
   const request = new Request(input, init);
   request.headers.delete("CF-Connecting-IP");
@@ -21231,6 +21231,212 @@ async function verifyAdmin(request, env) {
   return userId;
 }
 __name(verifyAdmin, "verifyAdmin");
+async function verifyAdministrator(request, env) {
+  const auth = request.headers.get("Authorization");
+  if (!auth?.startsWith("Bearer "))
+    return null;
+  const token = auth.slice(7);
+  const userId = await getUserIdFromToken(token, env);
+  if (!userId)
+    return null;
+  const { data, error } = await userClient(env, token).from("admins").select("id, role").eq("auth_user_id", userId).eq("is_active", true).maybeSingle();
+  if (error || !data || data.role !== "administrator")
+    return null;
+  return userId;
+}
+__name(verifyAdministrator, "verifyAdministrator");
+async function loadStaffMember(staffId, env) {
+  const { data, error } = await serviceClient(env).from("admins").select("id, auth_user_id, email, full_name, role, is_active").eq("id", staffId).maybeSingle();
+  if (error || !data)
+    return null;
+  return data;
+}
+__name(loadStaffMember, "loadStaffMember");
+async function resolveProfileAuthUserId(email, admin) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const { data: doctor } = await admin.from("doctors").select("auth_user_id, full_name").ilike("email", normalizedEmail).maybeSingle();
+  if (doctor?.auth_user_id) {
+    return { authUserId: doctor.auth_user_id, fullName: doctor.full_name ?? null };
+  }
+  const { data: patient } = await admin.from("patients").select("auth_user_id, full_name").ilike("email", normalizedEmail).maybeSingle();
+  if (patient?.auth_user_id) {
+    return { authUserId: patient.auth_user_id, fullName: patient.full_name ?? null };
+  }
+  const authUserId = await findUserByEmail(normalizedEmail, admin);
+  return { authUserId, fullName: null };
+}
+__name(resolveProfileAuthUserId, "resolveProfileAuthUserId");
+async function createStaffMember(body, env) {
+  const email = body.email.trim().toLowerCase();
+  const fullName = body.full_name.trim();
+  const password = body.password?.trim() ?? "";
+  const role = body.role === "administrator" ? "administrator" : "patient_service_executive";
+  if (!fullName)
+    return { error: "Full name is required." };
+  if (!email)
+    return { error: "Email is required." };
+  const admin = serviceClient(env);
+  const { data: existingRow } = await admin.from("admins").select("id, role, auth_user_id").ilike("email", email).maybeSingle();
+  if (existingRow?.role === role) {
+    return {
+      error: role === "patient_service_executive" ? "This email is already a Patient Service Executive." : "This email is already an administrator."
+    };
+  }
+  if (existingRow?.role === "administrator" && role === "patient_service_executive") {
+    return { error: "This email belongs to an administrator account." };
+  }
+  if (existingRow?.role === "patient_service_executive" && role === "administrator") {
+    return { error: "This email belongs to a Patient Service Executive account." };
+  }
+  let authUserId = existingRow?.auth_user_id ?? null;
+  if (!authUserId) {
+    const profileAuth = await resolveProfileAuthUserId(email, admin);
+    authUserId = profileAuth.authUserId;
+  }
+  if (!authUserId && password.length < 6) {
+    return { error: "Password is required when creating a new login (at least 6 characters)." };
+  }
+  const metadataRole = role === "administrator" ? "admin" : "patient_service_executive";
+  if (!authUserId) {
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { role: metadataRole, full_name: fullName }
+    });
+    if (authError) {
+      if (authError.message.toLowerCase().includes("already")) {
+        authUserId = await findUserByEmail(email, admin);
+        if (!authUserId)
+          return { error: authError.message };
+      } else {
+        return { error: authError.message };
+      }
+    } else {
+      authUserId = authData.user?.id ?? null;
+    }
+  }
+  if (!authUserId)
+    return { error: "Could not resolve auth user id." };
+  const { data: existingAuthUser, error: existingAuthError } = await admin.auth.admin.getUserById(authUserId);
+  if (existingAuthError)
+    return { error: existingAuthError.message };
+  const existingMetadata = existingAuthUser.user?.user_metadata && typeof existingAuthUser.user.user_metadata === "object" ? existingAuthUser.user.user_metadata : {};
+  const authPatch = {
+    ban_duration: "none",
+    user_metadata: {
+      ...existingMetadata,
+      full_name: fullName,
+      staff_role: role
+    }
+  };
+  if (!existingMetadata.role) {
+    authPatch.user_metadata.role = metadataRole;
+  }
+  if (password)
+    authPatch.password = password;
+  const { error: authUpdateError } = await admin.auth.admin.updateUserById(authUserId, authPatch);
+  if (authUpdateError)
+    return { error: authUpdateError.message };
+  const rowPayload = {
+    auth_user_id: authUserId,
+    email,
+    full_name: fullName,
+    role,
+    is_active: true,
+    updated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (existingRow) {
+    const { data: data2, error: error2 } = await admin.from("admins").update(rowPayload).eq("id", existingRow.id).select("id, auth_user_id, email, full_name, role, is_active, created_at, updated_at").single();
+    if (error2)
+      return { error: error2.message };
+    return { staff: data2 };
+  }
+  const { data, error } = await admin.from("admins").insert(rowPayload).select("id, auth_user_id, email, full_name, role, is_active, created_at, updated_at").single();
+  if (error)
+    return { error: error.message };
+  return { staff: data };
+}
+__name(createStaffMember, "createStaffMember");
+async function manageStaffMember(body, env) {
+  const staff = await loadStaffMember(body.staffId, env);
+  if (!staff)
+    return { error: "Staff member not found." };
+  if (staff.role !== "patient_service_executive") {
+    return { error: "Only Patient Service Executive accounts can be managed here." };
+  }
+  const admin = serviceClient(env);
+  if (body.action === "set_password") {
+    const password = body.password?.trim() ?? "";
+    if (password.length < 6)
+      return { error: "Password must be at least 6 characters." };
+    if (!staff.auth_user_id)
+      return { error: "No auth account linked for this staff member." };
+    const { error } = await admin.auth.admin.updateUserById(staff.auth_user_id, { password });
+    if (error)
+      return { error: error.message };
+    return { staff };
+  }
+  if (body.action === "deactivate") {
+    if (staff.auth_user_id) {
+      const { error: error2 } = await admin.auth.admin.updateUserById(staff.auth_user_id, { ban_duration: BAN_DURATION });
+      if (error2)
+        return { error: error2.message };
+    }
+    const { data, error } = await admin.from("admins").update({ is_active: false, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", staff.id).select("id, auth_user_id, email, full_name, role, is_active, created_at, updated_at").single();
+    if (error)
+      return { error: error.message };
+    return { staff: data };
+  }
+  if (body.action === "activate") {
+    if (staff.auth_user_id) {
+      const { error: error2 } = await admin.auth.admin.updateUserById(staff.auth_user_id, { ban_duration: "none" });
+      if (error2)
+        return { error: error2.message };
+    }
+    const { data, error } = await admin.from("admins").update({ is_active: true, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", staff.id).select("id, auth_user_id, email, full_name, role, is_active, created_at, updated_at").single();
+    if (error)
+      return { error: error.message };
+    return { staff: data };
+  }
+  if (body.action === "update") {
+    const fullName = body.full_name?.trim() ?? "";
+    const email = body.email?.trim().toLowerCase() ?? "";
+    if (!fullName)
+      return { error: "Full name is required." };
+    if (!email)
+      return { error: "Email is required." };
+    const { data: conflict } = await admin.from("admins").select("id").ilike("email", email).neq("id", staff.id).maybeSingle();
+    if (conflict)
+      return { error: "Another staff account already uses this email." };
+    const password = body.password?.trim() ?? "";
+    if (password && password.length < 6) {
+      return { error: "Password must be at least 6 characters." };
+    }
+    if (staff.auth_user_id) {
+      const authPatch = {
+        user_metadata: { full_name: fullName, role: "patient_service_executive" }
+      };
+      if (email !== staff.email.toLowerCase())
+        authPatch.email = email;
+      if (password)
+        authPatch.password = password;
+      const { error: authError } = await admin.auth.admin.updateUserById(staff.auth_user_id, authPatch);
+      if (authError)
+        return { error: authError.message };
+    }
+    const { data, error } = await admin.from("admins").update({
+      full_name: fullName,
+      email,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", staff.id).select("id, auth_user_id, email, full_name, role, is_active, created_at, updated_at").single();
+    if (error)
+      return { error: error.message };
+    return { staff: data };
+  }
+  return { error: "Unknown action." };
+}
+__name(manageStaffMember, "manageStaffMember");
 async function loadProfile(role, profileId, env) {
   const table = role === "doctor" ? "doctors" : "patients";
   const cols = role === "doctor" ? "id,email,full_name,auth_user_id,login_disabled,mobile_no,phone" : "id,email,full_name,auth_user_id,login_disabled,phone";
@@ -21352,11 +21558,42 @@ var src_default = {
     if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY || !env.SUPABASE_SERVICE_ROLE_KEY) {
       return json({ error: "Worker misconfigured." }, 500, origin, env);
     }
+    const url = new URL(request.url);
+    if (request.method === "POST" && (url.pathname === "/staff" || url.pathname === "/staff/manage")) {
+      const administratorId = await verifyAdministrator(request, env);
+      if (!administratorId) {
+        return json({ error: "Unauthorized. Sign in as an administrator." }, 403, origin, env);
+      }
+      if (url.pathname === "/staff") {
+        let body2;
+        try {
+          body2 = await request.json();
+        } catch {
+          return json({ error: "Invalid JSON body." }, 400, origin, env);
+        }
+        const result2 = await createStaffMember(body2, env);
+        if (result2.error)
+          return json({ error: result2.error }, 400, origin, env);
+        return json({ ok: true, staff: result2.staff }, 201, origin, env);
+      }
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: "Invalid JSON body." }, 400, origin, env);
+      }
+      if (!body.staffId || !body.action) {
+        return json({ error: "staffId and action are required." }, 400, origin, env);
+      }
+      const result = await manageStaffMember(body, env);
+      if (result.error)
+        return json({ error: result.error }, 400, origin, env);
+      return json({ ok: true, staff: result.staff }, 200, origin, env);
+    }
     const adminId = await verifyAdmin(request, env);
     if (!adminId) {
       return json({ error: "Unauthorized. Sign in as an active admin." }, 401, origin, env);
     }
-    const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/status") {
       const role = url.searchParams.get("role");
       const profileId = url.searchParams.get("profileId");
@@ -21447,7 +21684,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-YetBgz/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-Gz962G/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -21479,7 +21716,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-YetBgz/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-Gz962G/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

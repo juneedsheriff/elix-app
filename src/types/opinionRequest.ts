@@ -20,6 +20,10 @@ export type OpinionRequest = {
   patient_email: string | null;
   doctor_response: string | null;
   responded_at: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  assigned_to_name: string | null;
+  coordination_notes: string | null;
   records: OpinionRequestFile[];
 };
 

@@ -1,20 +1,43 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Pencil } from 'lucide-react';
+import { Loader2, Pencil, Search } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
 import { fetchAllPatientsForAdmin } from '../../lib/admins';
+import { canEditProfiles } from '../../lib/staffPermissions';
 import type { Patient } from '../../types/patient';
 import { patientEditUrl } from './elixHealthRoutes';
+import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString();
 }
 
+function matchesPatientSearch(patient: Patient, query: string) {
+  const haystack = [
+    patient.elix_id,
+    patient.full_name,
+    patient.email,
+    patient.phone,
+    patient.city,
+    patient.country,
+    patient.gender,
+    patient.blood_group
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
 export default function ElixHealthPatientsPage() {
+  const staff = useElixHealthStaff();
+  const canEdit = canEditProfiles(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +56,13 @@ export default function ElixHealthPatientsPage() {
     void load();
   }, [load]);
 
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filteredPatients = useMemo(() => {
+    if (!normalizedQuery) return patients;
+    return patients.filter((patient) => matchesPatientSearch(patient, normalizedQuery));
+  }, [patients, normalizedQuery]);
+
   if (loading) {
     return (
       <p className='elixhealth-status'>
@@ -49,8 +79,23 @@ export default function ElixHealthPatientsPage() {
     );
   }
 
+  const subtitle = normalizedQuery
+    ? `${filteredPatients.length} of ${patients.length} patients`
+    : `${patients.length} registered`;
+
   return (
-    <SectionCard title='Patients' subtitle={`${patients.length} registered`}>
+    <SectionCard title='Patients' subtitle={subtitle}>
+      <label className='doctor-search elixhealth-table-search'>
+        <Search size={16} aria-hidden />
+        <input
+          type='search'
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder='Search by Elix ID, name, email, phone, or location'
+          aria-label='Search patients'
+        />
+      </label>
+
       <div className='elixhealth-table-wrap'>
         <table className='elixhealth-table'>
           <thead>
@@ -66,7 +111,7 @@ export default function ElixHealthPatientsPage() {
             </tr>
           </thead>
           <tbody>
-            {patients.map((patient) => (
+            {filteredPatients.map((patient) => (
               <tr key={patient.id}>
                 <td>
                   <code>{patient.elix_id}</code>
@@ -82,7 +127,7 @@ export default function ElixHealthPatientsPage() {
                 <td>
                   <Link to={patientEditUrl(patient.id)} className='elixhealth-row-action'>
                     <Pencil size={15} aria-hidden />
-                    Edit
+                    {canEdit ? 'Edit' : 'View'}
                   </Link>
                 </td>
               </tr>
@@ -90,6 +135,9 @@ export default function ElixHealthPatientsPage() {
           </tbody>
         </table>
         {patients.length === 0 ? <p className='muted'>No patients in the database.</p> : null}
+        {patients.length > 0 && filteredPatients.length === 0 ? (
+          <p className='muted'>No patients match your search.</p>
+        ) : null}
       </div>
     </SectionCard>
   );

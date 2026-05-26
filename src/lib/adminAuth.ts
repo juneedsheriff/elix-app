@@ -75,6 +75,55 @@ async function adminAuthFetch<T>(path: string, init?: RequestInit): Promise<{ da
   }
 }
 
+export type StaffMemberPayload = {
+  id: string;
+  auth_user_id: string | null;
+  email: string;
+  full_name: string;
+  role: 'administrator' | 'patient_service_executive';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function createStaffMember(input: {
+  full_name: string;
+  email: string;
+  password?: string;
+  role?: 'administrator' | 'patient_service_executive';
+}) {
+  return adminAuthFetch<{ ok: boolean; staff: StaffMemberPayload }>('/staff', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+}
+
+export async function createPatientServiceExecutive(input: {
+  full_name: string;
+  email: string;
+  password?: string;
+}) {
+  return createStaffMember({ ...input, role: 'patient_service_executive' });
+}
+
+export async function manageStaffMember(
+  staffId: string,
+  action: 'activate' | 'deactivate' | 'set_password' | 'update',
+  options?: { password?: string; full_name?: string; email?: string }
+) {
+  return adminAuthFetch<{ ok: boolean; staff: StaffMemberPayload }>('/staff/manage', {
+    method: 'POST',
+    body: JSON.stringify({ staffId, action, ...options })
+  });
+}
+
+export async function updateStaffMember(
+  staffId: string,
+  input: { full_name: string; email: string; password?: string }
+) {
+  return manageStaffMember(staffId, 'update', input);
+}
+
 export async function fetchAccountAuthStatus(role: AccountRole, profileId: string) {
   const params = new URLSearchParams({ role, profileId });
   return adminAuthFetch<AccountAuthStatus>(`/status?${params.toString()}`);

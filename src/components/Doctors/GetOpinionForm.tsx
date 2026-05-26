@@ -113,8 +113,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
           <CheckCircle2 size={40} aria-hidden />
           <h3>Request submitted</h3>
           <p className='muted'>
-            Your second opinion request was sent to {doctor.full_name}. They will review your selected records and
-            message.
+            Your second opinion request was submitted. An admin will assign it to our patient service team, who will coordinate with you and {doctor.full_name}.
           </p>
           <button type='button' className='primary-btn wide' onClick={onBack}>
             Back to profile
