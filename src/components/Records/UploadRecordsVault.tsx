@@ -5,6 +5,7 @@ import {
   fetchUserMedicalRecords,
   getMedicalRecordDownloadUrl,
   medicalFileValidationError,
+  isR2StorageConfigured,
   uploadMedicalRecord
 } from '../../lib/records';
 import type { MedicalRecord } from '../../types/medicalRecord';
@@ -74,6 +75,10 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
     }
     if (!configured) {
       setUploadMessage('Connect Supabase to enable uploads.');
+      return;
+    }
+    if (!isR2StorageConfigured()) {
+      setUploadMessage('Set VITE_R2_API_URL to your Cloudflare Worker URL, then restart the dev server.');
       return;
     }
 
@@ -152,7 +157,7 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
       <section className='section-card'>
         <div className='section-head'>
           <h3>Medical records vault</h3>
-          <p>HIPAA and GDPR compliant encrypted storage</p>
+          <p>HIPAA and GDPR compliant encrypted storage on Cloudflare R2</p>
         </div>
 
         {!userId ? (
@@ -164,6 +169,13 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
         {!configured ? (
           <p className='auth-error' role='alert'>
             Add VITE_SUPABASE_* to .env.local, run migrations, then restart the dev server.
+          </p>
+        ) : null}
+
+        {configured && !isR2StorageConfigured() ? (
+          <p className='auth-error' role='alert'>
+            Add VITE_R2_API_URL (Cloudflare Worker for R2) to .env.local, deploy{' '}
+            <code>workers/medical-records</code>, then restart the dev server.
           </p>
         ) : null}
 
@@ -188,7 +200,7 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
           <button
             type='button'
             className='primary-btn'
-            disabled={uploading || !userId || !configured}
+            disabled={uploading || !userId || !configured || !isR2StorageConfigured()}
             onClick={(e) => {
               e.stopPropagation();
               inputRef.current?.click();
@@ -203,7 +215,7 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
             accept={ACCEPT}
             multiple
             onChange={onFileInput}
-            disabled={uploading || !userId || !configured}
+            disabled={uploading || !userId || !configured || !isR2StorageConfigured()}
             aria-label='Select medical record files'
           />
         </div>

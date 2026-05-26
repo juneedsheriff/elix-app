@@ -1908,3 +1908,807 @@ select {
     transform: translateY(0);
   }
 }
+
+/* Elix Health admin console (/elixhealth) */
+.elixhealth-shell {
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.elixhealth-login-card {
+  margin: auto;
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem 1.75rem;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.elixhealth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  color: var(--brand-cyan);
+}
+
+.elixhealth-brand h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+
+.elixhealth-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-cyan);
+}
+
+.elixhealth-submit {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Metronic-style admin shell */
+.elixhealth-app {
+  display: flex;
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--surface-soft);
+}
+
+.elixhealth-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(7, 25, 35, 0.45);
+  cursor: pointer;
+}
+
+.elixhealth-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  width: 265px;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #0c2a3f 0%, var(--brand-navy) 100%);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: 4px 0 24px rgba(7, 25, 35, 0.18);
+  transform: translateX(-100%);
+  transition: transform 220ms ease;
+}
+
+.elixhealth-sidebar--open {
+  transform: translateX(0);
+}
+
+.elixhealth-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.35rem 1.25rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.elixhealth-sidebar-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.elixhealth-sidebar-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.elixhealth-sidebar-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.elixhealth-sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 0.85rem;
+}
+
+.elixhealth-sidebar-section {
+  margin: 0 0 0.65rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.elixhealth-sidebar-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.elixhealth-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.elixhealth-sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.elixhealth-sidebar-link--active {
+  background: color-mix(in srgb, var(--brand-cyan) 22%, transparent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.elixhealth-sidebar-chevron {
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.elixhealth-sidebar-footer {
+  padding: 1rem 1rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.elixhealth-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.elixhealth-sidebar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: color-mix(in srgb, var(--brand-cyan) 35%, transparent);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.elixhealth-sidebar-user-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.elixhealth-sidebar-user-text strong {
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elixhealth-sidebar-user-text span {
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elixhealth-sidebar-signout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: background 160ms ease;
+}
+
+.elixhealth-sidebar-signout:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.elixhealth-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  min-width: 0;
+}
+
+.elixhealth-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 70px;
+  padding: 0.75rem 1.25rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(20, 63, 88, 0.04);
+}
+
+.elixhealth-topbar-start {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.elixhealth-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.elixhealth-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-soft);
+}
+
+.elixhealth-page-title {
+  margin: 0.1rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.elixhealth-topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.elixhealth-topbar-user {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.elixhealth-content {
+  flex: 1;
+  padding: 1.35rem 1.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.elixhealth-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.elixhealth-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.elixhealth-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.elixhealth-summary-item {
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.elixhealth-summary-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  margin-bottom: 0.35rem;
+}
+
+.elixhealth-summary-item strong {
+  font-size: 1.35rem;
+  color: var(--text);
+}
+
+.elixhealth-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.elixhealth-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.elixhealth-table th,
+.elixhealth-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.elixhealth-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.elixhealth-table tbody tr:hover {
+  background: color-mix(in srgb, var(--brand-cyan) 6%, transparent);
+}
+
+.elixhealth-table code {
+  font-size: 0.85em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--surface-soft);
+}
+
+.elixhealth-row-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--brand-cyan);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.elixhealth-row-action:hover {
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface));
+}
+
+.elixhealth-edit-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.elixhealth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 160ms ease;
+}
+
+.elixhealth-back-link:hover {
+  background: var(--surface-soft);
+  color: var(--brand-cyan);
+}
+
+.elixhealth-form-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.elixhealth-success {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-green) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand-green) 35%, var(--border));
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.elixhealth-auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.elixhealth-auth-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.elixhealth-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.elixhealth-badge--ok {
+  border-color: color-mix(in srgb, var(--brand-green) 40%, var(--border));
+  color: var(--brand-green);
+  background: color-mix(in srgb, var(--brand-green) 10%, var(--surface));
+}
+
+.elixhealth-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.elixhealth-retry-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-cyan);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.elixhealth-table-wrap--wide {
+  max-width: 100%;
+}
+
+.elixhealth-table--compact {
+  font-size: 0.82rem;
+}
+
+.elixhealth-table--compact th,
+.elixhealth-table--compact td {
+  padding: 0.5rem 0.6rem;
+}
+
+.elixhealth-profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.elixhealth-profile-tab {
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.elixhealth-profile-tab--active {
+  border-color: var(--brand-cyan);
+  background: color-mix(in srgb, var(--brand-cyan) 12%, var(--surface));
+  color: var(--text);
+}
+
+.elixhealth-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.elixhealth-form-section-title {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.elixhealth-field select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.elixhealth-field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  grid-column: 1 / -1;
+}
+
+.elixhealth-field--checkbox input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.elixhealth-color-input {
+  width: 100%;
+  height: 42px;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.elixhealth-hours-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.elixhealth-hours-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 1fr;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.elixhealth-hours-day {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.elixhealth-field--inline span {
+  font-size: 0.72rem;
+}
+
+@media (max-width: 640px) {
+  .elixhealth-hours-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.elixhealth-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.elixhealth-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: rgba(15, 47, 70, 0.5);
+  cursor: pointer;
+}
+
+.elixhealth-modal {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 720px);
+  max-height: min(92dvh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  animation: fadeIn 200ms ease-out;
+}
+
+.elixhealth-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.elixhealth-modal-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.elixhealth-modal-head .muted {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.elixhealth-modal-close {
+  flex-shrink: 0;
+}
+
+.elixhealth-modal-body {
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.elixhealth-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 0.85rem 1.25rem 1.1rem;
+  border-top: 1px solid var(--border);
+}
+
+.elixhealth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.elixhealth-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.elixhealth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+}
+
+.elixhealth-field span {
+  font-weight: 600;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.elixhealth-field input,
+.elixhealth-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+
+.elixhealth-field input:focus,
+.elixhealth-field textarea:focus {
+  border-color: var(--brand-cyan);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-cyan) 18%, transparent);
+}
+
+.elixhealth-field--full {
+  grid-column: 1 / -1;
+}
+
+.elixhealth-readonly-id {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-soft);
+}
+
+.elixhealth-readonly-id code {
+  font-size: 0.9em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--surface-soft);
+}
+
+@media (max-width: 640px) {
+  .elixhealth-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .elixhealth-field--full {
+    grid-column: auto;
+  }
+}
+
+@media (min-width: 992px) {
+  .elixhealth-sidebar {
+    transform: translateX(0);
+  }
+
+  .elixhealth-sidebar-backdrop {
+    display: none !important;
+  }
+
+  .elixhealth-menu-toggle {
+    display: none;
+  }
+
+  .elixhealth-main {
+    margin-left: 265px;
+  }
+}
+
+@media (max-width: 991px) {
+  .elixhealth-sidebar-backdrop {
+    display: block;
+  }
+}

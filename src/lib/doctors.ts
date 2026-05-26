@@ -1,8 +1,8 @@
 import type { Doctor } from '../types/doctor';
+import { DOCTOR_PROFILE_COLUMNS, normalizeDoctorProfile } from './doctorProfile';
 import { supabase } from './supabase';
 
-const doctorColumns =
-  'id, full_name, specialty, years_experience, hospital, rating, languages, fee_usd, image_url, country, bio, email, phone';
+const doctorColumns = DOCTOR_PROFILE_COLUMNS;
 
 /** Display consultation fee from doctors.fee_usd (whole US dollars). */
 export function formatConsultationFeeUsd(feeUsd: number): string {
@@ -16,12 +16,7 @@ export function formatConsultationFeeUsd(feeUsd: number): string {
 
 /** Supabase may return numeric columns as strings; normalize for UI. */
 export function normalizeDoctor(row: Doctor): Doctor {
-  return {
-    ...row,
-    years_experience: Number(row.years_experience),
-    rating: Number(row.rating),
-    fee_usd: Number(row.fee_usd)
-  };
+  return normalizeDoctorProfile(row);
 }
 
 export async function fetchDoctors(limit = 50) {

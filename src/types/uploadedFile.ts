@@ -1,4 +1,4 @@
-/** Row in public.uploaded_files — file bytes live in Supabase Storage. */
+/** Row in public.uploaded_files — file bytes live in Cloudflare R2. */
 export type UploadedFile = {
   id: string;
   user_id: string | null;

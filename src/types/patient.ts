@@ -1,5 +1,6 @@
 export type Patient = {
   id: string;
+  elix_id: string;
   auth_user_id: string | null;
   full_name: string;
   email: string;
@@ -16,6 +17,7 @@ export type Patient = {
   emergency_contact_phone: string | null;
   preferred_language: string;
   avatar_url: string | null;
+  login_disabled?: boolean;
   created_at: string;
   updated_at: string;
 };

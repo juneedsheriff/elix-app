@@ -12,16 +12,43 @@ create extension if not exists "pgcrypto";
 create table if not exists public.doctors (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
-  specialty text not null,
-  years_experience integer not null check (years_experience >= 0),
-  hospital text not null,
-  rating numeric(3, 2) not null check (rating >= 0 and rating <= 5),
-  languages text not null,
-  fee_usd integer not null check (fee_usd >= 0),
-  image_url text not null,
-  country text not null,
-  bio text,
+  gender text,
+  mobile_no text,
   email text,
+  medical_license_no text,
+  qualification text,
+  start_of_practice date,
+  specialty text not null,
+  specialization text,
+  about_doctor text,
+  work_experience text,
+  awards_recognitions text,
+  membership text,
+  clinic_name text,
+  clinic_specialization text,
+  about_clinic text,
+  clinic_website text,
+  clinic_country text,
+  clinic_state text,
+  clinic_city text,
+  clinic_location text,
+  clinic_street text,
+  clinic_zipcode text,
+  scheduler_effect_from date,
+  scheduler_time_interval integer check (scheduler_time_interval is null or scheduler_time_interval > 0),
+  consultation_fee integer check (consultation_fee is null or consultation_fee >= 0),
+  elix_patient_priority boolean not null default false,
+  scheduler_color text default '#09abc0',
+  consultation_hours jsonb not null default '{}'::jsonb,
+  time_settings jsonb not null default '{}'::jsonb,
+  years_experience integer not null check (years_experience >= 0) default 0,
+  hospital text not null default '',
+  rating numeric(3, 2) not null check (rating >= 0 and rating <= 5) default 4.5,
+  languages text not null default 'English',
+  fee_usd integer not null check (fee_usd >= 0) default 0,
+  image_url text not null default '',
+  country text not null default '',
+  bio text,
   phone text,
   auth_user_id uuid unique references auth.users (id) on delete set null,
   created_at timestamptz not null default now()
@@ -38,11 +65,77 @@ drop policy if exists "doctors_select_public" on public.doctors;
 create policy "doctors_select_public"
   on public.doctors for select to anon, authenticated using (true);
 
+drop policy if exists "doctors_update_admins" on public.doctors;
+create policy "doctors_update_admins"
+  on public.doctors for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- -----------------------------------------------------------------------------
+-- Admins
+-- -----------------------------------------------------------------------------
+create table if not exists public.admins (
+  id uuid primary key default gen_random_uuid(),
+  auth_user_id uuid unique references auth.users (id) on delete cascade,
+  email text not null,
+  full_name text not null default 'Administrator',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists admins_email_idx on public.admins (lower(email));
+create index if not exists admins_auth_user_idx on public.admins (auth_user_id);
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.admins a
+    where a.auth_user_id = auth.uid() and a.is_active = true
+  );
+$$;
+
+alter table public.admins enable row level security;
+
+drop policy if exists "admins_select_own" on public.admins;
+create policy "admins_select_own"
+  on public.admins for select to authenticated using (auth_user_id = auth.uid());
+
 -- -----------------------------------------------------------------------------
 -- Patients
 -- -----------------------------------------------------------------------------
+create sequence if not exists public.patient_elix_id_seq;
+
+create or replace function public.generate_patient_elix_id()
+returns text
+language plpgsql
+as $$
+declare
+  n bigint;
+  pair_index bigint;
+  num_part int;
+  first_letter text;
+  second_letter text;
+begin
+  n := nextval('public.patient_elix_id_seq') - 1;
+  if n >= 6760000 then
+    raise exception 'patient elix_id sequence exhausted (max 6,760,000 IDs)';
+  end if;
+  pair_index := n / 10000;
+  num_part := (n % 10000)::int;
+  first_letter := chr(97 + ((pair_index / 26) % 26)::int);
+  second_letter := chr(97 + (pair_index % 26)::int);
+  return 'elix-' || first_letter || second_letter || lpad(num_part::text, 4, '0');
+end;
+$$;
+
 create table if not exists public.patients (
   id uuid primary key default gen_random_uuid(),
+  elix_id text not null,
   auth_user_id uuid unique references auth.users (id) on delete cascade,
   full_name text not null,
   email text not null,
@@ -64,7 +157,30 @@ create table if not exists public.patients (
 );
 
 create unique index if not exists patients_email_idx on public.patients (lower(email));
+create unique index if not exists patients_elix_id_idx on public.patients (elix_id);
 create index if not exists patients_auth_user_idx on public.patients (auth_user_id);
+
+alter table public.patients
+  add constraint patients_elix_id_format_chk
+  check (elix_id ~ '^elix-[a-z]{2}[0-9]{4}$');
+
+create or replace function public.set_patient_elix_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.elix_id is null or btrim(new.elix_id) = '' then
+    new.elix_id := public.generate_patient_elix_id();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists patients_set_elix_id on public.patients;
+create trigger patients_set_elix_id
+  before insert on public.patients
+  for each row
+  execute function public.set_patient_elix_id();
 
 alter table public.patients enable row level security;
 
@@ -85,6 +201,15 @@ drop policy if exists "patients_update_own" on public.patients;
 create policy "patients_update_own"
   on public.patients for update to authenticated
   using (auth_user_id = auth.uid()) with check (auth_user_id = auth.uid());
+
+drop policy if exists "patients_select_admins" on public.patients;
+create policy "patients_select_admins"
+  on public.patients for select to authenticated using (public.is_admin());
+
+drop policy if exists "patients_update_admins" on public.patients;
+create policy "patients_update_admins"
+  on public.patients for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- Uploaded files + opinion requests
@@ -172,6 +297,10 @@ create policy "uploaded_files_update"
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
+drop policy if exists "uploaded_files_select_admins" on public.uploaded_files;
+create policy "uploaded_files_select_admins"
+  on public.uploaded_files for select to authenticated using (public.is_admin());
+
 drop policy if exists "opinion_requests_select" on public.opinion_requests;
 create policy "opinion_requests_select"
   on public.opinion_requests for select to anon, authenticated
@@ -214,6 +343,18 @@ create policy "opinion_request_records_select"
 drop policy if exists "opinion_request_records_insert" on public.opinion_request_records;
 create policy "opinion_request_records_insert"
   on public.opinion_request_records for insert to anon, authenticated with check (true);
+
+drop policy if exists "opinion_requests_select_admins" on public.opinion_requests;
+create policy "opinion_requests_select_admins"
+  on public.opinion_requests for select to authenticated using (public.is_admin());
+
+drop policy if exists "opinion_request_records_select_admins" on public.opinion_request_records;
+create policy "opinion_request_records_select_admins"
+  on public.opinion_request_records for select to authenticated using (public.is_admin());
+
+drop policy if exists "admins_select_all_admins" on public.admins;
+create policy "admins_select_all_admins"
+  on public.admins for select to authenticated using (public.is_admin());
 
 -- -----------------------------------------------------------------------------
 -- Storage bucket for uploads (PDF, JPG, DOC)
