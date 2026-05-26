@@ -13,6 +13,7 @@ type AdminDoctorEditFormProps = {
   doctor: Doctor;
   onSaved: (doctor: Doctor) => void;
   onAuthChanged?: () => void;
+  readOnly?: boolean;
 };
 
 const TABS: { id: DoctorEditTab; label: string }[] = [
@@ -22,11 +23,16 @@ const TABS: { id: DoctorEditTab; label: string }[] = [
   { id: 'login', label: 'Login' }
 ];
 
-export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged }: AdminDoctorEditFormProps) {
+export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, readOnly = false }: AdminDoctorEditFormProps) {
+  const visibleTabs = readOnly ? TABS.filter((tab) => tab.id !== 'login') : TABS;
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as DoctorEditTab | null;
   const activeTab: DoctorEditTab =
-    tabParam === 'clinic' || tabParam === 'scheduler' || tabParam === 'login' ? tabParam : 'profile';
+    readOnly && tabParam === 'login'
+      ? 'profile'
+      : tabParam === 'clinic' || tabParam === 'scheduler' || tabParam === 'login'
+        ? tabParam
+        : 'profile';
 
   const [form, setForm] = useState<AdminDoctorUpdateInput>(() => doctorToAdminInput(doctor));
   const [busy, setBusy] = useState(false);
@@ -72,7 +78,7 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged }: 
       ) : null}
 
       <div className='elixhealth-profile-tabs' role='tablist' aria-label='Doctor profile sections'>
-        {TABS.map(({ id, label }) => (
+        {visibleTabs.map(({ id, label }) => (
           <button
             key={id}
             type='button'
@@ -87,6 +93,8 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged }: 
           </button>
         ))}
       </div>
+
+      <fieldset disabled={readOnly || busy} className='elixhealth-form-fieldset'>
 
       {activeTab === 'profile' ? (
         <div className='elixhealth-tab-panel' role='tabpanel'>
@@ -464,7 +472,7 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged }: 
         </div>
       ) : null}
 
-      {activeTab === 'login' ? (
+      {activeTab === 'login' && !readOnly ? (
         <div className='elixhealth-tab-panel' role='tabpanel'>
           <AdminAccountAccessPanel
             role='doctor'
@@ -477,7 +485,7 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged }: 
         </div>
       ) : null}
 
-      {activeTab !== 'login' ? (
+      {activeTab !== 'login' && !readOnly ? (
       <div className='elixhealth-form-actions'>
         <button type='submit' className='primary-btn' disabled={busy}>
           {busy ? (
@@ -490,6 +498,7 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged }: 
         </button>
       </div>
       ) : null}
+      </fieldset>
     </form>
   );
 }

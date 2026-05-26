@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { Activity, Bell, Clock, FolderOpen } from '../../navIcons';
 import MetricCard from '../../components/ui/MetricCard';
 import SectionCard from '../../components/ui/SectionCard';
-import { fetchPatientOpinionRequests, isAwaitingDoctorReply } from '../../lib/opinionRequests';
+import { fetchPatientOpinionRequests, isAwaitingDoctorReply, patientRequestStatusLabel } from '../../lib/opinionRequests';
 import { fetchUserMedicalRecords } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
@@ -188,7 +188,7 @@ export default function PatientDashboardPage({
                 <li key={request.id}>
                   <strong>{request.doctor_name ?? 'Doctor'}</strong>
                   <span>
-                    {request.doctor_response ? 'Reply received' : 'Awaiting reply'}
+                    {patientRequestStatusLabel(request)}
                     {' • '}
                     {formatRequestDate(request.created_at)}
                   </span>

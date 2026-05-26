@@ -52,7 +52,43 @@ const requestListSelectMinimalBase = `
   doctor_name
 `;
 
+const assignmentFields = `
+  assigned_to,
+  assigned_at,
+  coordination_notes,
+  assignee:admins!opinion_requests_assigned_to_fkey (
+    full_name
+  )
+`;
+
 const requestListSelectWithResponse = `
+  id,
+  message,
+  status,
+  created_at,
+  patient_id,
+  patient_name,
+  doctor_id,
+  doctor_name,
+  doctor_response,
+  responded_at,
+  ${assignmentFields},
+  doctors (
+    id,
+    full_name,
+    specialty
+  ),
+  opinion_request_records (
+    uploaded_files (
+      id,
+      file_name,
+      summary,
+      storage_path
+    )
+  )
+`;
+
+const requestListSelectWithResponseNoAssign = `
   id,
   message,
   status,
@@ -83,6 +119,52 @@ export function isAwaitingDoctorReply(request: Pick<OpinionRequest, 'doctor_resp
   return !request.doctor_response?.trim();
 }
 
+/** Request submitted by patient but not yet assigned by admin. */
+export function isPendingAdminAssignment(
+  request: Pick<OpinionRequest, 'status' | 'assigned_to'>
+): boolean {
+  return request.status === 'submitted' && !request.assigned_to;
+}
+
+/** @deprecated Use isPendingAdminAssignment */
+export function isPendingAdminApproval(
+  request: Pick<OpinionRequest, 'status' | 'assigned_to'>
+): boolean {
+  return isPendingAdminAssignment(request);
+}
+
+export function isAssignedToPatientService(
+  request: Pick<OpinionRequest, 'status' | 'assigned_to'>
+): boolean {
+  return request.status === 'submitted' && Boolean(request.assigned_to);
+}
+
+export function patientRequestStatusLabel(
+  request: Pick<OpinionRequest, 'status' | 'doctor_response' | 'assigned_to'>
+): string {
+  if (request.doctor_response?.trim()) return 'Reply received';
+  if (request.status === 'submitted' && !request.assigned_to) return 'Pending admin review';
+  if (request.status === 'submitted' && request.assigned_to) return 'Being coordinated by our team';
+  if (request.status === 'in_review') return 'Awaiting doctor reply';
+  if (request.status === 'closed') return 'Closed';
+  return 'Submitted';
+}
+
+export function staffRequestStatusLabel(
+  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'doctor_response'>
+): string {
+  if (request.doctor_response?.trim() || request.status === 'closed') return 'Closed';
+  if (request.status === 'in_review') return 'With doctor';
+  if (request.status === 'submitted' && request.assigned_to) return 'With patient service';
+  if (request.status === 'submitted') return 'Pending assignment';
+  return request.status;
+}
+
+function isMissingAssignmentColumnsError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('assigned_to') || msg.includes('coordination_notes') || msg.includes('assignee');
+}
+
 function isMissingResponseColumnsError(error: { message?: string } | null) {
   const msg = error?.message?.toLowerCase() ?? '';
   return msg.includes('doctor_response') || msg.includes('responded_at');
@@ -99,6 +181,10 @@ type RequestListRow = {
   doctor_name: string | null;
   doctor_response: string | null;
   responded_at: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  coordination_notes: string | null;
+  assignee: { full_name: string } | null;
   doctors: { id: string; full_name: string; specialty: string } | null;
   opinion_request_records: Array<{
     uploaded_files: OpinionRequestFile | null;
@@ -209,6 +295,10 @@ function mapRequestRow(
     patient_email: patient?.email ?? null,
     doctor_response: row.doctor_response,
     responded_at: row.responded_at,
+    assigned_to: row.assigned_to ?? null,
+    assigned_at: row.assigned_at ?? null,
+    assigned_to_name: row.assignee?.full_name ?? null,
+    coordination_notes: row.coordination_notes ?? null,
     records
   };
 }
@@ -277,6 +367,13 @@ async function fetchOpinionRequestRows(
   let result = await buildQuery(requestListSelectWithResponse);
   if (!result.error) {
     return { rows: result.data, error: null, responsesEnabled: true };
+  }
+
+  if (isMissingAssignmentColumnsError(result.error)) {
+    result = await buildQuery(requestListSelectWithResponseNoAssign);
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
   }
 
   if (isMissingResponseColumnsError(result.error)) {
@@ -367,4 +464,89 @@ export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequests
     const message = err instanceof Error ? err.message : 'Failed to load patient details';
     return { data: null, error: { message }, responsesEnabled: false };
   }
+}
+
+/** Loads opinion requests visible to signed-in staff (administrator: all; PSE: assigned). */
+export async function fetchOpinionRequestsForStaff(): Promise<FetchOpinionRequestsResult> {
+  const { rows, error, responsesEnabled } = await fetchOpinionRequestRows();
+
+  if (error) {
+    return {
+      data: null,
+      error: { message: `${error.message}${permissionHint(error.code, error.message)}` },
+      responsesEnabled: false
+    };
+  }
+
+  const authUserIds = [...new Set((rows ?? []).map((r) => r.patient_id).filter(Boolean))] as string[];
+
+  try {
+    const patientMap = await loadPatientEmailMap(authUserIds);
+    return {
+      data: (rows ?? []).map((row) => mapRequestRow(row, patientMap)),
+      error: null,
+      responsesEnabled
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to load patient details';
+    return { data: null, error: { message }, responsesEnabled: false };
+  }
+}
+
+/** @deprecated Use fetchOpinionRequestsForStaff */
+export const fetchAllOpinionRequestsForAdmin = fetchOpinionRequestsForStaff;
+
+/** Administrator assigns a submitted request to a Patient Service Executive. */
+export async function assignOpinionRequest(requestId: string, assigneeAdminId: string) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      assigned_to: assigneeAdminId,
+      assigned_at: new Date().toISOString()
+    })
+    .eq('id', requestId)
+    .eq('status', 'submitted')
+    .select('id, assigned_to, assigned_at')
+    .single();
+
+  if (error) {
+    const hint =
+      error.code === '42501' || error.message?.toLowerCase().includes('permission')
+        ? ' Run supabase/migrations/017_staff_roles_request_assignment.sql in the Supabase SQL Editor.'
+        : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+
+  return { data, error: null };
+}
+
+/** Patient Service Executive forwards a coordinated request to the doctor. */
+export async function forwardOpinionRequestToDoctor(requestId: string, coordinationNotes?: string) {
+  const update: {
+    status: 'in_review';
+    coordination_notes?: string;
+  } = { status: 'in_review' };
+
+  const trimmedNotes = coordinationNotes?.trim();
+  if (trimmedNotes) {
+    update.coordination_notes = trimmedNotes;
+  }
+
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update(update)
+    .eq('id', requestId)
+    .eq('status', 'submitted')
+    .select('id, status, coordination_notes')
+    .single();
+
+  if (error) {
+    const hint =
+      error.code === '42501' || error.message?.toLowerCase().includes('permission')
+        ? ' Run supabase/migrations/017_staff_roles_request_assignment.sql in the Supabase SQL Editor.'
+        : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+
+  return { data, error: null };
 }

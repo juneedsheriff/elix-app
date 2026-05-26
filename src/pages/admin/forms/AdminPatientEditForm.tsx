@@ -8,6 +8,7 @@ type AdminPatientEditFormProps = {
   patient: Patient;
   onSaved: (patient: Patient) => void;
   onAuthChanged?: () => void;
+  readOnly?: boolean;
 };
 
 function toFormState(patient: Patient): AdminPatientUpdateInput {
@@ -29,7 +30,7 @@ function toFormState(patient: Patient): AdminPatientUpdateInput {
   };
 }
 
-export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged }: AdminPatientEditFormProps) {
+export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, readOnly = false }: AdminPatientEditFormProps) {
   const [form, setForm] = useState<AdminPatientUpdateInput>(() => toFormState(patient));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged }
 
   return (
     <form className='elixhealth-form' onSubmit={(e) => void handleSubmit(e)}>
+      <fieldset disabled={readOnly || busy} className='elixhealth-form-fieldset'>
       {error ? (
         <p className='auth-error' role='alert'>
           {error}
@@ -188,15 +190,18 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged }
         </label>
       </div>
 
-      <AdminAccountAccessPanel
-        role='patient'
-        profileId={patient.id}
-        profileEmail={patient.email}
-        authUserId={patient.auth_user_id}
-        loginDisabled={patient.login_disabled}
-        onAuthChanged={onAuthChanged}
-      />
+      {!readOnly ? (
+        <AdminAccountAccessPanel
+          role='patient'
+          profileId={patient.id}
+          profileEmail={patient.email}
+          authUserId={patient.auth_user_id}
+          loginDisabled={patient.login_disabled}
+          onAuthChanged={onAuthChanged}
+        />
+      ) : null}
 
+      {!readOnly ? (
       <div className='elixhealth-form-actions'>
         <button type='submit' className='primary-btn' disabled={busy}>
           {busy ? (
@@ -208,6 +213,8 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged }
           )}
         </button>
       </div>
+      ) : null}
+      </fieldset>
     </form>
   );
 }

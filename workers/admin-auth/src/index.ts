@@ -93,6 +93,313 @@ async function verifyAdmin(request: Request, env: Env): Promise<string | null> {
   return userId;
 }
 
+async function verifyAdministrator(request: Request, env: Env): Promise<string | null> {
+  const auth = request.headers.get('Authorization');
+  if (!auth?.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  const userId = await getUserIdFromToken(token, env);
+  if (!userId) return null;
+
+  const { data, error } = await userClient(env, token)
+    .from('admins')
+    .select('id, role')
+    .eq('auth_user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error || !data || data.role !== 'administrator') return null;
+  return userId;
+}
+
+type StaffRow = {
+  id: string;
+  auth_user_id: string | null;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+};
+
+type CreateStaffBody = {
+  full_name: string;
+  email: string;
+  password?: string;
+  role?: 'administrator' | 'patient_service_executive';
+};
+
+type ManageStaffBody = {
+  staffId: string;
+  action: 'activate' | 'deactivate' | 'set_password' | 'update';
+  password?: string;
+  full_name?: string;
+  email?: string;
+};
+
+async function loadStaffMember(staffId: string, env: Env): Promise<StaffRow | null> {
+  const { data, error } = await serviceClient(env)
+    .from('admins')
+    .select('id, auth_user_id, email, full_name, role, is_active')
+    .eq('id', staffId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as StaffRow;
+}
+
+async function resolveProfileAuthUserId(
+  email: string,
+  admin: SupabaseClient
+): Promise<{ authUserId: string | null; fullName: string | null }> {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data: doctor } = await admin
+    .from('doctors')
+    .select('auth_user_id, full_name')
+    .ilike('email', normalizedEmail)
+    .maybeSingle();
+
+  if (doctor?.auth_user_id) {
+    return { authUserId: doctor.auth_user_id, fullName: doctor.full_name ?? null };
+  }
+
+  const { data: patient } = await admin
+    .from('patients')
+    .select('auth_user_id, full_name')
+    .ilike('email', normalizedEmail)
+    .maybeSingle();
+
+  if (patient?.auth_user_id) {
+    return { authUserId: patient.auth_user_id, fullName: patient.full_name ?? null };
+  }
+
+  const authUserId = await findUserByEmail(normalizedEmail, admin);
+  return { authUserId, fullName: null };
+}
+
+async function createStaffMember(body: CreateStaffBody, env: Env) {
+  const email = body.email.trim().toLowerCase();
+  const fullName = body.full_name.trim();
+  const password = body.password?.trim() ?? '';
+  const role = body.role === 'administrator' ? 'administrator' : 'patient_service_executive';
+
+  if (!fullName) return { error: 'Full name is required.' };
+  if (!email) return { error: 'Email is required.' };
+
+  const admin = serviceClient(env);
+  const { data: existingRow } = await admin.from('admins').select('id, role, auth_user_id').ilike('email', email).maybeSingle();
+
+  if (existingRow?.role === role) {
+    return {
+      error:
+        role === 'patient_service_executive'
+          ? 'This email is already a Patient Service Executive.'
+          : 'This email is already an administrator.'
+    };
+  }
+
+  if (existingRow?.role === 'administrator' && role === 'patient_service_executive') {
+    return { error: 'This email belongs to an administrator account.' };
+  }
+
+  if (existingRow?.role === 'patient_service_executive' && role === 'administrator') {
+    return { error: 'This email belongs to a Patient Service Executive account.' };
+  }
+
+  let authUserId = existingRow?.auth_user_id ?? null;
+
+  if (!authUserId) {
+    const profileAuth = await resolveProfileAuthUserId(email, admin);
+    authUserId = profileAuth.authUserId;
+  }
+
+  if (!authUserId && password.length < 6) {
+    return { error: 'Password is required when creating a new login (at least 6 characters).' };
+  }
+
+  const metadataRole = role === 'administrator' ? 'admin' : 'patient_service_executive';
+
+  if (!authUserId) {
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { role: metadataRole, full_name: fullName }
+    });
+
+    if (authError) {
+      if (authError.message.toLowerCase().includes('already')) {
+        authUserId = await findUserByEmail(email, admin);
+        if (!authUserId) return { error: authError.message };
+      } else {
+        return { error: authError.message };
+      }
+    } else {
+      authUserId = authData.user?.id ?? null;
+    }
+  }
+
+  if (!authUserId) return { error: 'Could not resolve auth user id.' };
+
+  const { data: existingAuthUser, error: existingAuthError } = await admin.auth.admin.getUserById(authUserId);
+  if (existingAuthError) return { error: existingAuthError.message };
+
+  const existingMetadata =
+    existingAuthUser.user?.user_metadata && typeof existingAuthUser.user.user_metadata === 'object'
+      ? (existingAuthUser.user.user_metadata as Record<string, unknown>)
+      : {};
+
+  const authPatch: {
+    ban_duration: string;
+    user_metadata: Record<string, unknown>;
+    password?: string;
+  } = {
+    ban_duration: 'none',
+    user_metadata: {
+      ...existingMetadata,
+      full_name: fullName,
+      staff_role: role
+    }
+  };
+
+  if (!existingMetadata.role) {
+    authPatch.user_metadata.role = metadataRole;
+  }
+
+  if (password) authPatch.password = password;
+
+  const { error: authUpdateError } = await admin.auth.admin.updateUserById(authUserId, authPatch);
+  if (authUpdateError) return { error: authUpdateError.message };
+
+  const rowPayload = {
+    auth_user_id: authUserId,
+    email,
+    full_name: fullName,
+    role,
+    is_active: true,
+    updated_at: new Date().toISOString()
+  };
+
+  if (existingRow) {
+    const { data, error } = await admin
+      .from('admins')
+      .update(rowPayload)
+      .eq('id', existingRow.id)
+      .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+      .single();
+    if (error) return { error: error.message };
+    return { staff: data };
+  }
+
+  const { data, error } = await admin
+    .from('admins')
+    .insert(rowPayload)
+    .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+    .single();
+  if (error) return { error: error.message };
+  return { staff: data };
+}
+
+async function manageStaffMember(body: ManageStaffBody, env: Env) {
+  const staff = await loadStaffMember(body.staffId, env);
+  if (!staff) return { error: 'Staff member not found.' };
+  if (staff.role !== 'patient_service_executive') {
+    return { error: 'Only Patient Service Executive accounts can be managed here.' };
+  }
+
+  const admin = serviceClient(env);
+
+  if (body.action === 'set_password') {
+    const password = body.password?.trim() ?? '';
+    if (password.length < 6) return { error: 'Password must be at least 6 characters.' };
+    if (!staff.auth_user_id) return { error: 'No auth account linked for this staff member.' };
+    const { error } = await admin.auth.admin.updateUserById(staff.auth_user_id, { password });
+    if (error) return { error: error.message };
+    return { staff };
+  }
+
+  if (body.action === 'deactivate') {
+    if (staff.auth_user_id) {
+      const { error } = await admin.auth.admin.updateUserById(staff.auth_user_id, { ban_duration: BAN_DURATION });
+      if (error) return { error: error.message };
+    }
+    const { data, error } = await admin
+      .from('admins')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', staff.id)
+      .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+      .single();
+    if (error) return { error: error.message };
+    return { staff: data };
+  }
+
+  if (body.action === 'activate') {
+    if (staff.auth_user_id) {
+      const { error } = await admin.auth.admin.updateUserById(staff.auth_user_id, { ban_duration: 'none' });
+      if (error) return { error: error.message };
+    }
+    const { data, error } = await admin
+      .from('admins')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq('id', staff.id)
+      .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+      .single();
+    if (error) return { error: error.message };
+    return { staff: data };
+  }
+
+  if (body.action === 'update') {
+    const fullName = body.full_name?.trim() ?? '';
+    const email = body.email?.trim().toLowerCase() ?? '';
+    if (!fullName) return { error: 'Full name is required.' };
+    if (!email) return { error: 'Email is required.' };
+
+    const { data: conflict } = await admin
+      .from('admins')
+      .select('id')
+      .ilike('email', email)
+      .neq('id', staff.id)
+      .maybeSingle();
+
+    if (conflict) return { error: 'Another staff account already uses this email.' };
+
+    const password = body.password?.trim() ?? '';
+    if (password && password.length < 6) {
+      return { error: 'Password must be at least 6 characters.' };
+    }
+
+    if (staff.auth_user_id) {
+      const authPatch: {
+        email?: string;
+        password?: string;
+        user_metadata: { full_name: string; role: string };
+      } = {
+        user_metadata: { full_name: fullName, role: 'patient_service_executive' }
+      };
+      if (email !== staff.email.toLowerCase()) authPatch.email = email;
+      if (password) authPatch.password = password;
+
+      const { error: authError } = await admin.auth.admin.updateUserById(staff.auth_user_id, authPatch);
+      if (authError) return { error: authError.message };
+    }
+
+    const { data, error } = await admin
+      .from('admins')
+      .update({
+        full_name: fullName,
+        email,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', staff.id)
+      .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+      .single();
+
+    if (error) return { error: error.message };
+    return { staff: data };
+  }
+
+  return { error: 'Unknown action.' };
+}
+
 type ProfileRow = {
   id: string;
   email: string;
@@ -230,12 +537,47 @@ export default {
       return json({ error: 'Worker misconfigured.' }, 500, origin, env);
     }
 
+    const url = new URL(request.url);
+
+    if (request.method === 'POST' && (url.pathname === '/staff' || url.pathname === '/staff/manage')) {
+      const administratorId = await verifyAdministrator(request, env);
+      if (!administratorId) {
+        return json({ error: 'Unauthorized. Sign in as an administrator.' }, 403, origin, env);
+      }
+
+      if (url.pathname === '/staff') {
+        let body: CreateStaffBody;
+        try {
+          body = (await request.json()) as CreateStaffBody;
+        } catch {
+          return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+        }
+
+        const result = await createStaffMember(body, env);
+        if (result.error) return json({ error: result.error }, 400, origin, env);
+        return json({ ok: true, staff: result.staff }, 201, origin, env);
+      }
+
+      let body: ManageStaffBody;
+      try {
+        body = (await request.json()) as ManageStaffBody;
+      } catch {
+        return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+      }
+
+      if (!body.staffId || !body.action) {
+        return json({ error: 'staffId and action are required.' }, 400, origin, env);
+      }
+
+      const result = await manageStaffMember(body, env);
+      if (result.error) return json({ error: result.error }, 400, origin, env);
+      return json({ ok: true, staff: result.staff }, 200, origin, env);
+    }
+
     const adminId = await verifyAdmin(request, env);
     if (!adminId) {
       return json({ error: 'Unauthorized. Sign in as an active admin.' }, 401, origin, env);
     }
-
-    const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/status') {
       const role = url.searchParams.get('role') as Role | null;

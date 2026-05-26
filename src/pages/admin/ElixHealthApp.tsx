@@ -10,7 +10,9 @@ import ElixHealthLogin from './ElixHealthLogin';
 import ElixHealthOverviewPage from './ElixHealthOverviewPage';
 import ElixHealthPatientEditPage from './ElixHealthPatientEditPage';
 import ElixHealthPatientsPage from './ElixHealthPatientsPage';
+import ElixHealthRequestsPage from './ElixHealthRequestsPage';
 import ElixHealthStaffPage from './ElixHealthStaffPage';
+import { AdministratorOnly } from './AdministratorOnly';
 
 export default function ElixHealthApp() {
   const navigate = useNavigate();
@@ -95,7 +97,8 @@ export default function ElixHealthApp() {
         <Route path='doctor' element={<ElixHealthDoctorEditPage />} />
         <Route path='patients' element={<ElixHealthPatientsPage />} />
         <Route path='patient' element={<ElixHealthPatientEditPage />} />
-        <Route path='staff' element={<ElixHealthStaffPage />} />
+        <Route path='requests' element={<ElixHealthRequestsPage />} />
+        <Route path='staff' element={<AdministratorOnly><ElixHealthStaffPage /></AdministratorOnly>} />
       </Route>
       <Route path='*' element={<Navigate to={admin ? '/elixhealth' : '/elixhealth/login'} replace />} />
     </Routes>

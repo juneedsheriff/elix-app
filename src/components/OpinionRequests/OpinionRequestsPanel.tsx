@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ClipboardList, FileText, Loader2, Stethoscope } from 'lucide-react';
 import DoctorRequestRespond from './DoctorRequestRespond';
-import { fetchDoctorOpinionRequests, fetchPatientOpinionRequests } from '../../lib/opinionRequests';
+import { fetchDoctorOpinionRequests, fetchPatientOpinionRequests, patientRequestStatusLabel } from '../../lib/opinionRequests';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
@@ -18,7 +18,10 @@ function formatRequestDate(iso: string): string {
   return date.toLocaleString();
 }
 
-function statusLabel(status: string): string {
+function statusLabel(status: string, view: 'patient' | 'doctor', request?: OpinionRequest): string {
+  if (view === 'patient' && request) {
+    return patientRequestStatusLabel(request);
+  }
   if (status === 'in_review') return 'In review';
   if (status === 'closed') return 'Closed';
   return 'Submitted';
@@ -167,7 +170,7 @@ export default function OpinionRequestsPanel({
                       ? request.doctor_name ?? 'Doctor'
                       : request.patient_name ?? 'Patient'}
                   </strong>
-                  <span className={`tag status-${request.status}`}>{statusLabel(request.status)}</span>
+                  <span className={`tag status-${request.status}`}>{statusLabel(request.status, view, request)}</span>
                 </div>
                 <p className='doctor-request-names'>
                   <span>
@@ -202,7 +205,13 @@ export default function OpinionRequestsPanel({
                 ) : null}
 
                 {view === 'patient' && !request.doctor_response && request.status !== 'closed' ? (
-                  <p className='muted doctor-awaiting-response'>Waiting for the doctor&apos;s written opinion.</p>
+                  <p className='muted doctor-awaiting-response'>
+                    {!request.assigned_to && request.status === 'submitted'
+                      ? 'Waiting for admin review before coordination begins.'
+                      : request.status === 'submitted'
+                        ? 'Our patient service team is coordinating with you and the doctor.'
+                        : 'Waiting for the doctor&apos;s written opinion.'}
+                  </p>
                 ) : null}
 
                 {view === 'doctor' ? (

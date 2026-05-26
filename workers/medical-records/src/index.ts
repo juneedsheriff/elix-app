@@ -55,6 +55,50 @@ function assertOwnsPath(allowedPrefixes: string[], storagePath: string): void {
   }
 }
 
+async function canAccessStoragePathViaRls(
+  authHeader: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/uploaded_files?storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: authHeader,
+      apikey: env.SUPABASE_ANON_KEY,
+      Accept: 'application/json'
+    }
+  });
+
+  if (!res.ok) return false;
+
+  const rows = (await res.json()) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function assertCanAccessPath(
+  allowedPrefixes: string[],
+  authHeader: string,
+  storagePath: string,
+  env: Env
+): Promise<void> {
+  if (storagePath.includes('..')) {
+    throw new Error('Forbidden');
+  }
+
+  if (allowedPrefixes.some((prefix) => storagePath.startsWith(prefix))) {
+    return;
+  }
+
+  const allowed = await canAccessStoragePathViaRls(authHeader, storagePath, env);
+  if (!allowed) {
+    throw new Error('Forbidden');
+  }
+}
+
 function safeFileName(fileName: string): string {
   return fileName.replace(/[^\w.\-() ]+/g, '_').slice(0, 200);
 }
@@ -212,7 +256,7 @@ export default {
         }
 
         const storagePath = body.storagePath.trim();
-        assertOwnsPath(pathPrefixes, storagePath);
+        await assertCanAccessPath(pathPrefixes, authHeader, storagePath, env);
 
         const object = await env.MEDICAL_RECORDS.get(storagePath);
         if (!object) {

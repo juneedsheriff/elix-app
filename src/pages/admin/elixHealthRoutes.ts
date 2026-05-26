@@ -1,4 +1,4 @@
-import type { ElixHealthNavId } from './ElixHealthLayout';
+import type { ElixHealthNavId } from '../../lib/staffPermissions';
 
 export const ELIX_HEALTH_PATHS = {
   overview: '/elixhealth',
@@ -6,7 +6,8 @@ export const ELIX_HEALTH_PATHS = {
   doctor: '/elixhealth/doctor',
   patients: '/elixhealth/patients',
   patient: '/elixhealth/patient',
-  staff: '/elixhealth/staff'
+  staff: '/elixhealth/staff',
+  requests: '/elixhealth/requests'
 } as const;
 
 export function doctorEditUrl(id: string, tab?: 'clinic' | 'scheduler' | 'login') {
@@ -27,6 +28,7 @@ export function navIdFromPathname(pathname: string): ElixHealthNavId {
     return 'patients';
   }
   if (pathname === '/elixhealth/staff') return 'staff';
+  if (pathname === '/elixhealth/requests') return 'requests';
   return 'overview';
 }
 
@@ -44,5 +46,6 @@ export function pageTitleFromPathname(pathname: string, search: string): string 
   if (pathname === '/elixhealth/doctors') return 'Doctors';
   if (pathname === '/elixhealth/patients') return 'Patients';
   if (pathname === '/elixhealth/staff') return 'Staff';
+  if (pathname === '/elixhealth/requests') return 'Opinion requests';
   return 'Dashboard';
 }
