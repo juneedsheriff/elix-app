@@ -1,0 +1,2 @@
+# Copy to .dev.vars for `npm run dev` (local worker). Do not commit .dev.vars.
+SUPABASE_ANON_KEY=your-supabase-anon-key

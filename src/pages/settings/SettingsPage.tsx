@@ -51,6 +51,8 @@ export default function SettingsPage({
             <li>
               <strong>{patientProfile.full_name}</strong>
               <span>
+                Patient ID: {patientProfile.elix_id}
+                {' • '}
                 {[patientProfile.city, patientProfile.country].filter(Boolean).join(', ') || 'Location not set'}
               </span>
             </li>

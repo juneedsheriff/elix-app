@@ -8,7 +8,20 @@
     "build": "npm run icons:generate && vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "icons:generate": "node scripts/generate-pwa-icons.mjs"
+    "icons:generate": "node scripts/generate-pwa-icons.mjs",
+    "worker:records:dev": "npm run dev --prefix workers/medical-records",
+    "worker:records:deploy": "npm run deploy --prefix workers/medical-records",
+    "worker:admin-auth:dev": "npm run dev --prefix workers/admin-auth",
+    "worker:admin-auth:deploy": "npm run deploy --prefix workers/admin-auth",
+    "db:apply-login-disabled": "node scripts/apply-login-disabled.mjs",
+    "db:migrate-records-to-r2": "node scripts/migrate-records-to-r2.mjs",
+    "db:migrate-r2-to-elix-id": "node scripts/migrate-r2-to-elix-id.mjs",
+    "db:apply-elix-id": "node scripts/apply-elix-id.mjs",
+    "db:apply-admins": "node scripts/apply-admins.mjs",
+    "db:apply-admin-policies": "node scripts/apply-admin-policies.mjs",
+    "db:apply-doctor-profile": "node scripts/apply-doctor-profile.mjs",
+    "db:apply-admin-update-policies": "node scripts/apply-admin-update-policies.mjs",
+    "db:seed-admin": "node scripts/seed-admin.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",
@@ -31,6 +44,7 @@
     "eslint-plugin-react": "^7.34.1",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
+    "pg": "^8.21.0",
     "sharp": "^0.34.2",
     "vite": "^5.2.0"
   }

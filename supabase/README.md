@@ -55,7 +55,8 @@ npm run db:setup
 | Table | Purpose |
 |-------|---------|
 | `doctors` | Specialist directory |
-| `patients` | Patient profiles (linked to Auth) |
+| `admins` | Platform administrators (Supabase Auth login) |
+| `patients` | Patient profiles (linked to Auth); public ID `elix_id` (e.g. `elix-aa0000`) |
 | `uploaded_files` | Uploaded file metadata (name, size, Storage path) |
 | `medical_records` | Legacy table — migrate with `004_uploaded_files.sql` |
 | `opinion_requests` | Second opinion requests — run `006_doctor_opinion_access.sql` (doctor read) and `009_opinion_doctor_response.sql` (respond to patient) |
@@ -68,6 +69,11 @@ Demo rows from `npm run db:seed-records` are metadata only until you run:
 ```bash
 npm run db:assign-records    # optional: attach null user_id rows to a patient
 npm run db:upload-record-files   # upload PDF/JPEG blobs under the patient's auth folder
+npm run db:migrate-records-to-r2 # copy existing Supabase Storage blobs → Cloudflare R2
+npm run db:migrate-r2-to-elix-id   # move R2 objects from {auth_user_id}/ → {elix_id}/
+npm run db:apply-elix-id         # patient elix_id column (or run 010_patient_elix_id.sql in SQL Editor)
+npm run db:apply-admins          # admins table + RLS
+npm run db:seed-admin            # create admin auth user (see scripts/admin-credentials.mjs)
 ```
 
 ## Verify in Dashboard

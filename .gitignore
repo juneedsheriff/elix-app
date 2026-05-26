@@ -16,6 +16,8 @@ dist-ssr
 .env.*.local
 !.env.example
 !.env.server.example
+workers/medical-records/.dev.vars
+workers/admin-auth/.dev.vars
 
 # Editor directories and files
 .vscode/*

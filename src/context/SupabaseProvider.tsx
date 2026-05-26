@@ -11,6 +11,7 @@ import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { fetchDoctorByAuthUserId, fetchDoctorByEmail, fetchDoctorById } from '../lib/doctors';
 import { ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
+import { fetchAdminByAuthUserId } from '../lib/admins';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Doctor } from '../types/doctor';
 import type { Patient, PatientUpsertInput } from '../types/patient';
@@ -145,18 +146,19 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const [doctor, patient] = await Promise.all([
+      const [doctor, patient, admin] = await Promise.all([
         resolveDoctorForUser(nextSession.user),
-        resolvePatientForUser(nextSession.user)
+        resolvePatientForUser(nextSession.user),
+        fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data)
       ]);
 
       if (mounted) {
         setDoctorProfile(doctor);
-        setPatientProfile(patient);
+        setPatientProfile(admin ? null : patient);
         setLoading(false);
       }
 
-      if (!doctor && !patient && nextSession.user.email) {
+      if (!doctor && !patient && !admin && nextSession.user.email) {
         const ensured = await ensurePatientProfile(nextSession.user);
         if (mounted && ensured.data) setPatientProfile(ensured.data);
       }
@@ -192,9 +194,10 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
     const user = data.user;
     const doctor = user ? await resolveDoctorForUser(user) : null;
-    let patient = user ? await resolvePatientForUser(user) : null;
+    const admin = user ? (await fetchAdminByAuthUserId(user.id)).data : null;
+    let patient = user && !admin ? await resolvePatientForUser(user) : null;
 
-    if (user && !doctor && !patient) {
+    if (user && !doctor && !patient && !admin) {
       const ensured = await ensurePatientProfile(user);
       patient = ensured.data;
       if (!patient && ensured.error) {

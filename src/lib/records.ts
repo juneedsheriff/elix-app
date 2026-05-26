@@ -1,8 +1,16 @@
 import type { MedicalRecord, UploadedFile } from '../types/uploadedFile';
 import { toMedicalRecord } from '../types/uploadedFile';
 import { fetchPatientByAuthUserId } from './patients';
+import {
+  createR2UploadUrl,
+  deleteR2Object,
+  downloadMedicalRecordBlob,
+  isR2StorageConfigured,
+  uploadFileToR2
+} from './r2Storage';
 import { supabase } from './supabase';
 
+/** Cloudflare R2 bucket name (metadata column + worker binding). */
 const BUCKET = 'medical-records';
 const TABLE = 'uploaded_files';
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -41,11 +49,6 @@ export function medicalFileValidationError(file: File): string | null {
 function mimeForFile(file: File): string {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
   return file.type || EXTENSION_MIME[ext] || 'application/octet-stream';
-}
-
-function storagePathFor(userId: string, fileName: string): string {
-  const safeName = fileName.replace(/[^\w.\-() ]+/g, '_');
-  return `${userId}/${crypto.randomUUID()}-${safeName}`;
 }
 
 function normalizeRow(row: UploadedFile): UploadedFile {
@@ -87,22 +90,36 @@ export async function fetchUserMedicalRecords(authUserId: string) {
   return { data: asMedicalRecords(result.data), error: null };
 }
 
+export { isR2StorageConfigured };
+
 export async function uploadMedicalRecord(file: File, patientId: string) {
   const validationError = medicalFileValidationError(file);
   if (validationError) {
     return { data: null, error: { message: validationError } };
   }
 
-  const storagePath = storagePathFor(patientId, file.name);
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: { message: 'Cloudflare R2 is not configured. Set VITE_R2_API_URL in .env.local.' }
+    };
+  }
+
   const contentType = mimeForFile(file);
 
-  const { error: storageError } = await supabase.storage.from(BUCKET).upload(storagePath, file, {
-    contentType,
-    upsert: false
-  });
+  const { data: uploadTarget, error: presignError } = await createR2UploadUrl(file);
+  if (presignError || !uploadTarget) {
+    return { data: null, error: presignError ?? { message: 'Could not prepare upload.' } };
+  }
 
-  if (storageError) {
-    return { data: null, error: storageError };
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    contentType,
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { data: null, error: uploadError };
   }
 
   const { data: patientRow } = await fetchPatientByAuthUserId(patientId);
@@ -115,28 +132,31 @@ export async function uploadMedicalRecord(file: File, patientId: string) {
       file_name: file.name,
       mime_type: contentType,
       file_size_bytes: file.size,
-      storage_bucket: BUCKET,
-      storage_path: storagePath,
+      storage_bucket: uploadTarget.storageBucket || BUCKET,
+      storage_path: uploadTarget.storagePath,
       summary: 'Uploaded just now'
     })
     .select(fileColumns)
     .single<UploadedFile>();
 
   if (rowError) {
-    await supabase.storage.from(BUCKET).remove([storagePath]);
+    await deleteR2Object(uploadTarget.storagePath);
     return { data: null, error: rowError };
   }
 
   return { data: toMedicalRecord(normalizeRow(data)), error: null };
 }
 
-export async function getMedicalRecordDownloadUrl(storagePath: string, expiresIn = 3600) {
-  return supabase.storage.from(BUCKET).createSignedUrl(storagePath, expiresIn);
+export async function getMedicalRecordDownloadUrl(storagePath: string, _expiresIn = 3600) {
+  const { blob, error } = await downloadMedicalRecordBlob(storagePath);
+  if (error || !blob) return { data: null, error };
+  const signedUrl = URL.createObjectURL(blob);
+  return { data: { signedUrl }, error: null };
 }
 
 export async function deleteMedicalRecord(record: MedicalRecord) {
   if (record.storage_path) {
-    const { error: storageError } = await supabase.storage.from(BUCKET).remove([record.storage_path]);
+    const { error: storageError } = await deleteR2Object(record.storage_path);
     if (storageError) return { error: storageError };
   }
 

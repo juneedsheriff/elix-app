@@ -40,7 +40,12 @@ type PatientDashboardPageProps = ScreenPageProps & {
   onNavigate?: (screenId: string) => void;
 };
 
-export default function PatientDashboardPage({ userId, dbConnected, onNavigate }: PatientDashboardPageProps) {
+export default function PatientDashboardPage({
+  userId,
+  dbConnected,
+  patientProfile,
+  onNavigate
+}: PatientDashboardPageProps) {
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [recordCount, setRecordCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -87,7 +92,14 @@ export default function PatientDashboardPage({ userId, dbConnected, onNavigate }
 
   return (
     <div className='screen-grid'>
-      <SectionCard title='Patient Command Center' subtitle='Track every opinion request in one place'>
+      <SectionCard
+        title='Patient Command Center'
+        subtitle={
+          patientProfile?.elix_id
+            ? `Patient ID ${patientProfile.elix_id} • Track every opinion request in one place`
+            : 'Track every opinion request in one place'
+        }
+      >
         {!dbConnected ? (
           <p className='auth-error' role='alert'>
             Connect Supabase in <code>.env.local</code> to load live stats.

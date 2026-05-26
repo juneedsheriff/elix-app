@@ -2,36 +2,46 @@ import type { User } from '@supabase/supabase-js';
 import type { Patient, PatientUpsertInput } from '../types/patient';
 import { supabase } from './supabase';
 
-const patientColumns =
+const patientColumnsWithElix =
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
+
+const patientColumnsLegacy =
   'id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
 
-export async function fetchPatientByAuthUserId(authUserId: string) {
-  const result = await supabase
-    .from('patients')
-    .select(patientColumns)
-    .eq('auth_user_id', authUserId)
-    .maybeSingle();
+function withFallbackElixId(patient: Patient | null): Patient | null {
+  if (!patient || patient.elix_id) return patient;
+  const suffix = patient.id.replace(/-/g, '').slice(0, 6).toLowerCase();
+  return { ...patient, elix_id: `elix-${suffix.padEnd(6, '0').slice(0, 6)}` };
+}
 
-  if (result.error) return { data: null, error: result.error };
-  return { data: result.data as Patient | null, error: null };
+async function selectPatient(
+  build: (columns: string) => ReturnType<typeof supabase.from<'patients'>>
+) {
+  const withElix = await build(patientColumnsWithElix).maybeSingle();
+  if (!withElix.error) {
+    return { data: withFallbackElixId(withElix.data as Patient | null), error: null };
+  }
+  if (!withElix.error.message.includes('elix_id')) {
+    return { data: null, error: withElix.error };
+  }
+
+  const legacy = await build(patientColumnsLegacy).maybeSingle();
+  if (legacy.error) return { data: null, error: legacy.error };
+  return { data: withFallbackElixId(legacy.data as Patient | null), error: null };
+}
+
+export async function fetchPatientByAuthUserId(authUserId: string) {
+  return selectPatient((columns) =>
+    supabase.from('patients').select(columns).eq('auth_user_id', authUserId)
+  );
 }
 
 export async function fetchPatientByEmail(email: string) {
-  const result = await supabase
-    .from('patients')
-    .select(patientColumns)
-    .ilike('email', email.trim())
-    .maybeSingle();
-
-  if (result.error) return { data: null, error: result.error };
-  return { data: result.data as Patient | null, error: null };
+  return selectPatient((columns) => supabase.from('patients').select(columns).ilike('email', email.trim()));
 }
 
 export async function fetchPatientById(id: string) {
-  const result = await supabase.from('patients').select(patientColumns).eq('id', id).maybeSingle();
-
-  if (result.error) return { data: null, error: result.error };
-  return { data: result.data as Patient | null, error: null };
+  return selectPatient((columns) => supabase.from('patients').select(columns).eq('id', id));
 }
 
 export function defaultPatientNameFromUser(user: User): string {
@@ -66,11 +76,11 @@ export async function ensurePatientProfile(user: User, input?: Partial<PatientUp
           preferred_language: input?.preferred_language ?? byEmail.data.preferred_language
         })
         .eq('id', byEmail.data.id)
-        .select(patientColumns)
+        .select(patientColumnsWithElix)
         .single<Patient>();
 
       if (error) return { data: null, error, created: false };
-      return { data, error: null, created: false };
+      return { data: withFallbackElixId(data), error: null, created: false };
     }
   }
 
@@ -83,8 +93,12 @@ export async function ensurePatientProfile(user: User, input?: Partial<PatientUp
     preferred_language: input?.preferred_language ?? 'en'
   };
 
-  const result = await supabase.from('patients').insert(row).select(patientColumns).single<Patient>();
+  let result = await supabase.from('patients').insert(row).select(patientColumnsWithElix).single<Patient>();
+
+  if (result.error?.message.includes('elix_id')) {
+    result = await supabase.from('patients').insert(row).select(patientColumnsLegacy).single<Patient>();
+  }
 
   if (result.error) return { data: null, error: result.error, created: false };
-  return { data: result.data, error: null, created: true };
+  return { data: withFallbackElixId(result.data), error: null, created: true };
 }

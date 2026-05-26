@@ -68,7 +68,13 @@ const migrationFiles = [
   '006_doctor_opinion_access.sql',
   '007_opinion_request_names.sql',
   '008_fix_opinion_doctor_id.sql',
-  '009_opinion_doctor_response.sql'
+  '009_opinion_doctor_response.sql',
+  '010_patient_elix_id.sql',
+  '011_admins.sql',
+  '012_admins_list_policy.sql',
+  '013_admin_profile_updates.sql',
+  '014_doctor_extended_profile.sql',
+  '015_login_disabled_flags.sql'
 ];
 
 const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
