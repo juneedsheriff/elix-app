@@ -21,6 +21,7 @@
     "db:apply-admin-policies": "node scripts/apply-admin-policies.mjs",
     "db:apply-doctor-profile": "node scripts/apply-doctor-profile.mjs",
     "db:apply-admin-update-policies": "node scripts/apply-admin-update-policies.mjs",
+    "db:apply-doctor-visibility": "node scripts/apply-doctor-visibility.mjs",
     "db:seed-admin": "node scripts/seed-admin.mjs"
   },
   "dependencies": {

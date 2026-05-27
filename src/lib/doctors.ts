@@ -23,6 +23,8 @@ export async function fetchDoctors(limit = 50) {
   const result = await supabase
     .from('doctors')
     .select(doctorColumns)
+    .eq('is_visible', true)
+    .is('deleted_at', null)
     .order('rating', { ascending: false })
     .limit(limit);
 

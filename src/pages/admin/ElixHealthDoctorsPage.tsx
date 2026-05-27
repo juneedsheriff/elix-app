@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Pencil } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Pencil, Trash2 } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
 import { formatConsultationFeeUsd } from '../../lib/doctors';
-import { fetchAllDoctorsForAdmin } from '../../lib/admins';
+import { deleteDoctorForAdmin, fetchAllDoctorsForAdmin, setDoctorVisibilityForAdmin } from '../../lib/admins';
 import type { Doctor } from '../../types/doctor';
 import { doctorEditUrl } from './elixHealthRoutes';
 
@@ -20,6 +20,8 @@ function cell(value: string | null | undefined) {
 export default function ElixHealthDoctorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
 
   const load = useCallback(async () => {
@@ -39,6 +41,44 @@ export default function ElixHealthDoctorsPage() {
     void load();
   }, [load]);
 
+  const handleVisibility = async (doctor: Doctor) => {
+    const nextVisible = doctor.is_visible === false;
+    setBusyId(doctor.id);
+    setActionMessage(null);
+
+    const { error: visibilityError } = await setDoctorVisibilityForAdmin(doctor.id, nextVisible);
+    setBusyId(null);
+
+    if (visibilityError) {
+      setActionMessage(visibilityError.message);
+      return;
+    }
+
+    setActionMessage(`${doctor.full_name} is now ${nextVisible ? 'visible in' : 'hidden from'} patient search.`);
+    void load();
+  };
+
+  const handleDelete = async (doctor: Doctor) => {
+    const confirmed = window.confirm(
+      `Delete ${doctor.full_name}? This hides the doctor from patient search and removes them from the active admin list.`
+    );
+    if (!confirmed) return;
+
+    setBusyId(doctor.id);
+    setActionMessage(null);
+
+    const { error: deleteError } = await deleteDoctorForAdmin(doctor.id);
+    setBusyId(null);
+
+    if (deleteError) {
+      setActionMessage(deleteError.message);
+      return;
+    }
+
+    setActionMessage(`${doctor.full_name} was deleted from active doctor listings.`);
+    void load();
+  };
+
   if (loading) {
     return (
       <p className='elixhealth-status'>
@@ -57,6 +97,12 @@ export default function ElixHealthDoctorsPage() {
 
   return (
     <SectionCard title='Doctors' subtitle={`${doctors.length} registered`}>
+      {actionMessage ? (
+        <p className='elixhealth-success' role='status'>
+          {actionMessage}
+        </p>
+      ) : null}
+
       <div className='elixhealth-table-wrap elixhealth-table-wrap--wide'>
         <table className='elixhealth-table elixhealth-table--compact'>
           <thead>
@@ -65,15 +111,12 @@ export default function ElixHealthDoctorsPage() {
               <th>Gender</th>
               <th>Mobile no.</th>
               <th>Email ID</th>
-              <th>License no.</th>
               <th>Qualification</th>
               <th>Specialty</th>
-              <th>Specialization</th>
               <th>Clinic name</th>
               <th>City</th>
               <th>Country</th>
               <th>Fee</th>
-              <th>Priority</th>
               <th>Login</th>
               <th aria-label='Actions' />
             </tr>
@@ -85,21 +128,42 @@ export default function ElixHealthDoctorsPage() {
                 <td>{cell(doctor.gender)}</td>
                 <td>{cell(doctor.mobile_no ?? doctor.phone)}</td>
                 <td>{cell(doctor.email)}</td>
-                <td>{cell(doctor.medical_license_no)}</td>
                 <td>{cell(doctor.qualification)}</td>
                 <td>{doctor.specialty}</td>
-                <td>{cell(doctor.specialization)}</td>
                 <td>{cell(doctor.clinic_name ?? doctor.hospital)}</td>
                 <td>{cell(doctor.clinic_city)}</td>
                 <td>{cell(doctor.clinic_country ?? doctor.country)}</td>
                 <td>{formatConsultationFeeUsd(doctor.consultation_fee ?? doctor.fee_usd)}</td>
-                <td>{doctor.elix_patient_priority ? 'Yes' : 'No'}</td>
                 <td>{loginCell(doctor)}</td>
                 <td>
-                  <Link to={doctorEditUrl(doctor.id)} className='elixhealth-row-action'>
-                    <Pencil size={15} aria-hidden />
-                    Edit
-                  </Link>
+                  <div className='elixhealth-table-actions'>
+                    <Link to={doctorEditUrl(doctor.id)} className='elixhealth-row-action'>
+                      <Pencil size={15} aria-hidden />
+                      Edit
+                    </Link>
+                    <button
+                      type='button'
+                      className='elixhealth-row-action'
+                      disabled={busyId === doctor.id}
+                      onClick={() => void handleVisibility(doctor)}
+                    >
+                      {doctor.is_visible === false ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
+                      {doctor.is_visible === false ? 'Show' : 'Hide'}
+                    </button>
+                    <button
+                      type='button'
+                      className='elixhealth-row-action elixhealth-row-action--danger'
+                      disabled={busyId === doctor.id}
+                      onClick={() => void handleDelete(doctor)}
+                    >
+                      {busyId === doctor.id ? (
+                        <Loader2 size={15} className='spin' aria-hidden />
+                      ) : (
+                        <Trash2 size={15} aria-hidden />
+                      )}
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

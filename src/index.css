@@ -2339,6 +2339,27 @@ select {
   background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface));
 }
 
+.elixhealth-row-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.elixhealth-row-action--danger {
+  color: #dc2626;
+  border-color: color-mix(in srgb, #dc2626 35%, var(--border));
+}
+
+.elixhealth-row-action--danger:hover {
+  background: color-mix(in srgb, #dc2626 8%, var(--surface));
+}
+
+.elixhealth-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
 .elixhealth-edit-page {
   display: flex;
   flex-direction: column;

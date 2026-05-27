@@ -67,6 +67,8 @@ export type Doctor = {
   country: string;
   /** @deprecated Use about_doctor */
   bio: string | null;
+  is_visible?: boolean;
+  deleted_at?: string | null;
   auth_user_id?: string | null;
   login_disabled?: boolean;
   created_at?: string;
