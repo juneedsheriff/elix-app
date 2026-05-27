@@ -5,8 +5,12 @@ Production-grade frontend scaffold for a cross-platform healthcare product where
 ## Stack Used in This Repository
 
 - Vite + React + TypeScript
+- Supabase (PostgreSQL, Auth, RLS)
+- Cloudflare Workers + R2 (medical records storage)
 - Mobile-first responsive UI
 - Design-token style CSS system (light + dark mode)
+
+Full technology list: [`docs/TECH_STACK.md`](docs/TECH_STACK.md)
 
 ## Product Roles
 
@@ -59,6 +63,7 @@ vercel --prod
 
 ## Architecture and Product Docs
 
+- Technology stack: `docs/TECH_STACK.md`
 - Database schema: `docs/architecture/database-schema.sql`
 - API architecture: `docs/architecture/api-architecture.md`
 - Backend architecture: `docs/architecture/backend-architecture.md`
