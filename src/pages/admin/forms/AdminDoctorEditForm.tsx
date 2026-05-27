@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
-import { updateDoctorForAdmin } from '../../../lib/admins';
+import { Eye, EyeOff, Loader2, Trash2 } from 'lucide-react';
+import { deleteDoctorForAdmin, setDoctorVisibilityForAdmin, updateDoctorForAdmin } from '../../../lib/admins';
 import { doctorToAdminInput } from '../../../lib/doctorProfile';
 import type { AdminDoctorUpdateInput, Doctor } from '../../../types/doctor';
 import ConsultationHoursEditor from './ConsultationHoursEditor';
@@ -36,11 +36,14 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
 
   const [form, setForm] = useState<AdminDoctorUpdateInput>(() => doctorToAdminInput(doctor));
   const [busy, setBusy] = useState(false);
+  const [manageBusy, setManageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manageMessage, setManageMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(doctorToAdminInput(doctor));
     setError(null);
+    setManageMessage(null);
   }, [doctor]);
 
   const setTab = (tab: DoctorEditTab) => {
@@ -69,11 +72,57 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
     onSaved(data);
   };
 
+  const handleToggleVisibility = async () => {
+    setManageBusy(true);
+    setManageMessage(null);
+    setError(null);
+
+    const nextVisible = doctor.is_visible === false;
+    const { error: visibilityError } = await setDoctorVisibilityForAdmin(doctor.id, nextVisible);
+    setManageBusy(false);
+
+    if (visibilityError) {
+      setError(visibilityError.message);
+      return;
+    }
+
+    setManageMessage(`Doctor is now ${nextVisible ? 'visible in' : 'hidden from'} patient search.`);
+    onAuthChanged?.(); // also refresh doctor row data
+  };
+
+  const handleDeleteDoctor = async () => {
+    const confirmed = window.confirm(
+      `Delete ${doctor.full_name}? This hides the doctor from patient search and removes them from the active admin list.`
+    );
+    if (!confirmed) return;
+
+    setManageBusy(true);
+    setManageMessage(null);
+    setError(null);
+
+    const { error: deleteError } = await deleteDoctorForAdmin(doctor.id);
+    setManageBusy(false);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setManageMessage('Doctor deleted from active listings.');
+    onSaved(doctor);
+  };
+
   return (
     <form className='elixhealth-form' onSubmit={(e) => void handleSubmit(e)}>
       {error ? (
         <p className='auth-error' role='alert'>
           {error}
+        </p>
+      ) : null}
+
+      {manageMessage ? (
+        <p className='elixhealth-success' role='status'>
+          {manageMessage}
         </p>
       ) : null}
 
@@ -98,6 +147,38 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
 
       {activeTab === 'profile' ? (
         <div className='elixhealth-tab-panel' role='tabpanel'>
+          {!readOnly ? (
+            <>
+              <h3 className='elixhealth-form-section-title'>Doctor visibility</h3>
+              <div className='elixhealth-auth-status-row'>
+                <span>Patient search</span>
+                <strong className={doctor.is_visible === false ? 'elixhealth-badge' : 'elixhealth-badge elixhealth-badge--ok'}>
+                  {doctor.is_visible === false ? 'Hidden' : 'Visible'}
+                </strong>
+              </div>
+              <div className='elixhealth-auth-actions'>
+                <button
+                  type='button'
+                  className='secondary-btn'
+                  disabled={manageBusy || busy}
+                  onClick={() => void handleToggleVisibility()}
+                >
+                  {manageBusy ? <Loader2 size={16} className='spin' aria-hidden /> : doctor.is_visible === false ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
+                  {doctor.is_visible === false ? 'Show in search' : 'Hide from search'}
+                </button>
+                <button
+                  type='button'
+                  className='secondary-btn elixhealth-row-action--danger'
+                  disabled={manageBusy || busy}
+                  onClick={() => void handleDeleteDoctor()}
+                >
+                  {manageBusy ? <Loader2 size={16} className='spin' aria-hidden /> : <Trash2 size={16} aria-hidden />}
+                  Delete doctor
+                </button>
+              </div>
+            </>
+          ) : null}
+
           <h3 className='elixhealth-form-section-title'>Personal</h3>
           <div className='elixhealth-form-grid'>
             <label className='elixhealth-field'>

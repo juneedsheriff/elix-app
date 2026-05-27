@@ -1,13 +1,10 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, FileText, Loader2, Send } from 'lucide-react';
-import SectionCard from '../../components/ui/SectionCard';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert } from '@mantine/core';
 import { fetchPatientServiceExecutives } from '../../lib/admins';
 import {
   assignOpinionRequest,
   fetchOpinionRequestsForStaff,
   forwardOpinionRequestToDoctor,
-  isAssignedToPatientService,
-  isPendingAdminAssignment,
   staffRequestStatusLabel
 } from '../../lib/opinionRequests';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
@@ -15,25 +12,45 @@ import { isAdministrator, isPatientServiceExecutive } from '../../lib/staffPermi
 import type { Admin } from '../../types/admin';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import RequestDetailDrawer from './requests/RequestDetailDrawer';
+import RequestsAnalyticsCards from './requests/RequestsAnalyticsCards';
+import RequestsDataTable from './requests/RequestsDataTable';
+import RequestsFilterDrawer from './requests/RequestsFilterDrawer';
+import RequestsPageHeader from './requests/RequestsPageHeader';
+import RequestsPageSkeleton from './requests/RequestsPageSkeleton';
+import RequestsTableToolbar from './requests/RequestsTableToolbar';
+import {
+  applyRequestQuickFilters,
+  computeRequestAnalytics,
+  exportRequestsCsv,
+  uniqueSorted,
+  type RequestQuickFilters
+} from './requests/requestsUtils';
+import { useRequestsTableColumns } from './requests/requestsTableColumns';
+import './doctors/doctors-management.css';
 
-type RequestFilter = 'pending' | 'all';
+const DEFAULT_FILTERS: RequestQuickFilters = {
+  queue: 'pending',
+  status: 'all',
+  specialty: null,
+  assignee: null
+};
 
-function formatRequestDate(iso: string): string {
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return date.toLocaleString();
-}
+function matchesSearch(request: OpinionRequest, query: string) {
+  const haystack = [
+    request.patient_name,
+    request.patient_email,
+    request.doctor_name,
+    request.doctor_specialty,
+    request.message,
+    request.assigned_to_name,
+    staffRequestStatusLabel(request)
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 
-function cell(value: string | null | undefined) {
-  const v = value?.trim();
-  return v ? v : '—';
+  return haystack.includes(query);
 }
 
 export default function ElixHealthRequestsPage() {
@@ -44,17 +61,20 @@ export default function ElixHealthRequestsPage() {
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [executives, setExecutives] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<RequestFilter>('pending');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<RequestQuickFilters>(DEFAULT_FILTERS);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [assigneeByRequest, setAssigneeByRequest] = useState<Record<string, string>>({});
-  const [notesByRequest, setNotesByRequest] = useState<Record<string, string>>({});
+  const [selectedRequest, setSelectedRequest] = useState<OpinionRequest | null>(null);
+  const [assigneeId, setAssigneeId] = useState('');
+  const [coordinationNotes, setCoordinationNotes] = useState('');
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
 
     const [requestsRes, executivesRes] = await Promise.all([
@@ -74,34 +94,80 @@ export default function ElixHealthRequestsPage() {
     } else if (isAdmin) {
       setExecutives(executivesRes.data ?? []);
     }
-
-    setLoading(false);
   }, [isAdmin]);
 
-  useEffect(() => {
-    void load();
+  const initialLoad = useCallback(async () => {
+    setLoading(true);
+    await load();
+    setLoading(false);
   }, [load]);
 
-  const pendingCount = useMemo(() => {
-    if (isAdmin) {
-      return requests.filter(isPendingAdminAssignment).length;
-    }
-    return requests.filter(isAssignedToPatientService).length;
-  }, [isAdmin, requests]);
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
-  const visibleRequests = useMemo(() => {
-    if (filter === 'pending') {
-      if (isAdmin) return requests.filter(isPendingAdminAssignment);
-      return requests.filter(isAssignedToPatientService);
-    }
-    return requests;
-  }, [filter, isAdmin, requests]);
+  useEffect(() => {
+    void initialLoad();
+  }, [initialLoad]);
 
-  const openRecord = async (storagePath: string | null) => {
-    if (!storagePath) {
-      setActionMessage('File path missing for this record.');
-      return;
+  const analytics = useMemo(
+    () => computeRequestAnalytics(requests, isAdmin),
+    [requests, isAdmin]
+  );
+
+  const specialtyOptions = useMemo(
+    () => uniqueSorted(requests.map((request) => request.doctor_specialty)),
+    [requests]
+  );
+
+  const assigneeOptions = useMemo(
+    () => uniqueSorted(requests.map((request) => request.assigned_to_name)),
+    [requests]
+  );
+
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const filteredRequests = useMemo(() => {
+    let list = applyRequestQuickFilters(requests, filters, isAdmin);
+    if (normalizedSearch) {
+      list = list.filter((request) => matchesSearch(request, normalizedSearch));
     }
+    return list;
+  }, [requests, filters, isAdmin, normalizedSearch]);
+
+  const hasActiveFilters =
+    Boolean(normalizedSearch) ||
+    filters.queue !== 'pending' ||
+    filters.status !== 'all' ||
+    Boolean(filters.specialty) ||
+    Boolean(filters.assignee);
+
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setFilters(DEFAULT_FILTERS);
+  }, []);
+
+  const handleExport = useCallback(() => {
+    exportRequestsCsv(filteredRequests);
+  }, [filteredRequests]);
+
+  const openRequest = useCallback((request: OpinionRequest) => {
+    setSelectedRequest(request);
+    setAssigneeId('');
+    setCoordinationNotes('');
+    setActionMessage(null);
+    setSuccessMessage(null);
+    setDrawerOpen(true);
+  }, []);
+
+  const columns = useRequestsTableColumns({
+    isAdmin,
+    onView: openRequest
+  });
+
+  const openRecord = async (storagePath: string) => {
     const { data, error: urlError } = await getMedicalRecordDownloadUrl(storagePath);
     if (urlError || !data?.signedUrl) {
       setActionMessage(urlError?.message ?? 'Could not open file.');
@@ -110,18 +176,18 @@ export default function ElixHealthRequestsPage() {
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
-  const handleAssign = async (request: OpinionRequest) => {
-    const assigneeId = assigneeByRequest[request.id];
+  const handleAssign = async () => {
+    if (!selectedRequest) return;
     if (!assigneeId) {
       setActionMessage('Select a Patient Service Executive before assigning.');
       return;
     }
 
-    setBusyId(request.id);
+    setBusyId(selectedRequest.id);
     setActionMessage(null);
     setSuccessMessage(null);
 
-    const { error: assignError } = await assignOpinionRequest(request.id, assigneeId);
+    const { error: assignError } = await assignOpinionRequest(selectedRequest.id, assigneeId);
     setBusyId(null);
 
     if (assignError) {
@@ -131,19 +197,22 @@ export default function ElixHealthRequestsPage() {
 
     const executive = executives.find((e) => e.id === assigneeId);
     setSuccessMessage(
-      `Assigned request from ${request.patient_name ?? 'patient'} to ${executive?.full_name ?? 'Patient Service Executive'}.`
+      `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executive?.full_name ?? 'Patient Service Executive'}.`
     );
-    void load();
+    setDrawerOpen(false);
+    void refresh();
   };
 
-  const handleForward = async (request: OpinionRequest) => {
-    setBusyId(request.id);
+  const handleForward = async () => {
+    if (!selectedRequest) return;
+
+    setBusyId(selectedRequest.id);
     setActionMessage(null);
     setSuccessMessage(null);
 
     const { error: forwardError } = await forwardOpinionRequestToDoctor(
-      request.id,
-      notesByRequest[request.id]
+      selectedRequest.id,
+      coordinationNotes
     );
     setBusyId(null);
 
@@ -152,278 +221,111 @@ export default function ElixHealthRequestsPage() {
       return;
     }
 
-    setSuccessMessage(`Sent request to ${request.doctor_name ?? 'doctor'} for review.`);
-    void load();
+    setSuccessMessage(`Sent request to ${selectedRequest.doctor_name ?? 'doctor'} for review.`);
+    setDrawerOpen(false);
+    void refresh();
   };
 
-  if (loading) {
+  const pageTitle = isPse ? 'My assigned requests' : 'Opinion requests';
+  const pageSubtitle = isAdmin
+    ? `${analytics.pendingQueue} pending assignment · ${analytics.total} total`
+    : `${analytics.pendingQueue} awaiting coordination · ${analytics.total} assigned to you`;
+  const pendingCardLabel = isAdmin ? 'Pending Assignment' : 'Awaiting Coordination';
+
+  if (error && !loading && requests.length === 0) {
     return (
-      <p className='elixhealth-status'>
-        <Loader2 size={18} className='spin' aria-hidden /> Loading opinion requests…
-      </p>
+      <Alert color='red' radius='md' title='Could not load requests' className='doctors-mgmt'>
+        {error}. Ensure migration 017_staff_roles_request_assignment.sql is applied in Supabase.
+      </Alert>
     );
   }
 
-  if (error) {
-    return (
-      <p className='auth-error' role='alert'>
-        {error}. Ensure migration 017_staff_roles_request_assignment.sql is applied in Supabase.
-      </p>
-    );
+  if (loading && requests.length === 0) {
+    return <RequestsPageSkeleton />;
   }
 
   return (
-    <div className='elixhealth-requests'>
-      <SectionCard
-        title={isPse ? 'My assigned requests' : 'Opinion requests'}
-        subtitle={
-          isAdmin
-            ? `${pendingCount} pending assignment • ${requests.length} total`
-            : `${pendingCount} awaiting coordination • ${requests.length} assigned to you`
-        }
-      >
-        <div className='elixhealth-requests-toolbar'>
-          <div className='elixhealth-profile-tabs' role='tablist' aria-label='Request filters'>
-            <button
-              type='button'
-              role='tab'
-              aria-selected={filter === 'pending'}
-              className={
-                filter === 'pending'
-                  ? 'elixhealth-profile-tab elixhealth-profile-tab--active'
-                  : 'elixhealth-profile-tab'
-              }
-              onClick={() => setFilter('pending')}
-            >
-              Pending ({pendingCount})
-            </button>
-            <button
-              type='button'
-              role='tab'
-              aria-selected={filter === 'all'}
-              className={
-                filter === 'all'
-                  ? 'elixhealth-profile-tab elixhealth-profile-tab--active'
-                  : 'elixhealth-profile-tab'
-              }
-              onClick={() => setFilter('all')}
-            >
-              All ({requests.length})
-            </button>
-          </div>
-          <button type='button' className='elixhealth-retry-link' onClick={() => void load()}>
-            Refresh
-          </button>
-        </div>
+    <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
+      <RequestsPageHeader
+        title={pageTitle}
+        subtitle={pageSubtitle}
+        onOpenFilters={() => setFilterDrawerOpen(true)}
+        onExport={handleExport}
+        onRefresh={() => void refresh()}
+        refreshing={refreshing}
+      />
 
-        {actionMessage ? (
-          <p className='auth-error' role='alert'>
-            {actionMessage}
-          </p>
-        ) : null}
+      {actionMessage ? (
+        <Alert color='red' radius='md' onClose={() => setActionMessage(null)} withCloseButton>
+          {actionMessage}
+        </Alert>
+      ) : null}
 
-        {successMessage ? (
-          <p className='elixhealth-success' role='status'>
-            {successMessage}
-          </p>
-        ) : null}
+      {successMessage ? (
+        <Alert color='green' radius='md' onClose={() => setSuccessMessage(null)} withCloseButton>
+          {successMessage}
+        </Alert>
+      ) : null}
 
-        {visibleRequests.length === 0 ? (
-          <p className='muted'>
-            {filter === 'pending'
-              ? isAdmin
-                ? 'No requests waiting for assignment.'
-                : 'No assigned requests waiting for coordination.'
-              : 'No opinion requests yet.'}
-          </p>
-        ) : (
-          <div className='elixhealth-table-wrap elixhealth-table-wrap--scroll'>
-            <table className='elixhealth-table elixhealth-table--compact elixhealth-table--sticky-edges'>
-              <thead>
-                <tr>
-                  <th className='elixhealth-table__col-sticky-start elixhealth-table__col-name'>Patient</th>
-                  <th>Doctor</th>
-                  <th>Submitted</th>
-                  <th>Records</th>
-                  <th>Status</th>
-                  {isAdmin ? <th>Assigned to</th> : null}
-                  <th className='elixhealth-table__col-sticky-end'>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRequests.map((request) => {
-                  const isExpanded = expandedId === request.id;
-                  const canAssign = isAdmin && isPendingAdminAssignment(request);
-                  const canForward = isPse && isAssignedToPatientService(request);
+      <RequestsAnalyticsCards
+        analytics={analytics}
+        pendingLabel={pendingCardLabel}
+        loading={loading}
+      />
 
-                  return (
-                    <Fragment key={request.id}>
-                      <tr key={request.id}>
-                        <td className='elixhealth-table__col-sticky-start elixhealth-table__col-name'>
-                          <strong>{cell(request.patient_name)}</strong>
-                          {request.patient_email ? (
-                            <span className='elixhealth-table-subtext'>{request.patient_email}</span>
-                          ) : null}
-                        </td>
-                        <td>
-                          {cell(request.doctor_name)}
-                          {request.doctor_specialty ? (
-                            <span className='elixhealth-table-subtext'>{request.doctor_specialty}</span>
-                          ) : null}
-                        </td>
-                        <td>{formatRequestDate(request.created_at)}</td>
-                        <td>{request.records.length}</td>
-                        <td>
-                          <span className={`tag status-${request.status}`}>
-                            {staffRequestStatusLabel(request)}
-                          </span>
-                        </td>
-                        {isAdmin ? <td>{cell(request.assigned_to_name)}</td> : null}
-                        <td className='elixhealth-table__col-sticky-end'>
-                          <div className='elixhealth-table-actions'>
-                            <button
-                              type='button'
-                              className='elixhealth-row-action'
-                              onClick={() => setExpandedId(isExpanded ? null : request.id)}
-                            >
-                              <Eye size={14} aria-hidden />
-                              {isExpanded ? 'Hide' : 'View'}
-                            </button>
+      <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
+        <RequestsDataTable
+          data={filteredRequests}
+          columns={columns}
+          isLoading={loading}
+          hasActiveFilters={hasActiveFilters}
+          isPendingQueue={filters.queue === 'pending'}
+          isAdmin={isAdmin}
+          onClearFilters={clearFilters}
+          renderToolbar={({ table, fullScreen, onToggleFullScreen }) => (
+            <RequestsTableToolbar
+              table={table}
+              fullScreen={fullScreen}
+              onToggleFullScreen={onToggleFullScreen}
+              search={search}
+              onSearchChange={setSearch}
+              filters={filters}
+              specialtyOptions={specialtyOptions}
+              pendingCount={analytics.pendingQueue}
+              totalCount={analytics.total}
+              onFilterChange={setFilters}
+            />
+          )}
+        />
+      </div>
 
-                            {canAssign ? (
-                              <>
-                                <select
-                                  className='elixhealth-inline-select'
-                                  value={assigneeByRequest[request.id] ?? ''}
-                                  onChange={(e) =>
-                                    setAssigneeByRequest((prev) => ({
-                                      ...prev,
-                                      [request.id]: e.target.value
-                                    }))
-                                  }
-                                  aria-label={`Assign request from ${request.patient_name ?? 'patient'}`}
-                                >
-                                  <option value=''>Select PSE…</option>
-                                  {executives.map((executive) => (
-                                    <option key={executive.id} value={executive.id}>
-                                      {executive.full_name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type='button'
-                                  className='primary-btn elixhealth-table-action-btn'
-                                  disabled={busyId === request.id || executives.length === 0}
-                                  onClick={() => void handleAssign(request)}
-                                >
-                                  {busyId === request.id ? (
-                                    <Loader2 size={14} className='spin' aria-hidden />
-                                  ) : (
-                                    'Assign'
-                                  )}
-                                </button>
-                              </>
-                            ) : null}
+      <RequestsFilterDrawer
+        opened={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        filters={filters}
+        specialtyOptions={specialtyOptions}
+        assigneeOptions={assigneeOptions}
+        showAssignee={isAdmin}
+        onChange={setFilters}
+        onReset={clearFilters}
+      />
 
-                            {canForward ? (
-                              <button
-                                type='button'
-                                className='primary-btn elixhealth-table-action-btn'
-                                disabled={busyId === request.id}
-                                onClick={() => void handleForward(request)}
-                              >
-                                {busyId === request.id ? (
-                                  <Loader2 size={14} className='spin' aria-hidden />
-                                ) : (
-                                  <>
-                                    <Send size={14} aria-hidden /> Send to doctor
-                                  </>
-                                )}
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded ? (
-                        <tr key={`${request.id}-detail`} className='elixhealth-table-detail-row'>
-                          <td colSpan={isAdmin ? 7 : 6}>
-                            <div className='elixhealth-request-detail'>
-                              <p>
-                                <strong>Patient message:</strong> {request.message}
-                              </p>
-                              {request.coordination_notes ? (
-                                <p>
-                                  <strong>Coordination notes:</strong> {request.coordination_notes}
-                                </p>
-                              ) : null}
-                              {canForward ? (
-                                <label className='elixhealth-field elixhealth-field--full'>
-                                  <span>Coordination notes (optional)</span>
-                                  <textarea
-                                    rows={2}
-                                    value={notesByRequest[request.id] ?? ''}
-                                    onChange={(e) =>
-                                      setNotesByRequest((prev) => ({
-                                        ...prev,
-                                        [request.id]: e.target.value
-                                      }))
-                                    }
-                                    placeholder='Notes for the doctor about patient coordination…'
-                                  />
-                                </label>
-                              ) : null}
-                              {request.records.length > 0 ? (
-                                <ul className='record-select-list doctor-request-files'>
-                                  {request.records.map((record) => (
-                                    <li key={record.id}>
-                                      <div className='record-select-item doctor-request-file-row'>
-                                        <FileText size={18} aria-hidden />
-                                        <span className='record-select-text'>
-                                          <strong>{record.file_name}</strong>
-                                          {record.summary ? (
-                                            <span className='muted'>{record.summary}</span>
-                                          ) : null}
-                                        </span>
-                                        {record.storage_path ? (
-                                          <button
-                                            type='button'
-                                            className='text-btn'
-                                            onClick={() => void openRecord(record.storage_path)}
-                                          >
-                                            Open
-                                          </button>
-                                        ) : null}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className='muted'>No medical records attached.</p>
-                              )}
-                              {request.doctor_response ? (
-                                <div className='doctor-response-block patient-view'>
-                                  <h5>Doctor&apos;s opinion</h5>
-                                  <p>{request.doctor_response}</p>
-                                </div>
-                              ) : null}
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {isAdmin && executives.length === 0 ? (
-          <p className='muted'>
-            Add a staff account with role <strong>Patient Service Executive</strong> to assign requests.
-          </p>
-        ) : null}
-      </SectionCard>
+      <RequestDetailDrawer
+        request={selectedRequest}
+        opened={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        isAdmin={isAdmin}
+        isPse={isPse}
+        executives={executives}
+        assigneeId={assigneeId}
+        onAssigneeChange={setAssigneeId}
+        coordinationNotes={coordinationNotes}
+        onCoordinationNotesChange={setCoordinationNotes}
+        busy={busyId === selectedRequest?.id}
+        onAssign={() => void handleAssign()}
+        onForward={() => void handleForward()}
+        onOpenRecord={(path) => void openRecord(path)}
+      />
     </div>
   );
 }

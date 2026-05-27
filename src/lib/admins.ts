@@ -99,6 +99,7 @@ export async function fetchAllDoctorsForAdmin() {
   const result = await supabase
     .from('doctors')
     .select(doctorAdminColumns)
+    .is('deleted_at', null)
     .order('full_name', { ascending: true });
 
   if (result.error) return { data: null, error: result.error };
@@ -136,6 +137,33 @@ export async function updateDoctorForAdmin(id: string, input: AdminDoctorUpdateI
     return { data: null, error: { message: 'Doctor was updated but could not be reloaded.' } };
   }
   return { data: normalizeDoctor(data as Doctor), error: null };
+}
+
+export async function setDoctorVisibilityForAdmin(id: string, isVisible: boolean) {
+  const { error: updateError } = await supabase
+    .from('doctors')
+    .update({
+      is_visible: isVisible
+    })
+    .eq('id', id)
+    .is('deleted_at', null);
+
+  if (updateError) return { error: updateError };
+  return { error: null };
+}
+
+export async function deleteDoctorForAdmin(id: string) {
+  const { error: updateError } = await supabase
+    .from('doctors')
+    .update({
+      is_visible: false,
+      deleted_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .is('deleted_at', null);
+
+  if (updateError) return { error: updateError };
+  return { error: null };
 }
 
 export async function updatePatientForAdmin(id: string, input: AdminPatientUpdateInput) {

@@ -47,6 +47,8 @@ export const DOCTOR_PROFILE_COLUMNS = [
   'image_url',
   'country',
   'bio',
+  'is_visible',
+  'deleted_at',
   'auth_user_id',
   'login_disabled',
   'created_at'
@@ -164,6 +166,8 @@ export function normalizeDoctorProfile(row: Doctor): Doctor {
     rating: Number(row.rating),
     languages: row.languages ?? '',
     image_url: row.image_url ?? '',
+    is_visible: row.is_visible !== false,
+    deleted_at: row.deleted_at ?? null,
     email: row.email ?? ''
   };
 }
