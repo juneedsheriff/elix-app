@@ -1,12 +1,12 @@
 /**
- * Creates the platform admin in Supabase Auth and public.admins.
- * Run after 011_admins.sql: npm run db:seed-admin
+ * Creates Patient Service Executive in Supabase Auth and public.admins.
+ * Run after 017_staff_roles_request_assignment.sql: npm run db:seed-pse
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import { ADMIN_EMAIL, ADMIN_FULL_NAME, ADMIN_PASSWORD } from './admin-credentials.mjs';
+import { PSE_EMAIL, PSE_FULL_NAME, PSE_PASSWORD } from './pse-credentials.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -32,9 +32,9 @@ loadEnvFile('.env.local');
 
 const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const email = (process.env.ADMIN_EMAIL ?? ADMIN_EMAIL).trim().toLowerCase();
-const password = process.env.ADMIN_PASSWORD ?? ADMIN_PASSWORD;
-const fullName = process.env.ADMIN_FULL_NAME ?? ADMIN_FULL_NAME;
+const email = (process.env.PSE_EMAIL ?? PSE_EMAIL).trim().toLowerCase();
+const password = process.env.PSE_PASSWORD ?? PSE_PASSWORD;
+const fullName = process.env.PSE_FULL_NAME ?? PSE_FULL_NAME;
 
 if (!url || !key?.trim()) {
   console.error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local');
@@ -43,15 +43,15 @@ if (!url || !key?.trim()) {
 
 const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const { error: tableError } = await supabase.from('admins').select('id').limit(1);
-if (tableError) {
-  console.error('admins table missing. Run: npm run db:apply-admins');
+const roleProbe = await supabase.from('admins').select('role').limit(1);
+if (roleProbe.error?.message?.toLowerCase().includes('role')) {
+  console.error('admins.role column missing. Run: npm run db:apply-staff-roles');
   process.exit(1);
 }
 
 const { data: existingRow } = await supabase
   .from('admins')
-  .select('id, auth_user_id, email')
+  .select('id, auth_user_id, email, role')
   .ilike('email', email)
   .maybeSingle();
 
@@ -67,7 +67,7 @@ if (!authUserId) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { role: 'admin', full_name: fullName }
+    user_metadata: { role: 'patient_service_executive', full_name: fullName }
   });
 
   if (authError) {
@@ -80,7 +80,7 @@ if (!authUserId) {
       authUserId = existing.id;
       await supabase.auth.admin.updateUserById(authUserId, {
         password,
-        user_metadata: { role: 'admin', full_name: fullName }
+        user_metadata: { role: 'patient_service_executive', full_name: fullName }
       });
       console.log('Linked existing auth user and updated password.');
     } else {
@@ -89,56 +89,49 @@ if (!authUserId) {
     }
   } else {
     authUserId = authData.user?.id ?? null;
-    console.log('Created Supabase Auth user.');
+    console.log('Created Supabase Auth user for PSE.');
   }
 } else {
   await supabase.auth.admin.updateUserById(authUserId, {
     password,
-    user_metadata: { role: 'admin', full_name: fullName }
+    user_metadata: { role: 'patient_service_executive', full_name: fullName }
   });
-  console.log('Admin auth user exists; password/metadata updated.');
+  console.log('PSE auth user exists; password/metadata updated.');
 }
 
 if (!authUserId) {
-  console.error('No auth user id for admin.');
+  console.error('No auth user id for PSE.');
   process.exit(1);
 }
 
+const rowPayload = {
+  auth_user_id: authUserId,
+  email,
+  full_name: fullName,
+  role: 'patient_service_executive',
+  is_active: true,
+  updated_at: new Date().toISOString()
+};
+
 if (existingRow) {
-  const rowPayload = {
-    auth_user_id: authUserId,
-    email,
-    full_name: fullName,
-    role: 'administrator',
-    is_active: true,
-    updated_at: new Date().toISOString()
-  };
-
   const { error: updateError } = await supabase.from('admins').update(rowPayload).eq('id', existingRow.id);
-
   if (updateError) {
-    console.error('Admin row update failed:', updateError.message);
+    console.error('PSE row update failed:', updateError.message);
     process.exit(1);
   }
-  console.log(`Admin ready: ${email} (existing row ${existingRow.id})`);
+  console.log(`Patient Service Executive ready: ${email} (existing row ${existingRow.id})`);
 } else {
   const { data: inserted, error: insertError } = await supabase
     .from('admins')
-    .insert({
-      auth_user_id: authUserId,
-      email,
-      full_name: fullName,
-      role: 'administrator',
-      is_active: true
-    })
+    .insert(rowPayload)
     .select('id')
     .single();
 
   if (insertError) {
-    console.error('Admin row insert failed:', insertError.message);
+    console.error('PSE row insert failed:', insertError.message);
     process.exit(1);
   }
-  console.log(`Admin ready: ${email} (id ${inserted.id})`);
+  console.log(`Patient Service Executive ready: ${email} (id ${inserted.id})`);
 }
 
-console.log('Sign in with this email and password in the app (admin UI can use user_metadata.role = admin).');
+console.log(`Sign in at /elixhealth/login with:\n  Email: ${email}\n  Password: (see scripts/pse-credentials.mjs or PSE_PASSWORD env)`);

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -12,9 +13,10 @@ import {
   X
 } from 'lucide-react';
 import type { Admin } from '../../types/admin';
+import { adminRoleLabel, navItemsForRole, requestsNavLabel, type ElixHealthNavId } from '../../lib/staffPermissions';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 
-export type ElixHealthNavId = 'overview' | 'doctors' | 'patients' | 'staff';
+export type { ElixHealthNavId };
 
 type NavItem = {
   id: ElixHealthNavId;
@@ -23,12 +25,30 @@ type NavItem = {
   icon: typeof Users;
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'overview', label: 'Dashboard', path: ELIX_HEALTH_PATHS.overview, icon: LayoutDashboard },
-  { id: 'doctors', label: 'Doctors', path: ELIX_HEALTH_PATHS.doctors, icon: Stethoscope },
-  { id: 'patients', label: 'Patients', path: ELIX_HEALTH_PATHS.patients, icon: UserCircle },
-  { id: 'staff', label: 'Staff', path: ELIX_HEALTH_PATHS.staff, icon: Shield }
-];
+const NAV_META: Record<ElixHealthNavId, { path: string; icon: typeof Users; label?: string }> = {
+  overview: { path: ELIX_HEALTH_PATHS.overview, icon: LayoutDashboard },
+  doctors: { path: ELIX_HEALTH_PATHS.doctors, icon: Stethoscope },
+  patients: { path: ELIX_HEALTH_PATHS.patients, icon: UserCircle },
+  requests: { path: ELIX_HEALTH_PATHS.requests, icon: ClipboardList },
+  staff: { path: ELIX_HEALTH_PATHS.staff, icon: Shield }
+};
+
+const NAV_LABELS: Record<ElixHealthNavId, string> = {
+  overview: 'Dashboard',
+  doctors: 'Doctors',
+  patients: 'Patients',
+  requests: 'Requests',
+  staff: 'Staff'
+};
+
+function navItemsForAdmin(admin: Admin): NavItem[] {
+  return navItemsForRole(admin.role).map((id) => ({
+    id,
+    path: NAV_META[id].path,
+    icon: NAV_META[id].icon,
+    label: id === 'requests' ? requestsNavLabel(admin.role) : NAV_LABELS[id]
+  }));
+}
 
 type ElixHealthLayoutProps = {
   admin: Admin;
@@ -48,6 +68,7 @@ export default function ElixHealthLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navItems = navItemsForAdmin(admin);
 
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -84,14 +105,14 @@ export default function ElixHealthLayout({
           <img src='/icons/elix-logo-transparent.png' alt='' className='elixhealth-sidebar-logo' />
           <div>
             <p className='elixhealth-sidebar-title'>Elix Health</p>
-            <p className='elixhealth-sidebar-subtitle'>Admin console</p>
+            <p className='elixhealth-sidebar-subtitle'>{adminRoleLabel(admin.role)}</p>
           </div>
         </div>
 
         <nav className='elixhealth-sidebar-nav'>
           <p className='elixhealth-sidebar-section'>Menu</p>
           <ul>
-            {NAV_ITEMS.map(({ id, label, path, icon: Icon }) => (
+            {navItems.map(({ id, label, path, icon: Icon }) => (
               <li key={id}>
                 <button
                   type='button'
@@ -155,7 +176,7 @@ export default function ElixHealthLayout({
                   </>
                 ) : null}
               </p>
-              <h1 className='elixhealth-page-title'>{pageTitle}</h1>
+              
             </div>
           </div>
           <div className='elixhealth-topbar-end'>

@@ -4,10 +4,14 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
 import { fetchDoctorById } from '../../lib/doctors';
 import type { Doctor } from '../../types/doctor';
+import { canEditProfiles } from '../../lib/staffPermissions';
 import AdminDoctorEditForm from './forms/AdminDoctorEditForm';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
+import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 export default function ElixHealthDoctorEditPage() {
+  const staff = useElixHealthStaff();
+  const readOnly = !canEditProfiles(staff);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const doctorId = searchParams.get('id');
@@ -73,9 +77,10 @@ export default function ElixHealthDoctorEditPage() {
       ) : null}
 
       {!loading && !error && doctor ? (
-        <SectionCard title='Edit doctor profile' subtitle={doctor.full_name}>
+        <SectionCard title={readOnly ? 'View doctor profile' : 'Edit doctor profile'} subtitle={doctor.full_name}>
           <AdminDoctorEditForm
             doctor={doctor}
+            readOnly={readOnly}
             onSaved={() => {
               navigate(ELIX_HEALTH_PATHS.doctors, { replace: true });
             }}

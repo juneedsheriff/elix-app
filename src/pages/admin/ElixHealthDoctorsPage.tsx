@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Pencil, Trash2 } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
@@ -6,6 +6,7 @@ import { formatConsultationFeeUsd } from '../../lib/doctors';
 import { deleteDoctorForAdmin, fetchAllDoctorsForAdmin, setDoctorVisibilityForAdmin } from '../../lib/admins';
 import type { Doctor } from '../../types/doctor';
 import { doctorEditUrl } from './elixHealthRoutes';
+import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 function loginCell(doctor: { auth_user_id?: string | null; login_disabled?: boolean }) {
   if (!doctor.auth_user_id) return 'No login';
@@ -17,12 +18,36 @@ function cell(value: string | null | undefined) {
   return v ? v : '—';
 }
 
+function matchesDoctorSearch(doctor: Doctor, query: string) {
+  const haystack = [
+    doctor.full_name,
+    doctor.email,
+    doctor.specialty,
+    doctor.clinic_name,
+    doctor.hospital,
+    doctor.clinic_city,
+    doctor.country,
+    doctor.clinic_country,
+    doctor.mobile_no,
+    doctor.phone,
+    doctor.gender
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
 export default function ElixHealthDoctorsPage() {
+  const staff = useElixHealthStaff();
+  const canEdit = canEditProfiles(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +120,10 @@ export default function ElixHealthDoctorsPage() {
     );
   }
 
+  const subtitle = normalizedQuery
+    ? `${filteredDoctors.length} of ${doctors.length} doctors`
+    : `${doctors.length} registered`;
+
   return (
     <SectionCard title='Doctors' subtitle={`${doctors.length} registered`}>
       {actionMessage ? (
@@ -107,7 +136,7 @@ export default function ElixHealthDoctorsPage() {
         <table className='elixhealth-table elixhealth-table--compact'>
           <thead>
             <tr>
-              <th>Full name</th>
+              <th className='elixhealth-table__col-sticky-start elixhealth-table__col-name'>Full name</th>
               <th>Gender</th>
               <th>Mobile no.</th>
               <th>Email ID</th>
@@ -118,13 +147,15 @@ export default function ElixHealthDoctorsPage() {
               <th>Country</th>
               <th>Fee</th>
               <th>Login</th>
-              <th aria-label='Actions' />
+              <th className='elixhealth-table__col-sticky-end' aria-label='Actions' />
             </tr>
           </thead>
           <tbody>
-            {doctors.map((doctor) => (
+            {filteredDoctors.map((doctor) => (
               <tr key={doctor.id}>
-                <td>{doctor.full_name}</td>
+                <td className='elixhealth-table__col-sticky-start elixhealth-table__col-name'>
+                  {doctor.full_name}
+                </td>
                 <td>{cell(doctor.gender)}</td>
                 <td>{cell(doctor.mobile_no ?? doctor.phone)}</td>
                 <td>{cell(doctor.email)}</td>
@@ -170,6 +201,9 @@ export default function ElixHealthDoctorsPage() {
           </tbody>
         </table>
         {doctors.length === 0 ? <p className='muted'>No doctors in the database.</p> : null}
+        {doctors.length > 0 && filteredDoctors.length === 0 ? (
+          <p className='muted'>No doctors match your search.</p>
+        ) : null}
       </div>
     </SectionCard>
   );
