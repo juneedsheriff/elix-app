@@ -1,0 +1,515 @@
+/* Doctors Management — premium healthcare admin */
+
+.doctors-mgmt-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  padding-bottom: 0.25rem;
+}
+
+.doctors-mgmt-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.doctors-mgmt-header__title {
+  font-size: clamp(1.75rem, 3vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.doctors-mgmt-header__subtitle {
+  font-size: 0.9rem;
+}
+
+.doctors-mgmt-header__actions {
+  margin-left: auto;
+}
+
+.doctors-mgmt-header__primary {
+  background: linear-gradient(135deg, var(--brand-cyan), color-mix(in srgb, var(--brand-cyan) 70%, #0ea5e9)) !important;
+  border: none !important;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--brand-cyan) 35%, transparent);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.doctors-mgmt-header__primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--brand-cyan) 42%, transparent);
+}
+
+.doctors-mgmt-header__ghost {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.doctors-mgmt-header__ghost:hover {
+  border-color: color-mix(in srgb, var(--brand-cyan) 40%, var(--border)) !important;
+  box-shadow: 0 4px 14px rgba(9, 171, 192, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Analytics cards — compact at 70% spacing */
+.doctors-mgmt-stats {
+  gap: calc(var(--mantine-spacing-md) * 0.7) !important;
+}
+
+.doctors-mgmt-stat {
+  padding: calc(var(--mantine-spacing-lg) * 0.7) !important;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(15, 47, 70, 0.06);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease;
+  overflow: hidden;
+  position: relative;
+}
+
+.doctors-mgmt-stat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.doctors-mgmt-stat:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px rgba(15, 47, 70, 0.1);
+}
+
+.doctors-mgmt-stat--total::before {
+  background: linear-gradient(135deg, rgba(9, 171, 192, 0.14), rgba(14, 165, 233, 0.06));
+}
+
+.doctors-mgmt-stat--active::before {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(9, 171, 192, 0.05));
+}
+
+.doctors-mgmt-stat--disabled::before {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(251, 146, 60, 0.05));
+}
+
+.doctors-mgmt-stat--specialties::before {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(9, 171, 192, 0.05));
+}
+
+.doctors-mgmt-stat .mantine-Group-root {
+  gap: calc(var(--mantine-spacing-sm) * 0.7) !important;
+}
+
+.doctors-mgmt-stat__label {
+  color: var(--text-soft);
+  letter-spacing: 0.06em;
+  position: relative;
+}
+
+.doctors-mgmt-stat__value {
+  font-size: calc(1.65rem * 0.7);
+  line-height: 1.2;
+  color: var(--text);
+  position: relative;
+  margin-top: calc(0.35rem * 0.7);
+}
+
+.doctors-mgmt-stat__icon {
+  width: calc(44px * 0.7) !important;
+  height: calc(44px * 0.7) !important;
+  min-width: calc(44px * 0.7) !important;
+  min-height: calc(44px * 0.7) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(8px);
+  color: var(--brand-cyan);
+  position: relative;
+  box-shadow: 0 4px 12px rgba(15, 47, 70, 0.08);
+}
+
+/* Table shell */
+.doctors-mgmt-table-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px !important;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 2px rgba(15, 47, 70, 0.04),
+    0 12px 40px rgba(15, 47, 70, 0.06);
+}
+
+.doctors-mgmt-table-card > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Fullscreen table shell (toolbar + grid together) */
+.doctors-mgmt-table-shell--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  height: 100dvh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.doctors-mgmt-table-fullscreen-open {
+  overflow: hidden;
+}
+
+.doctors-mgmt-table-shell--fullscreen .doctors-mgmt-mrt-paper {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+}
+
+.doctors-mgmt-table-shell--fullscreen .doctors-mgmt-mrt-container,
+.doctors-mgmt-table-shell--fullscreen .elixhealth-mrt-container {
+  flex: 1;
+  min-height: 0;
+  max-height: none !important;
+}
+
+.doctors-mgmt-table-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.doctors-mgmt-table-toolbar {
+  flex-shrink: 0;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-soft) 55%, var(--surface));
+}
+
+.doctors-mgmt-table-toolbar__inner {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(0, 2fr) auto;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+@media (max-width: 1100px) {
+  .doctors-mgmt-table-toolbar__inner {
+    grid-template-columns: 1fr;
+  }
+}
+
+.doctors-mgmt-search input {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  font-size: 0.9rem;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.doctors-mgmt-search input:focus {
+  border-color: color-mix(in srgb, var(--brand-cyan) 55%, var(--border)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-cyan) 18%, transparent);
+}
+
+.doctors-mgmt-quick-filters {
+  justify-content: flex-start;
+}
+
+.doctors-mgmt-quick-select {
+  min-width: 140px;
+  flex: 1;
+  max-width: 180px;
+}
+
+.doctors-mgmt-table-toolbar__tools .mantine-ActionIcon-root,
+.doctors-mgmt-table-toolbar__tools .mantine-Button-root {
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.doctors-mgmt-table-toolbar__tools .mantine-ActionIcon-root:hover,
+.doctors-mgmt-table-toolbar__tools .mantine-Button-root:hover {
+  color: var(--brand-cyan);
+  border-color: color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+  background: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface));
+}
+
+/* Table cells */
+.doctors-mgmt-mrt-paper {
+  background: var(--surface) !important;
+}
+
+.doctors-mgmt-th {
+  background: var(--surface-soft) !important;
+  font-size: 0.68rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-soft) !important;
+  font-weight: 700 !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-content-wrapper {
+  color: var(--text-soft) !important;
+}
+
+/* Sort & filter icons — no background, compact size */
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-sort-button,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon[data-active],
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon:hover,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-sort-button:hover {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-soft) !important;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon svg,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-sort-button svg {
+  width: 13px !important;
+  height: 13px !important;
+  color: var(--text-soft) !important;
+  stroke: var(--text-soft);
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon:hover,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-sort-button:hover,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon[data-active] {
+  color: var(--brand-cyan) !important;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon:hover svg,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-sort-button:hover svg,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-filter-label-icon[data-active] svg {
+  color: var(--brand-cyan) !important;
+  stroke: var(--brand-cyan);
+}
+
+.doctors-mgmt-td {
+  font-size: 0.9rem;
+  vertical-align: middle !important;
+  padding-top: 0.85rem !important;
+  padding-bottom: 0.85rem !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  transition: background 140ms ease;
+}
+
+.doctors-mgmt-td--alt {
+  background: color-mix(in srgb, var(--surface-soft) 65%, var(--surface));
+}
+
+.doctors-mgmt-tr:hover .doctors-mgmt-td {
+  background: color-mix(in srgb, var(--brand-cyan) 5%, var(--surface)) !important;
+}
+
+.doctors-mgmt-avatar {
+  background: linear-gradient(135deg, #09abc0, #078596) !important;
+  color: #fff !important;
+  border: 2px solid color-mix(in srgb, var(--brand-cyan) 25%, #fff);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--brand-cyan) 20%, transparent),
+    0 4px 12px color-mix(in srgb, var(--brand-cyan) 35%, transparent);
+}
+
+.doctors-mgmt-avatar .mantine-Avatar-placeholder {
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.doctors-mgmt-link {
+  color: var(--text) !important;
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+
+.doctors-mgmt-link:hover {
+  color: var(--brand-cyan) !important;
+}
+
+.doctors-mgmt-muted {
+  color: var(--text-soft) !important;
+}
+
+.doctors-mgmt-pill {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.doctors-mgmt-fee {
+  display: inline-block;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-cyan) 12%, var(--surface)),
+    color-mix(in srgb, var(--brand-cyan) 6%, var(--surface-soft))
+  );
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 22%, var(--border));
+}
+
+.doctors-mgmt-status {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.doctors-mgmt-action {
+  transition:
+    transform 140ms ease,
+    background 140ms ease;
+}
+
+.doctors-mgmt-action:hover {
+  transform: scale(1.06);
+  background: color-mix(in srgb, var(--brand-cyan) 12%, transparent) !important;
+}
+
+.doctors-mgmt-mrt-footer {
+  flex-shrink: 0;
+  background: var(--surface) !important;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 20px rgba(15, 47, 70, 0.04);
+  padding-left: 1.35rem !important;
+  padding-right: 1.35rem !important;
+}
+
+/* Pagination: rows per page left, page numbers right */
+.doctors-mgmt-mrt-footer .mrt-table-pagination {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+
+.doctors-mgmt-mrt-footer .mrt-table-pagination > .mantine-Group-root:first-of-type {
+  flex-shrink: 0;
+  margin-right: auto;
+}
+
+.doctors-mgmt-mrt-footer .mrt-table-pagination > .mantine-Pagination-root {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Table body left padding aligned with toolbar */
+.doctors-mgmt-mrt-container {
+  padding-left: 0;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-table thead tr th:first-child,
+.doctors-mgmt-mrt-paper .doctors-mgmt-table tbody tr td:first-child,
+.doctors-mgmt-mrt-paper table thead th:first-child,
+.doctors-mgmt-mrt-paper table tbody td:first-child {
+  padding-left: 1.35rem !important;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-td,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-table thead tr th:first-child,
+.doctors-mgmt-mrt-paper .doctors-mgmt-table tbody tr td:first-child,
+.doctors-mgmt-mrt-paper table thead th:first-child,
+.doctors-mgmt-mrt-paper table tbody td:first-child {
+  padding-left: 1.35rem !important;
+}
+
+.doctors-mgmt-doctor-cell {
+  padding-left: 0;
+}
+
+/* Column menu (dots) — keep default, not the sort/filter chips */
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-content-actions .mantine-ActionIcon-root:not(.mrt-table-head-sort-button) {
+  background: transparent !important;
+  color: var(--text-soft) !important;
+}
+
+.doctors-mgmt-empty {
+  min-height: 280px;
+}
+
+.doctors-mgmt-empty__icon {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-cyan) 18%, var(--surface)),
+    color-mix(in srgb, var(--brand-cyan) 8%, var(--surface-soft))
+  ) !important;
+}
+
+.doctors-mgmt-drawer {
+  background: var(--surface);
+}
+
+/* Dark mode (Mantine data-mantine-color-scheme) */
+[data-mantine-color-scheme='dark'] .doctors-mgmt-header__title,
+[data-mantine-color-scheme='dark'] .doctors-mgmt-stat__value {
+  color: var(--text);
+}
+
+[data-mantine-color-scheme='dark'] .doctors-mgmt-table-card,
+[data-mantine-color-scheme='dark'] .doctors-mgmt-stat {
+  border-color: var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+[data-mantine-color-scheme='dark'] .doctors-mgmt-stat__icon {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--brand-cyan);
+}
+
+[data-mantine-color-scheme='dark'] .doctors-mgmt-header__ghost,
+[data-mantine-color-scheme='dark'] .doctors-mgmt-search input {
+  background: var(--surface-soft) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+[data-mantine-color-scheme='dark'] .doctors-mgmt-td--alt {
+  background: color-mix(in srgb, var(--surface-soft) 80%, #000);
+}
+
+[data-mantine-color-scheme='dark'] .doctors-mgmt-fee {
+  background: color-mix(in srgb, var(--brand-cyan) 14%, var(--surface-soft));
+  border-color: var(--border);
+}
+
+@media (max-width: 768px) {
+  .doctors-mgmt-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .doctors-mgmt-quick-select {
+    max-width: none;
+    width: 100%;
+  }
+}

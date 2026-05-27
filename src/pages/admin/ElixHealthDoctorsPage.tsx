@@ -1,24 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, EyeOff, Loader2, Pencil, Trash2 } from 'lucide-react';
-import SectionCard from '../../components/ui/SectionCard';
-import { formatConsultationFeeUsd } from '../../lib/doctors';
-import { deleteDoctorForAdmin, fetchAllDoctorsForAdmin, setDoctorVisibilityForAdmin } from '../../lib/admins';
+import { Alert, Modal, Stack, Text } from '@mantine/core';
+import { fetchAllDoctorsForAdmin } from '../../lib/admins';
+import { canEditProfiles } from '../../lib/staffPermissions';
 import type { Doctor } from '../../types/doctor';
-import { doctorEditUrl } from './elixHealthRoutes';
+import DoctorsAnalyticsCards from './doctors/DoctorsAnalyticsCards';
+import DoctorsDataTable from './doctors/DoctorsDataTable';
+import DoctorsFilterDrawer from './doctors/DoctorsFilterDrawer';
+import DoctorsPageHeader from './doctors/DoctorsPageHeader';
+import DoctorsPageSkeleton from './doctors/DoctorsPageSkeleton';
+import DoctorsTableToolbar from './doctors/DoctorsTableToolbar';
+import {
+  applyDoctorQuickFilters,
+  computeDoctorAnalytics,
+  exportDoctorsCsv,
+  uniqueSorted,
+  type DoctorQuickFilters
+} from './doctors/doctorsUtils';
+import { useDoctorsTableColumns } from './doctors/doctorsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import './doctors/doctors-management.css';
 
-function loginCell(doctor: { auth_user_id?: string | null; login_disabled?: boolean }) {
-  if (!doctor.auth_user_id) return 'No login';
-  return doctor.login_disabled ? 'Disabled' : 'Enabled';
-}
+const DEFAULT_FILTERS: DoctorQuickFilters = {
+  specialty: null,
+  country: null,
+  login: 'all'
+};
 
-function cell(value: string | null | undefined) {
-  const v = value?.trim();
-  return v ? v : '—';
-}
-
-function matchesDoctorSearch(doctor: Doctor, query: string) {
+function matchesSearch(doctor: Doctor, query: string) {
   const haystack = [
     doctor.full_name,
     doctor.email,
@@ -30,7 +38,8 @@ function matchesDoctorSearch(doctor: Doctor, query: string) {
     doctor.clinic_country,
     doctor.mobile_no,
     doctor.phone,
-    doctor.gender
+    doctor.gender,
+    doctor.qualification
   ]
     .filter(Boolean)
     .join(' ')
@@ -44,10 +53,11 @@ export default function ElixHealthDoctorsPage() {
   const canEdit = canEditProfiles(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<DoctorQuickFilters>(DEFAULT_FILTERS);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,145 +76,124 @@ export default function ElixHealthDoctorsPage() {
     void load();
   }, [load]);
 
-  const handleVisibility = async (doctor: Doctor) => {
-    const nextVisible = doctor.is_visible === false;
-    setBusyId(doctor.id);
-    setActionMessage(null);
+  const analytics = useMemo(() => computeDoctorAnalytics(doctors), [doctors]);
 
-    const { error: visibilityError } = await setDoctorVisibilityForAdmin(doctor.id, nextVisible);
-    setBusyId(null);
+  const specialtyOptions = useMemo(
+    () => uniqueSorted(doctors.map((doctor) => doctor.specialty)),
+    [doctors]
+  );
 
-    if (visibilityError) {
-      setActionMessage(visibilityError.message);
-      return;
+  const countryOptions = useMemo(
+    () =>
+      uniqueSorted(
+        doctors.map((doctor) => doctor.clinic_country ?? doctor.country)
+      ),
+    [doctors]
+  );
+
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const filteredDoctors = useMemo(() => {
+    let list = applyDoctorQuickFilters(doctors, filters);
+    if (normalizedSearch) {
+      list = list.filter((doctor) => matchesSearch(doctor, normalizedSearch));
     }
+    return list;
+  }, [doctors, filters, normalizedSearch]);
 
-    setActionMessage(`${doctor.full_name} is now ${nextVisible ? 'visible in' : 'hidden from'} patient search.`);
-    void load();
-  };
+  const hasActiveFilters =
+    Boolean(normalizedSearch) ||
+    Boolean(filters.specialty) ||
+    Boolean(filters.country) ||
+    filters.login !== 'all';
 
-  const handleDelete = async (doctor: Doctor) => {
-    const confirmed = window.confirm(
-      `Delete ${doctor.full_name}? This hides the doctor from patient search and removes them from the active admin list.`
-    );
-    if (!confirmed) return;
+  const columns = useDoctorsTableColumns({ canEdit });
 
-    setBusyId(doctor.id);
-    setActionMessage(null);
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setFilters(DEFAULT_FILTERS);
+  }, []);
 
-    const { error: deleteError } = await deleteDoctorForAdmin(doctor.id);
-    setBusyId(null);
-
-    if (deleteError) {
-      setActionMessage(deleteError.message);
-      return;
-    }
-
-    setActionMessage(`${doctor.full_name} was deleted from active doctor listings.`);
-    void load();
-  };
-
-  if (loading) {
-    return (
-      <p className='elixhealth-status'>
-        <Loader2 size={18} className='spin' aria-hidden /> Loading doctors…
-      </p>
-    );
-  }
+  const handleExport = useCallback(() => {
+    exportDoctorsCsv(filteredDoctors);
+  }, [filteredDoctors]);
 
   if (error) {
     return (
-      <p className='auth-error' role='alert'>
+      <Alert color='red' radius='md' title='Could not load doctors' className='doctors-mgmt'>
         {error}. Run migration 014_doctor_extended_profile.sql if columns are missing.
-      </p>
+      </Alert>
     );
   }
 
-  const subtitle = normalizedQuery
-    ? `${filteredDoctors.length} of ${doctors.length} doctors`
-    : `${doctors.length} registered`;
+  if (loading && doctors.length === 0) {
+    return <DoctorsPageSkeleton />;
+  }
 
   return (
-    <SectionCard title='Doctors' subtitle={`${doctors.length} registered`}>
-      {actionMessage ? (
-        <p className='elixhealth-success' role='status'>
-          {actionMessage}
-        </p>
-      ) : null}
+    <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
+      <DoctorsPageHeader
+        totalCount={doctors.length}
+        canEdit={canEdit}
+        onOpenFilters={() => setDrawerOpen(true)}
+        onExport={handleExport}
+        onAddDoctor={() => setAddModalOpen(true)}
+      />
 
-      <div className='elixhealth-table-wrap elixhealth-table-wrap--wide'>
-        <table className='elixhealth-table elixhealth-table--compact'>
-          <thead>
-            <tr>
-              <th className='elixhealth-table__col-sticky-start elixhealth-table__col-name'>Full name</th>
-              <th>Gender</th>
-              <th>Mobile no.</th>
-              <th>Email ID</th>
-              <th>Qualification</th>
-              <th>Specialty</th>
-              <th>Clinic name</th>
-              <th>City</th>
-              <th>Country</th>
-              <th>Fee</th>
-              <th>Login</th>
-              <th className='elixhealth-table__col-sticky-end' aria-label='Actions' />
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDoctors.map((doctor) => (
-              <tr key={doctor.id}>
-                <td className='elixhealth-table__col-sticky-start elixhealth-table__col-name'>
-                  {doctor.full_name}
-                </td>
-                <td>{cell(doctor.gender)}</td>
-                <td>{cell(doctor.mobile_no ?? doctor.phone)}</td>
-                <td>{cell(doctor.email)}</td>
-                <td>{cell(doctor.qualification)}</td>
-                <td>{doctor.specialty}</td>
-                <td>{cell(doctor.clinic_name ?? doctor.hospital)}</td>
-                <td>{cell(doctor.clinic_city)}</td>
-                <td>{cell(doctor.clinic_country ?? doctor.country)}</td>
-                <td>{formatConsultationFeeUsd(doctor.consultation_fee ?? doctor.fee_usd)}</td>
-                <td>{loginCell(doctor)}</td>
-                <td>
-                  <div className='elixhealth-table-actions'>
-                    <Link to={doctorEditUrl(doctor.id)} className='elixhealth-row-action'>
-                      <Pencil size={15} aria-hidden />
-                      Edit
-                    </Link>
-                    <button
-                      type='button'
-                      className='elixhealth-row-action'
-                      disabled={busyId === doctor.id}
-                      onClick={() => void handleVisibility(doctor)}
-                    >
-                      {doctor.is_visible === false ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
-                      {doctor.is_visible === false ? 'Show' : 'Hide'}
-                    </button>
-                    <button
-                      type='button'
-                      className='elixhealth-row-action elixhealth-row-action--danger'
-                      disabled={busyId === doctor.id}
-                      onClick={() => void handleDelete(doctor)}
-                    >
-                      {busyId === doctor.id ? (
-                        <Loader2 size={15} className='spin' aria-hidden />
-                      ) : (
-                        <Trash2 size={15} aria-hidden />
-                      )}
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {doctors.length === 0 ? <p className='muted'>No doctors in the database.</p> : null}
-        {doctors.length > 0 && filteredDoctors.length === 0 ? (
-          <p className='muted'>No doctors match your search.</p>
-        ) : null}
+      <DoctorsAnalyticsCards analytics={analytics} loading={loading} />
+
+      <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
+        <DoctorsDataTable
+          data={filteredDoctors}
+          columns={columns}
+          isLoading={loading}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+          renderToolbar={({ table, fullScreen, onToggleFullScreen }) => (
+            <DoctorsTableToolbar
+              table={table}
+              fullScreen={fullScreen}
+              onToggleFullScreen={onToggleFullScreen}
+              search={search}
+              onSearchChange={setSearch}
+              filters={filters}
+              specialtyOptions={specialtyOptions}
+              countryOptions={countryOptions}
+              onFilterChange={setFilters}
+            />
+          )}
+        />
       </div>
-    </SectionCard>
+
+      <DoctorsFilterDrawer
+        opened={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        filters={filters}
+        specialtyOptions={specialtyOptions}
+        countryOptions={countryOptions}
+        onChange={setFilters}
+        onReset={clearFilters}
+      />
+
+      <Modal
+        opened={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        title='Add doctor'
+        radius='lg'
+        centered
+        classNames={{ content: 'doctors-mgmt-modal' }}
+      >
+        <Stack gap='sm'>
+          <Text size='sm' c='dimmed'>
+            New doctor profiles are provisioned through your healthcare onboarding workflow or
+            database administration. Once a record exists, you can complete clinic, scheduler, and
+            login settings from this console.
+          </Text>
+          <Text size='sm'>
+            To edit an existing provider, use the table actions or open a doctor name from the list.
+          </Text>
+        </Stack>
+      </Modal>
+    </div>
   );
 }

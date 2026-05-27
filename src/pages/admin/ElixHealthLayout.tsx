@@ -69,6 +69,7 @@ export default function ElixHealthLayout({
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navItems = navItemsForAdmin(admin);
+  const roleLabel = adminRoleLabel(admin.role);
 
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -102,41 +103,48 @@ export default function ElixHealthLayout({
         aria-label='Admin navigation'
       >
         <div className='elixhealth-sidebar-brand'>
-          <img src='/icons/elix-logo-transparent.png' alt='' className='elixhealth-sidebar-logo' />
-          <div>
+          <div className='elixhealth-sidebar-logo-wrap'>
+            <img src='/icons/elix-logo-transparent.png' alt='' className='elixhealth-sidebar-logo' />
+          </div>
+          <div className='elixhealth-sidebar-brand-text'>
             <p className='elixhealth-sidebar-title'>Elix Health</p>
-            <p className='elixhealth-sidebar-subtitle'>{adminRoleLabel(admin.role)}</p>
+            <span className='elixhealth-sidebar-role-badge'>{roleLabel}</span>
           </div>
         </div>
 
         <nav className='elixhealth-sidebar-nav'>
-          <p className='elixhealth-sidebar-section'>Menu</p>
+          <p className='elixhealth-sidebar-section'>Main menu</p>
           <ul>
-            {navItems.map(({ id, label, path, icon: Icon }) => (
-              <li key={id}>
-                <button
-                  type='button'
-                  className={
-                    activeNav === id
-                      ? 'elixhealth-sidebar-link elixhealth-sidebar-link--active'
-                      : 'elixhealth-sidebar-link'
-                  }
-                  onClick={() => handleNav(path)}
-                  aria-current={activeNav === id ? 'page' : undefined}
-                >
-                  <Icon size={18} aria-hidden />
-                  <span>{label}</span>
-                  {activeNav === id ? (
-                    <ChevronRight size={16} className='elixhealth-sidebar-chevron' aria-hidden />
-                  ) : null}
-                </button>
-              </li>
-            ))}
+            {navItems.map(({ id, label, path, icon: Icon }) => {
+              const isActive = activeNav === id;
+              return (
+                <li key={id}>
+                  <button
+                    type='button'
+                    className={
+                      isActive
+                        ? 'elixhealth-sidebar-link elixhealth-sidebar-link--active'
+                        : 'elixhealth-sidebar-link'
+                    }
+                    onClick={() => handleNav(path)}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    <span className='elixhealth-sidebar-link-icon' aria-hidden>
+                      <Icon size={18} />
+                    </span>
+                    <span className='elixhealth-sidebar-link-label'>{label}</span>
+                    {isActive ? (
+                      <ChevronRight size={16} className='elixhealth-sidebar-chevron' aria-hidden />
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 
         <div className='elixhealth-sidebar-footer'>
-          <div className='elixhealth-sidebar-user' title={admin.email}>
+          <div className='elixhealth-sidebar-user-card' title={admin.email}>
             <span className='elixhealth-sidebar-avatar' aria-hidden>
               {admin.full_name.charAt(0).toUpperCase()}
             </span>
@@ -176,7 +184,7 @@ export default function ElixHealthLayout({
                   </>
                 ) : null}
               </p>
-              
+              <h1 className='elixhealth-page-title'>{pageTitle}</h1>
             </div>
           </div>
           <div className='elixhealth-topbar-end'>

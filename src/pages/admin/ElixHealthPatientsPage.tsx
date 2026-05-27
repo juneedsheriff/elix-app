@@ -1,19 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2, Pencil, Search } from 'lucide-react';
-import SectionCard from '../../components/ui/SectionCard';
+import { Alert, Modal, Stack, Text } from '@mantine/core';
 import { fetchAllPatientsForAdmin } from '../../lib/admins';
 import { canEditProfiles } from '../../lib/staffPermissions';
 import type { Patient } from '../../types/patient';
-import { patientEditUrl } from './elixHealthRoutes';
+import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
+import PatientsDataTable from './patients/PatientsDataTable';
+import PatientsFilterDrawer from './patients/PatientsFilterDrawer';
+import PatientsPageHeader from './patients/PatientsPageHeader';
+import PatientsPageSkeleton from './patients/PatientsPageSkeleton';
+import PatientsTableToolbar from './patients/PatientsTableToolbar';
+import {
+  applyPatientQuickFilters,
+  computePatientAnalytics,
+  exportPatientsCsv,
+  uniqueSorted,
+  type PatientQuickFilters
+} from './patients/patientsUtils';
+import { usePatientsTableColumns } from './patients/patientsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import './doctors/doctors-management.css';
 
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString();
-}
+const DEFAULT_FILTERS: PatientQuickFilters = {
+  country: null,
+  city: null,
+  bloodGroup: null,
+  login: 'all'
+};
 
-function matchesPatientSearch(patient: Patient, query: string) {
+function matchesSearch(patient: Patient, query: string) {
   const haystack = [
     patient.elix_id,
     patient.full_name,
@@ -37,7 +51,10 @@ export default function ElixHealthPatientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<PatientQuickFilters>(DEFAULT_FILTERS);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,89 +73,127 @@ export default function ElixHealthPatientsPage() {
     void load();
   }, [load]);
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const analytics = useMemo(() => computePatientAnalytics(patients), [patients]);
+
+  const countryOptions = useMemo(
+    () => uniqueSorted(patients.map((patient) => patient.country)),
+    [patients]
+  );
+
+  const cityOptions = useMemo(
+    () => uniqueSorted(patients.map((patient) => patient.city)),
+    [patients]
+  );
+
+  const bloodGroupOptions = useMemo(
+    () => uniqueSorted(patients.map((patient) => patient.blood_group)),
+    [patients]
+  );
+
+  const normalizedSearch = search.trim().toLowerCase();
 
   const filteredPatients = useMemo(() => {
-    if (!normalizedQuery) return patients;
-    return patients.filter((patient) => matchesPatientSearch(patient, normalizedQuery));
-  }, [patients, normalizedQuery]);
+    let list = applyPatientQuickFilters(patients, filters);
+    if (normalizedSearch) {
+      list = list.filter((patient) => matchesSearch(patient, normalizedSearch));
+    }
+    return list;
+  }, [patients, filters, normalizedSearch]);
 
-  if (loading) {
-    return (
-      <p className='elixhealth-status'>
-        <Loader2 size={18} className='spin' aria-hidden /> Loading patients…
-      </p>
-    );
-  }
+  const hasActiveFilters =
+    Boolean(normalizedSearch) ||
+    Boolean(filters.country) ||
+    Boolean(filters.city) ||
+    Boolean(filters.bloodGroup) ||
+    filters.login !== 'all';
+
+  const columns = usePatientsTableColumns({ canEdit });
+
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setFilters(DEFAULT_FILTERS);
+  }, []);
+
+  const handleExport = useCallback(() => {
+    exportPatientsCsv(filteredPatients);
+  }, [filteredPatients]);
 
   if (error) {
     return (
-      <p className='auth-error' role='alert'>
+      <Alert color='red' radius='md' title='Could not load patients' className='doctors-mgmt'>
         {error}
-      </p>
+      </Alert>
     );
   }
 
-  const subtitle = normalizedQuery
-    ? `${filteredPatients.length} of ${patients.length} patients`
-    : `${patients.length} registered`;
+  if (loading && patients.length === 0) {
+    return <PatientsPageSkeleton />;
+  }
 
   return (
-    <SectionCard title='Patients' subtitle={subtitle}>
-      <label className='doctor-search elixhealth-table-search'>
-        <Search size={16} aria-hidden />
-        <input
-          type='search'
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder='Search by Elix ID, name, email, phone, or location'
-          aria-label='Search patients'
-        />
-      </label>
+    <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
+      <PatientsPageHeader
+        totalCount={patients.length}
+        canEdit={canEdit}
+        onOpenFilters={() => setDrawerOpen(true)}
+        onExport={handleExport}
+        onAddPatient={() => setAddModalOpen(true)}
+      />
 
-      <div className='elixhealth-table-wrap'>
-        <table className='elixhealth-table'>
-          <thead>
-            <tr>
-              <th>Elix ID</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Location</th>
-              <th>Joined</th>
-              <th>Login</th>
-              <th aria-label='Actions' />
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPatients.map((patient) => (
-              <tr key={patient.id}>
-                <td>
-                  <code>{patient.elix_id}</code>
-                </td>
-                <td>{patient.full_name}</td>
-                <td>{patient.email}</td>
-                <td>{patient.phone ?? '—'}</td>
-                <td>{[patient.city, patient.country].filter(Boolean).join(', ') || '—'}</td>
-                <td>{formatDate(patient.created_at)}</td>
-                <td>
-                  {!patient.auth_user_id ? 'No login' : patient.login_disabled ? 'Disabled' : 'Enabled'}
-                </td>
-                <td>
-                  <Link to={patientEditUrl(patient.id)} className='elixhealth-row-action'>
-                    <Pencil size={15} aria-hidden />
-                    {canEdit ? 'Edit' : 'View'}
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {patients.length === 0 ? <p className='muted'>No patients in the database.</p> : null}
-        {patients.length > 0 && filteredPatients.length === 0 ? (
-          <p className='muted'>No patients match your search.</p>
-        ) : null}
+      <PatientsAnalyticsCards analytics={analytics} loading={loading} />
+
+      <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
+        <PatientsDataTable
+          data={filteredPatients}
+          columns={columns}
+          isLoading={loading}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+          renderToolbar={({ table, fullScreen, onToggleFullScreen }) => (
+            <PatientsTableToolbar
+              table={table}
+              fullScreen={fullScreen}
+              onToggleFullScreen={onToggleFullScreen}
+              search={search}
+              onSearchChange={setSearch}
+              filters={filters}
+              countryOptions={countryOptions}
+              cityOptions={cityOptions}
+              onFilterChange={setFilters}
+            />
+          )}
+        />
       </div>
-    </SectionCard>
+
+      <PatientsFilterDrawer
+        opened={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        filters={filters}
+        countryOptions={countryOptions}
+        cityOptions={cityOptions}
+        bloodGroupOptions={bloodGroupOptions}
+        onChange={setFilters}
+        onReset={clearFilters}
+      />
+
+      <Modal
+        opened={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        title='Add patient'
+        radius='lg'
+        centered
+        classNames={{ content: 'doctors-mgmt-modal' }}
+      >
+        <Stack gap='sm'>
+          <Text size='sm' c='dimmed'>
+            New patient profiles are created through registration or your onboarding workflow.
+            Once a record exists, you can manage profile and login settings from this console.
+          </Text>
+          <Text size='sm'>
+            To edit an existing patient, use the table actions or open a name from the list.
+          </Text>
+        </Stack>
+      </Modal>
+    </div>
   );
 }
