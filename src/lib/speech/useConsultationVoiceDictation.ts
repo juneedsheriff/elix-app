@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConsultationSummaryFieldKey } from '../consultationSummaryFields';
 import { composeLiveTranscript } from './previewDictationText';
+import {
+  isMobileSpeechDevice,
+  normalizeSpeechTranscript,
+  readSegmentFromResults
+} from './speechTranscriptMerge';
 import { createSpeechRecognition, isSpeechRecognitionSupported } from './speechRecognitionSupport';
 
 type UseConsultationVoiceDictationOptions = {
@@ -18,12 +23,12 @@ export function useConsultationVoiceDictation({
 }: UseConsultationVoiceDictationOptions) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const activeFieldRef = useRef<ConsultationSummaryFieldKey | null>(null);
-  /** Finals from completed recognition segments (before auto-restart). */
   const priorCommittedRef = useRef('');
-  /** Finals accumulated in the current recognition segment. */
   const segmentCommittedRef = useRef('');
   const sessionTranscriptRef = useRef('');
   const interimTextRef = useRef('');
+  const restartingRef = useRef(false);
+  const isMobileRef = useRef(isMobileSpeechDevice());
 
   const [activeField, setActiveField] = useState<ConsultationSummaryFieldKey | null>(null);
   const [sessionText, setSessionText] = useState('');
@@ -33,10 +38,13 @@ export function useConsultationVoiceDictation({
   const supported = isSpeechRecognitionSupported();
 
   const syncTranscriptState = useCallback((committed: string, interim: string) => {
-    sessionTranscriptRef.current = committed;
-    interimTextRef.current = interim;
-    setSessionText(committed);
-    setInterimText(interim);
+    const normalizedCommitted = normalizeSpeechTranscript(committed);
+    const normalizedInterim = interim.trim();
+
+    sessionTranscriptRef.current = normalizedCommitted;
+    interimTextRef.current = normalizedInterim;
+    setSessionText(normalizedCommitted);
+    setInterimText(normalizedInterim);
   }, []);
 
   const resetTranscriptState = useCallback(() => {
@@ -44,6 +52,7 @@ export function useConsultationVoiceDictation({
     segmentCommittedRef.current = '';
     sessionTranscriptRef.current = '';
     interimTextRef.current = '';
+    restartingRef.current = false;
     setSessionText('');
     setInterimText('');
   }, []);
@@ -52,10 +61,9 @@ export function useConsultationVoiceDictation({
     (field: ConsultationSummaryFieldKey | null) => {
       if (!field) return;
 
-      const pending = composeLiveTranscript(
-        sessionTranscriptRef.current,
-        interimTextRef.current
-      ).trim();
+      const pending = normalizeSpeechTranscript(
+        composeLiveTranscript(sessionTranscriptRef.current, interimTextRef.current)
+      );
 
       resetTranscriptState();
 
@@ -73,6 +81,7 @@ export function useConsultationVoiceDictation({
 
       activeFieldRef.current = null;
       setActiveField(null);
+      restartingRef.current = false;
 
       if (recognition) {
         recognition.onresult = null;
@@ -91,10 +100,23 @@ export function useConsultationVoiceDictation({
         return;
       }
 
+      persistSegmentToPrior();
+      syncTranscriptState(priorCommittedRef.current, interimTextRef.current);
+
       finalizeSession(field);
     },
-    [finalizeSession, resetTranscriptState]
+    [finalizeSession, persistSegmentToPrior, resetTranscriptState]
   );
+
+  const persistSegmentToPrior = useCallback(() => {
+    const segment = normalizeSpeechTranscript(segmentCommittedRef.current);
+    if (!segment) return;
+
+    priorCommittedRef.current = normalizeSpeechTranscript(
+      joinCommittedSegments(priorCommittedRef.current, segment)
+    );
+    segmentCommittedRef.current = '';
+  }, []);
 
   const start = useCallback(
     (fieldKey: ConsultationSummaryFieldKey) => {
@@ -121,36 +143,25 @@ export function useConsultationVoiceDictation({
       setError(null);
       priorCommittedRef.current = '';
       segmentCommittedRef.current = '';
+      restartingRef.current = false;
       syncTranscriptState('', '');
 
       activeFieldRef.current = fieldKey;
       setActiveField(fieldKey);
 
-      recognition.continuous = true;
+      recognition.continuous = !isMobileRef.current;
       recognition.interimResults = true;
       recognition.lang = lang;
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let interim = '';
+        const { committed, interim } = readSegmentFromResults(event.results);
+        segmentCommittedRef.current = committed;
 
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
-          const result = event.results[index];
-          const transcript = result[0]?.transcript ?? '';
-          if (!transcript) continue;
-
-          if (result.isFinal) {
-            segmentCommittedRef.current += transcript;
-          } else {
-            interim += transcript;
-          }
-        }
-
-        const committed = joinCommittedSegments(
-          priorCommittedRef.current,
-          segmentCommittedRef.current.trim()
+        const mergedCommitted = normalizeSpeechTranscript(
+          joinCommittedSegments(priorCommittedRef.current, committed)
         );
 
-        syncTranscriptState(committed, interim.trim());
+        syncTranscriptState(mergedCommitted, interim);
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -165,6 +176,7 @@ export function useConsultationVoiceDictation({
         const failedField = activeFieldRef.current;
         activeFieldRef.current = null;
         setActiveField(null);
+        restartingRef.current = false;
 
         recognition.onresult = null;
         recognition.onerror = null;
@@ -181,20 +193,31 @@ export function useConsultationVoiceDictation({
       };
 
       recognition.onend = () => {
-        if (!activeFieldRef.current || !recognitionRef.current) return;
+        if (!activeFieldRef.current || !recognitionRef.current || restartingRef.current) return;
 
-        priorCommittedRef.current = joinCommittedSegments(
-          priorCommittedRef.current,
-          segmentCommittedRef.current.trim()
-        );
-        segmentCommittedRef.current = '';
+        persistSegmentToPrior();
         syncTranscriptState(priorCommittedRef.current, '');
 
-        try {
-          recognition.start();
-        } catch {
-          /* ignore restart errors */
+        if (isMobileRef.current) {
+          return;
         }
+
+        restartingRef.current = true;
+
+        window.setTimeout(() => {
+          if (!activeFieldRef.current || !recognitionRef.current) {
+            restartingRef.current = false;
+            return;
+          }
+
+          try {
+            recognition.start();
+          } catch {
+            /* ignore restart errors */
+          } finally {
+            restartingRef.current = false;
+          }
+        }, 120);
       };
 
       recognitionRef.current = recognition;
@@ -208,7 +231,7 @@ export function useConsultationVoiceDictation({
         recognitionRef.current = null;
       }
     },
-    [finalizeSession, lang, stop, supported, syncTranscriptState]
+    [finalizeSession, lang, persistSegmentToPrior, stop, supported, syncTranscriptState]
   );
 
   useEffect(() => {
