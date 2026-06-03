@@ -25,7 +25,7 @@ npm run worker:admin-auth:deploy
 VITE_ADMIN_AUTH_API_URL=https://elix-admin-auth.<your-subdomain>.workers.dev
 ```
 
-For local dev, run `npm run worker:admin-auth:dev` and use `http://localhost:8787`.
+For local dev, run `npm run worker:admin-auth:dev` and use `http://127.0.0.1:8788` (port 8788 avoids clashing with medical-records on 8787). Copy `.dev.vars.example` to `.dev.vars` with your Supabase keys and `ALLOWED_ORIGIN=http://localhost:3000`.
 
 ## API
 

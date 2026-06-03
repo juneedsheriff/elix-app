@@ -66,7 +66,8 @@ async function adminAuthFetch<T>(path: string, init?: RequestInit): Promise<{ da
     if (err instanceof TypeError) {
       return {
         data: null,
-        error: 'Could not reach login service (network/CORS). Use http://localhost:3000 or redeploy the admin-auth worker.'
+        error:
+          'Could not reach login service (network/CORS). Run the app at http://localhost:3000, set VITE_ADMIN_AUTH_API_URL to your admin-auth worker, and run npm run worker:admin-auth:dev (port 8788) or redeploy the worker.'
       };
     }
     return { data: null, error: err instanceof Error ? err.message : 'Request failed.' };

@@ -4,6 +4,7 @@ import { useSupabase } from '../../context/SupabaseProvider';
 import { adminSignIn, adminSignOut, fetchAdminByAuthUserId } from '../../lib/admins';
 import type { Admin } from '../../types/admin';
 import { ElixHealthAdminGuard } from './ElixHealthAdminShell';
+import ElixHealthDoctorCreatePage from './ElixHealthDoctorCreatePage';
 import ElixHealthDoctorEditPage from './ElixHealthDoctorEditPage';
 import ElixHealthDoctorsPage from './ElixHealthDoctorsPage';
 import ElixHealthLogin from './ElixHealthLogin';
@@ -94,6 +95,14 @@ export default function ElixHealthApp() {
       >
         <Route index element={<ElixHealthOverviewPage />} />
         <Route path='doctors' element={<ElixHealthDoctorsPage />} />
+        <Route
+          path='doctor/new'
+          element={
+            <AdministratorOnly>
+              <ElixHealthDoctorCreatePage />
+            </AdministratorOnly>
+          }
+        />
         <Route path='doctor' element={<ElixHealthDoctorEditPage />} />
         <Route path='patients' element={<ElixHealthPatientsPage />} />
         <Route path='patient' element={<ElixHealthPatientEditPage />} />

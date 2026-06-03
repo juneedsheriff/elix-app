@@ -8,9 +8,10 @@ import {
   Text,
   Tooltip
 } from '@mantine/core';
-import { IconEye } from '@tabler/icons-react';
+import { IconEye, IconTrash } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
-import { staffRequestStatusLabel } from '../../../lib/opinionRequests';
+import { formatPatientAvailability } from '../../../lib/doctorSchedule';
+import { consultationStageLabel, staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import {
   formatRequestDate,
@@ -21,6 +22,7 @@ import {
 type UseRequestsTableColumnsOptions = {
   isAdmin: boolean;
   onView: (request: OpinionRequest) => void;
+  onDelete?: (request: OpinionRequest) => void;
 };
 
 function displayCell(value: string | null | undefined) {
@@ -28,7 +30,7 @@ function displayCell(value: string | null | undefined) {
   return v ? v : '—';
 }
 
-export function useRequestsTableColumns({ isAdmin, onView }: UseRequestsTableColumnsOptions) {
+export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseRequestsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<OpinionRequest>[]>(
     () => {
       const columns: MRT_ColumnDef<OpinionRequest>[] = [
@@ -74,6 +76,13 @@ export function useRequestsTableColumns({ isAdmin, onView }: UseRequestsTableCol
           minSize: 170,
           Cell: ({ row }) => {
             const request = row.original;
+            const preferredTime = formatPatientAvailability(request.patient_availability);
+            const showPatientPick =
+              preferredTime &&
+              (request.consultation_stage === 'availability_submitted' ||
+                request.consultation_stage === 'schedule_proposed' ||
+                request.consultation_stage === 'schedule_confirmed' ||
+                request.consultation_stage === 'doctor_selected');
             return (
               <Stack gap={2}>
                 <Text size='sm' fw={500}>
@@ -82,6 +91,11 @@ export function useRequestsTableColumns({ isAdmin, onView }: UseRequestsTableCol
                 {request.doctor_specialty ? (
                   <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
                     {request.doctor_specialty}
+                  </Text>
+                ) : null}
+                {showPatientPick ? (
+                  <Text size='xs' c='teal' fw={600} className='doctors-mgmt-muted'>
+                    Preferred: {preferredTime.split('\n')[0]}
                   </Text>
                 ) : null}
               </Stack>
@@ -112,6 +126,18 @@ export function useRequestsTableColumns({ isAdmin, onView }: UseRequestsTableCol
           )
         },
         {
+          id: 'workflow',
+          header: 'Workflow',
+          accessorFn: (row) => consultationStageLabel(row.consultation_stage),
+          size: 160,
+          minSize: 140,
+          Cell: ({ row }) => (
+            <Badge variant='light' color='cyan' radius='xl' size='md' className='doctors-mgmt-pill'>
+              {consultationStageLabel(row.original.consultation_stage)}
+            </Badge>
+          )
+        },
+        {
           id: 'status',
           header: 'Status',
           accessorFn: (row) => staffRequestStatusLabel(row),
@@ -136,15 +162,20 @@ export function useRequestsTableColumns({ isAdmin, onView }: UseRequestsTableCol
 
       if (isAdmin) {
         columns.push({
-          accessorKey: 'assigned_to_name',
+          id: 'assigned_to',
           header: 'Assigned to',
-          size: 160,
-          minSize: 140,
-          Cell: ({ cell }) => (
-            <Text size='sm' className='doctors-mgmt-muted'>
-              {displayCell(cell.getValue<string | null>())}
-            </Text>
-          )
+          accessorFn: (row) => row.assigned_to_name ?? row.assigned_to ?? '',
+          size: 180,
+          minSize: 150,
+          Cell: ({ row }) => {
+            const request = row.original;
+            const label = request.assigned_to_name?.trim();
+            return (
+              <Text size='sm' fw={label ? 600 : undefined} className='doctors-mgmt-muted'>
+                {label ?? (request.assigned_to ? 'Assigned' : '—')}
+              </Text>
+            );
+          }
         });
       }
 
@@ -170,12 +201,30 @@ export function useRequestsTableColumns({ isAdmin, onView }: UseRequestsTableCol
                 <IconEye size={18} />
               </ActionIcon>
             </Tooltip>
+            {isAdmin && onDelete ? (
+              <Tooltip label='Delete request'>
+                <ActionIcon
+                  variant='subtle'
+                  color='red'
+                  radius='md'
+                  size='lg'
+                  className='doctors-mgmt-action'
+                  aria-label='Delete request'
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDelete(row.original);
+                  }}
+                >
+                  <IconTrash size={18} />
+                </ActionIcon>
+              </Tooltip>
+            ) : null}
           </Group>
         )
       });
 
       return columns;
     },
-    [isAdmin, onView]
+    [isAdmin, onView, onDelete]
   );
 }

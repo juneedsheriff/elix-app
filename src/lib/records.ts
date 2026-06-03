@@ -6,7 +6,8 @@ import {
   deleteR2Object,
   downloadMedicalRecordBlob,
   isR2StorageConfigured,
-  uploadFileToR2
+  uploadFileToR2,
+  type MedicalRecordDownloadOptions
 } from './r2Storage';
 import { supabase } from './supabase';
 
@@ -147,8 +148,11 @@ export async function uploadMedicalRecord(file: File, patientId: string) {
   return { data: toMedicalRecord(normalizeRow(data)), error: null };
 }
 
-export async function getMedicalRecordDownloadUrl(storagePath: string, _expiresIn = 3600) {
-  const { blob, error } = await downloadMedicalRecordBlob(storagePath);
+export async function getMedicalRecordDownloadUrl(
+  storagePath: string,
+  options?: MedicalRecordDownloadOptions
+) {
+  const { blob, error } = await downloadMedicalRecordBlob(storagePath, options);
   if (error || !blob) return { data: null, error };
   const signedUrl = URL.createObjectURL(blob);
   return { data: { signedUrl }, error: null };

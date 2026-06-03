@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@mantine/core';
-import { fetchPatientServiceExecutives } from '../../lib/admins';
+import { fetchAllDoctorsForAdmin, fetchPatientServiceExecutives } from '../../lib/admins';
 import {
   assignOpinionRequest,
+  deleteOpinionRequestForAdmin,
   fetchOpinionRequestsForStaff,
-  forwardOpinionRequestToDoctor,
-  staffRequestStatusLabel
+  staffRequestStatusLabel,
+  subscribeStaffOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import { isAdministrator, isPatientServiceExecutive } from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
+import type { Doctor } from '../../types/doctor';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 import RequestDetailDrawer from './requests/RequestDetailDrawer';
@@ -23,18 +25,12 @@ import {
   applyRequestQuickFilters,
   computeRequestAnalytics,
   exportRequestsCsv,
+  getDefaultRequestFilters,
   uniqueSorted,
   type RequestQuickFilters
 } from './requests/requestsUtils';
 import { useRequestsTableColumns } from './requests/requestsTableColumns';
 import './doctors/doctors-management.css';
-
-const DEFAULT_FILTERS: RequestQuickFilters = {
-  queue: 'pending',
-  status: 'all',
-  specialty: null,
-  assignee: null
-};
 
 function matchesSearch(request: OpinionRequest, query: string) {
   const haystack = [
@@ -66,27 +62,53 @@ export default function ElixHealthRequestsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<RequestQuickFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<RequestQuickFilters>(() => getDefaultRequestFilters(isAdmin));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<OpinionRequest | null>(null);
   const [assigneeId, setAssigneeId] = useState('');
-  const [coordinationNotes, setCoordinationNotes] = useState('');
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const stageSnapshotRef = useRef<Map<string, string | null>>(new Map());
+
+  const notifyPatientSelectionIfNew = useCallback(
+    (next: OpinionRequest[]) => {
+      for (const request of next) {
+        const prev = stageSnapshotRef.current.get(request.id);
+        const stage = request.consultation_stage ?? null;
+        if (
+          prev !== 'availability_submitted' &&
+          stage === 'availability_submitted' &&
+          (isPse ? request.assigned_to === staff.id : true)
+        ) {
+          setSuccessMessage(
+            `${request.patient_name ?? 'Patient'} selected ${request.doctor_name ?? 'a doctor'} with a preferred time. Open Step 3 — Recommend doctors to review availability.`
+          );
+        }
+        stageSnapshotRef.current.set(request.id, stage);
+      }
+    },
+    [isPse, staff.id]
+  );
 
   const load = useCallback(async () => {
     setError(null);
 
-    const [requestsRes, executivesRes] = await Promise.all([
+    const [requestsRes, executivesRes, doctorsRes] = await Promise.all([
       fetchOpinionRequestsForStaff(),
-      isAdmin ? fetchPatientServiceExecutives() : Promise.resolve({ data: [] as Admin[], error: null })
+      isAdmin ? fetchPatientServiceExecutives() : Promise.resolve({ data: [] as Admin[], error: null }),
+      isAdmin || isPse
+        ? fetchAllDoctorsForAdmin()
+        : Promise.resolve({ data: [] as Doctor[], error: null })
     ]);
 
     if (requestsRes.error) {
       setError(requestsRes.error.message);
       setRequests([]);
     } else {
-      setRequests(requestsRes.data ?? []);
+      const next = requestsRes.data ?? [];
+      notifyPatientSelectionIfNew(next);
+      setRequests(next);
     }
 
     if (executivesRes.error && isAdmin) {
@@ -94,7 +116,13 @@ export default function ElixHealthRequestsPage() {
     } else if (isAdmin) {
       setExecutives(executivesRes.data ?? []);
     }
-  }, [isAdmin]);
+
+    if (doctorsRes.error && (isAdmin || isPse)) {
+      setError(doctorsRes.error.message);
+    } else if (isAdmin || isPse) {
+      setDoctors(doctorsRes.data ?? []);
+    }
+  }, [isAdmin, isPse, notifyPatientSelectionIfNew]);
 
   const initialLoad = useCallback(async () => {
     setLoading(true);
@@ -104,13 +132,48 @@ export default function ElixHealthRequestsPage() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
+    const requestsRes = await fetchOpinionRequestsForStaff();
+    if (requestsRes.error) {
+      setError(requestsRes.error.message);
+    } else {
+      const next = requestsRes.data ?? [];
+      notifyPatientSelectionIfNew(next);
+      setRequests(next);
+      setSelectedRequest((current) => {
+        if (!current) return null;
+        const updated = next.find((request) => request.id === current.id);
+        if (!updated) return null;
+        return {
+          ...current,
+          ...updated,
+          assigned_to: updated.assigned_to ?? current.assigned_to,
+          assigned_to_name: updated.assigned_to_name ?? current.assigned_to_name,
+          assigned_at: updated.assigned_at ?? current.assigned_at,
+          consultation_stage: updated.consultation_stage ?? current.consultation_stage,
+          schedule_confirmed_at: updated.schedule_confirmed_at ?? current.schedule_confirmed_at,
+          payment_link: updated.payment_link ?? current.payment_link,
+          payment_status: updated.payment_status ?? current.payment_status,
+          payment_proof_submitted_at:
+            updated.payment_proof_submitted_at ?? current.payment_proof_submitted_at,
+          payment_proof_storage_path:
+            updated.payment_proof_storage_path ?? current.payment_proof_storage_path,
+          records: updated.records.length ? updated.records : current.records
+        };
+      });
+    }
     setRefreshing(false);
-  }, [load]);
+  }, [notifyPatientSelectionIfNew]);
 
   useEffect(() => {
     void initialLoad();
   }, [initialLoad]);
+
+  useEffect(() => {
+    if (!isAdmin && !isPse) return;
+    return subscribeStaffOpinionRequestUpdates(() => void refresh(), {
+      assignedToAdminId: isPse ? staff.id : null
+    });
+  }, [refresh, isAdmin, isPse, staff.id]);
 
   const analytics = useMemo(
     () => computeRequestAnalytics(requests, isAdmin),
@@ -137,17 +200,19 @@ export default function ElixHealthRequestsPage() {
     return list;
   }, [requests, filters, isAdmin, normalizedSearch]);
 
+  const defaultFilters = useMemo(() => getDefaultRequestFilters(isAdmin), [isAdmin]);
+
   const hasActiveFilters =
     Boolean(normalizedSearch) ||
-    filters.queue !== 'pending' ||
+    filters.queue !== defaultFilters.queue ||
     filters.status !== 'all' ||
     Boolean(filters.specialty) ||
     Boolean(filters.assignee);
 
   const clearFilters = useCallback(() => {
     setSearch('');
-    setFilters(DEFAULT_FILTERS);
-  }, []);
+    setFilters(getDefaultRequestFilters(isAdmin));
+  }, [isAdmin]);
 
   const handleExport = useCallback(() => {
     exportRequestsCsv(filteredRequests);
@@ -155,16 +220,50 @@ export default function ElixHealthRequestsPage() {
 
   const openRequest = useCallback((request: OpinionRequest) => {
     setSelectedRequest(request);
-    setAssigneeId('');
-    setCoordinationNotes('');
+    setAssigneeId(request.assigned_to ?? '');
     setActionMessage(null);
     setSuccessMessage(null);
     setDrawerOpen(true);
   }, []);
 
+  const handleDeleteRequest = useCallback(
+    async (request: OpinionRequest) => {
+      const label = request.patient_name ?? 'this patient';
+      if (
+        !window.confirm(
+          `Delete the opinion request for ${label} with ${request.doctor_name ?? 'the doctor'}? This removes it for the patient, PSE, and doctor.`
+        )
+      ) {
+        return;
+      }
+
+      setBusyId(request.id);
+      setActionMessage(null);
+      setSuccessMessage(null);
+
+      const { error: deleteError } = await deleteOpinionRequestForAdmin(request.id);
+      setBusyId(null);
+
+      if (deleteError) {
+        setActionMessage(deleteError.message);
+        return;
+      }
+
+      if (selectedRequest?.id === request.id) {
+        setDrawerOpen(false);
+        setSelectedRequest(null);
+      }
+
+      setSuccessMessage(`Deleted request for ${label}.`);
+      void refresh();
+    },
+    [refresh, selectedRequest?.id]
+  );
+
   const columns = useRequestsTableColumns({
     isAdmin,
-    onView: openRequest
+    onView: openRequest,
+    onDelete: isAdmin ? (request) => void handleDeleteRequest(request) : undefined
   });
 
   const openRecord = async (storagePath: string) => {
@@ -196,33 +295,22 @@ export default function ElixHealthRequestsPage() {
     }
 
     const executive = executives.find((e) => e.id === assigneeId);
+    const assignedAt = new Date().toISOString();
+    const executiveName = executive?.full_name ?? 'Patient Service Executive';
+
+    setSelectedRequest({
+      ...selectedRequest,
+      assigned_to: assigneeId,
+      assigned_to_name: executiveName,
+      assigned_at: assignedAt,
+      consultation_stage: 'assigned'
+    });
+    setAssigneeId(assigneeId);
     setSuccessMessage(
-      `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executive?.full_name ?? 'Patient Service Executive'}.`
+      `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executiveName}.`
     );
     setDrawerOpen(false);
-    void refresh();
-  };
-
-  const handleForward = async () => {
-    if (!selectedRequest) return;
-
-    setBusyId(selectedRequest.id);
-    setActionMessage(null);
-    setSuccessMessage(null);
-
-    const { error: forwardError } = await forwardOpinionRequestToDoctor(
-      selectedRequest.id,
-      coordinationNotes
-    );
-    setBusyId(null);
-
-    if (forwardError) {
-      setActionMessage(forwardError.message);
-      return;
-    }
-
-    setSuccessMessage(`Sent request to ${selectedRequest.doctor_name ?? 'doctor'} for review.`);
-    setDrawerOpen(false);
+    setSelectedRequest(null);
     void refresh();
   };
 
@@ -235,7 +323,9 @@ export default function ElixHealthRequestsPage() {
   if (error && !loading && requests.length === 0) {
     return (
       <Alert color='red' radius='md' title='Could not load requests' className='doctors-mgmt'>
-        {error}. Ensure migration 017_staff_roles_request_assignment.sql is applied in Supabase.
+        {error}. Run <code>npm run db:apply-staff-roles</code> and{' '}
+        <code>npm run db:apply-consultation-workflow</code>, or apply{' '}
+        <code>supabase/migrations/019_consultation_workflow.sql</code> in the Supabase SQL Editor.
       </Alert>
     );
   }
@@ -270,6 +360,7 @@ export default function ElixHealthRequestsPage() {
       <RequestsAnalyticsCards
         analytics={analytics}
         pendingLabel={pendingCardLabel}
+        showPatientSelections={isPse || isAdmin}
         loading={loading}
       />
 
@@ -317,14 +408,15 @@ export default function ElixHealthRequestsPage() {
         isAdmin={isAdmin}
         isPse={isPse}
         executives={executives}
+        doctors={doctors}
         assigneeId={assigneeId}
         onAssigneeChange={setAssigneeId}
-        coordinationNotes={coordinationNotes}
-        onCoordinationNotesChange={setCoordinationNotes}
         busy={busyId === selectedRequest?.id}
         onAssign={() => void handleAssign()}
-        onForward={() => void handleForward()}
         onOpenRecord={(path) => void openRecord(path)}
+        onWorkflowUpdated={() => void refresh()}
+        onError={setActionMessage}
+        onSuccess={setSuccessMessage}
       />
     </div>
   );

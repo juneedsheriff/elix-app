@@ -6,6 +6,7 @@ import { doctorToAdminInput } from '../../../lib/doctorProfile';
 import type { AdminDoctorUpdateInput, Doctor } from '../../../types/doctor';
 import ConsultationHoursEditor from './ConsultationHoursEditor';
 import AdminAccountAccessPanel from './AdminAccountAccessPanel';
+import AdminDoctorProfileImageSection from './AdminDoctorProfileImageSection';
 
 type DoctorEditTab = 'profile' | 'clinic' | 'scheduler' | 'login';
 
@@ -147,37 +148,15 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
 
       {activeTab === 'profile' ? (
         <div className='elixhealth-tab-panel' role='tabpanel'>
-          {!readOnly ? (
-            <>
-              <h3 className='elixhealth-form-section-title'>Doctor visibility</h3>
-              <div className='elixhealth-auth-status-row'>
-                <span>Patient search</span>
-                <strong className={doctor.is_visible === false ? 'elixhealth-badge' : 'elixhealth-badge elixhealth-badge--ok'}>
-                  {doctor.is_visible === false ? 'Hidden' : 'Visible'}
-                </strong>
-              </div>
-              <div className='elixhealth-auth-actions'>
-                <button
-                  type='button'
-                  className='secondary-btn'
-                  disabled={manageBusy || busy}
-                  onClick={() => void handleToggleVisibility()}
-                >
-                  {manageBusy ? <Loader2 size={16} className='spin' aria-hidden /> : doctor.is_visible === false ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
-                  {doctor.is_visible === false ? 'Show in search' : 'Hide from search'}
-                </button>
-                <button
-                  type='button'
-                  className='secondary-btn elixhealth-row-action--danger'
-                  disabled={manageBusy || busy}
-                  onClick={() => void handleDeleteDoctor()}
-                >
-                  {manageBusy ? <Loader2 size={16} className='spin' aria-hidden /> : <Trash2 size={16} aria-hidden />}
-                  Delete doctor
-                </button>
-              </div>
-            </>
-          ) : null}
+          <AdminDoctorProfileImageSection
+            imageUrl={form.image_url}
+            displayName={form.full_name}
+            onChange={(url) => setField('image_url', url)}
+            disabled={busy || manageBusy}
+            readOnly={readOnly}
+          />
+
+         
 
           <h3 className='elixhealth-form-section-title'>Personal</h3>
           <div className='elixhealth-form-grid'>
@@ -291,15 +270,6 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 required
               />
             </label>
-            <label className='elixhealth-field elixhealth-field--full'>
-              <span>Profile image URL</span>
-              <input
-                type='url'
-                value={form.image_url}
-                onChange={(e) => setField('image_url', e.target.value)}
-                required
-              />
-            </label>
           </div>
 
           <h3 className='elixhealth-form-section-title'>Profile details</h3>
@@ -337,7 +307,39 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
               />
             </label>
           </div>
+          {!readOnly ? (
+            <>
+              <h3 className='elixhealth-form-section-title'>Doctor visibility</h3>
+              <div className='elixhealth-auth-status-row'>
+                <span>Patient search</span>
+                <strong className={doctor.is_visible === false ? 'elixhealth-badge' : 'elixhealth-badge elixhealth-badge--ok'}>
+                  {doctor.is_visible === false ? 'Hidden' : 'Visible'}
+                </strong>
+              </div>
+              <div className='elixhealth-auth-actions'>
+                <button
+                  type='button'
+                  className='secondary-btn'
+                  disabled={manageBusy || busy}
+                  onClick={() => void handleToggleVisibility()}
+                >
+                  {manageBusy ? <Loader2 size={16} className='spin' aria-hidden /> : doctor.is_visible === false ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
+                  {doctor.is_visible === false ? 'Show in search' : 'Hide from search'}
+                </button>
+                <button
+                  type='button'
+                  className='secondary-btn elixhealth-row-action--danger'
+                  disabled={manageBusy || busy}
+                  onClick={() => void handleDeleteDoctor()}
+                >
+                  {manageBusy ? <Loader2 size={16} className='spin' aria-hidden /> : <Trash2 size={16} aria-hidden />}
+                  Delete doctor
+                </button>
+              </div>
+            </>
+          ) : null}
         </div>
+        
       ) : null}
 
       {activeTab === 'clinic' ? (

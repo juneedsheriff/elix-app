@@ -109,6 +109,31 @@ export async function fetchAllDoctorsForAdmin() {
   };
 }
 
+export async function createDoctorForAdmin(input: AdminDoctorUpdateInput) {
+  const row = {
+    ...adminInputToDbRow(input),
+    is_visible: true,
+    login_disabled: false
+  };
+
+  const { data, error } = await supabase.from('doctors').insert(row).select(doctorAdminColumns).single();
+
+  if (error) {
+    const message = error.code === '23505'
+      ? 'A doctor with this email already exists.'
+      : error.message.includes('doctors_insert_admins') || error.code === '42501'
+        ? `${error.message} Run supabase/migrations/028_doctors_insert_admins.sql (npm run db:apply-doctors-insert-admins).`
+        : error.message;
+    return { data: null, error: { message } };
+  }
+
+  if (!data) {
+    return { data: null, error: { message: 'Doctor was created but could not be reloaded.' } };
+  }
+
+  return { data: normalizeDoctor(data as Doctor), error: null };
+}
+
 export async function updateDoctorForAdmin(id: string, input: AdminDoctorUpdateInput) {
   const { error: updateError, count } = await supabase
     .from('doctors')

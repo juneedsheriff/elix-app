@@ -21,9 +21,20 @@ export type RequestQuickFilters = {
   assignee: string | null;
 };
 
+/** PSE sees all assigned requests by default; admins start on the pending assignment queue. */
+export function getDefaultRequestFilters(isAdmin: boolean): RequestQuickFilters {
+  return {
+    queue: isAdmin ? 'pending' : 'all',
+    status: 'all',
+    specialty: null,
+    assignee: null
+  };
+}
+
 export type RequestAnalytics = {
   total: number;
   pendingQueue: number;
+  patientSelectionsToReview: number;
   withDoctor: number;
   closed: number;
 };
@@ -76,11 +87,17 @@ export function computeRequestAnalytics(
   requests: OpinionRequest[],
   isAdmin: boolean
 ): RequestAnalytics {
+  const needsScheduleReview = (r: OpinionRequest) =>
+    r.consultation_stage === 'availability_submitted' ||
+    r.consultation_stage === 'schedule_proposed' ||
+    r.consultation_stage === 'doctor_selected';
+
   return {
     total: requests.length,
     pendingQueue: isAdmin
       ? requests.filter(isPendingAdminAssignment).length
       : requests.filter(isAssignedToPatientService).length,
+    patientSelectionsToReview: requests.filter(needsScheduleReview).length,
     withDoctor: requests.filter((r) => r.status === 'in_review').length,
     closed: requests.filter(
       (r) => r.status === 'closed' || Boolean(r.doctor_response?.trim())

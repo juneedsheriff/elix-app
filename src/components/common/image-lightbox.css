@@ -1,0 +1,102 @@
+.image-lightbox-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.image-lightbox-gallery__thumb {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  background: #f8fafc;
+  cursor: zoom-in;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.image-lightbox-gallery__thumb:hover,
+.image-lightbox-gallery__thumb:focus-visible {
+  border-color: rgba(13, 148, 136, 0.45);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+  outline: none;
+}
+
+.image-lightbox-gallery__thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.image-lightbox-gallery__thumb-label {
+  display: block;
+  padding: 0.35rem 0.45rem 0.5rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: #475569;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-lightbox-gallery__skeleton {
+  aspect-ratio: 1;
+  border-radius: 10px;
+}
+
+.image-lightbox-modal .mantine-Modal-content {
+  background: rgba(15, 23, 42, 0.96);
+}
+
+.image-lightbox-modal__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: min(70vh, 520px);
+  padding: 0.5rem 2.75rem 1rem;
+}
+
+.image-lightbox-modal__img {
+  max-width: 100%;
+  max-height: min(72vh, 640px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.image-lightbox-modal__caption {
+  margin-top: 0.75rem;
+  color: #e2e8f0;
+  text-align: center;
+  max-width: 36rem;
+}
+
+.image-lightbox-modal__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.image-lightbox-modal__nav--prev {
+  left: 0.25rem;
+}
+
+.image-lightbox-modal__nav--next {
+  right: 0.25rem;
+}
+
+.image-lightbox-modal__counter {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
