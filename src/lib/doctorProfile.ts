@@ -80,6 +80,65 @@ export function defaultConsultationHours(): ConsultationHours {
   return JSON.parse(JSON.stringify(DEFAULT_CONSULTATION_HOURS)) as ConsultationHours;
 }
 
+export const DEFAULT_DOCTOR_IMAGE_PLACEHOLDER = 'https://placehold.co/400x400?text=Doctor';
+
+export function emptyAdminDoctorInput(): AdminDoctorUpdateInput {
+  return {
+    full_name: '',
+    gender: null,
+    mobile_no: '',
+    email: '',
+    medical_license_no: null,
+    qualification: null,
+    start_of_practice: null,
+    specialty: '',
+    specialization: null,
+    about_doctor: null,
+    work_experience: null,
+    awards_recognitions: null,
+    membership: null,
+    clinic_name: '',
+    clinic_specialization: null,
+    about_clinic: null,
+    clinic_website: null,
+    clinic_country: '',
+    clinic_state: null,
+    clinic_city: null,
+    clinic_location: null,
+    clinic_street: null,
+    clinic_zipcode: null,
+    scheduler_effect_from: null,
+    scheduler_time_interval: 30,
+    consultation_fee: 0,
+    elix_patient_priority: false,
+    scheduler_color: '#09abc0',
+    consultation_hours: defaultConsultationHours(),
+    time_settings: {},
+    years_experience: 0,
+    rating: 4.5,
+    languages: 'English',
+    image_url: DEFAULT_DOCTOR_IMAGE_PLACEHOLDER
+  };
+}
+
+export function validateAdminDoctorInput(input: AdminDoctorUpdateInput): string | null {
+  if (!input.full_name.trim()) return 'Enter the doctor’s full name.';
+  if (!input.email.trim()) return 'Enter an email address.';
+  if (!input.mobile_no.trim()) return 'Enter a mobile number.';
+  if (!input.specialty.trim()) return 'Enter a specialty.';
+  if (!input.clinic_name.trim()) return 'Enter a clinic name.';
+  if (!input.clinic_country.trim()) return 'Enter a clinic country.';
+  if (!input.languages.trim()) return 'Enter languages.';
+  const image = input.image_url.trim();
+  if (!image) return 'Add a profile photo (URL or upload).';
+  if (image.startsWith('data:image/')) {
+    if (image.length > 700_000) return 'Uploaded image is too large. Use a smaller file (max 512 KB).';
+    return null;
+  }
+  if (!/^https?:\/\//i.test(image)) return 'Profile photo must be a valid http(s) URL or an uploaded image.';
+  return null;
+}
+
 function parseDay(raw: unknown): ConsultationHoursDay {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_DAY };
   const d = raw as Record<string, unknown>;

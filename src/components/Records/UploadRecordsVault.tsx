@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { FileText, Loader2, Upload } from 'lucide-react';
+import { fetchPatientConsultationSummaries } from '../../lib/opinionRequests';
 import {
   deleteMedicalRecord,
   fetchUserMedicalRecords,
@@ -8,6 +9,7 @@ import {
   isR2StorageConfigured,
   uploadMedicalRecord
 } from '../../lib/records';
+import type { ConsultationSummary } from '../../types/opinionRequest';
 import type { MedicalRecord } from '../../types/medicalRecord';
 
 const ACCEPT = '.pdf,.jpg,.jpeg,.doc,.docx';
@@ -39,6 +41,7 @@ type UploadRecordsVaultProps = {
 export default function UploadRecordsVault({ configured, userId }: UploadRecordsVaultProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
+  const [summaries, setSummaries] = useState<ConsultationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -48,18 +51,25 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
   const loadRecords = useCallback(async () => {
     if (!userId) {
       setRecords([]);
+      setSummaries([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await fetchUserMedicalRecords(userId);
-    if (fetchError) {
-      setError(fetchError.message);
+    const [recordsRes, summariesRes] = await Promise.all([
+      fetchUserMedicalRecords(userId),
+      fetchPatientConsultationSummaries(userId)
+    ]);
+    if (recordsRes.error) {
+      setError(recordsRes.error.message);
       setRecords([]);
     } else {
-      setRecords(data ?? []);
+      setRecords(recordsRes.data ?? []);
+    }
+    if (!summariesRes.error) {
+      setSummaries(summariesRes.data ?? []);
     }
     setLoading(false);
   }, [userId]);
@@ -290,6 +300,26 @@ export default function UploadRecordsVault({ configured, userId }: UploadRecords
           </ul>
         ) : null}
       </section>
+
+      {summaries.length > 0 ? (
+        <section className='section-card'>
+          <div className='section-head'>
+            <h3>Consultation summaries</h3>
+            <p>Structured notes and prescriptions from completed consultations</p>
+          </div>
+          <ul className='list'>
+            {summaries.map((summary) => (
+              <li key={summary.id}>
+                <strong>{summary.chief_complaint ?? 'Consultation'}</strong>
+                <span>
+                  {summary.prescription ? `Prescription: ${summary.prescription}` : summary.assessment_plan ?? ''}
+                </span>
+                <span className='muted'>{new Date(summary.created_at).toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,9 @@
 import { MantineProvider, createTheme, localStorageColorSchemeManager } from '@mantine/core';
+import { DatesProvider } from '@mantine/dates';
 import '@mantine/core/styles.css';
+import '@mantine/dates/styles.css';
 import type { ReactNode } from 'react';
+import 'dayjs/locale/en';
 
 const colorSchemeManager = localStorageColorSchemeManager({
   key: 'elix-health-color-scheme'
@@ -52,7 +55,9 @@ export default function ElixHealthMantineProvider({ children }: ElixHealthMantin
       colorSchemeManager={colorSchemeManager}
       defaultColorScheme='light'
     >
-      {children}
+      <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 0, weekendDays: [0, 6] }}>
+        {children}
+      </DatesProvider>
     </MantineProvider>
   );
 }

@@ -3,6 +3,7 @@ import type { ElixHealthNavId } from '../../lib/staffPermissions';
 export const ELIX_HEALTH_PATHS = {
   overview: '/elixhealth',
   doctors: '/elixhealth/doctors',
+  doctorNew: '/elixhealth/doctor/new',
   doctor: '/elixhealth/doctor',
   patients: '/elixhealth/patients',
   patient: '/elixhealth/patient',
@@ -33,6 +34,9 @@ export function navIdFromPathname(pathname: string): ElixHealthNavId {
 }
 
 export function pageTitleFromPathname(pathname: string, search: string): string {
+  if (pathname === '/elixhealth/doctor/new') {
+    return 'Add doctor';
+  }
   if (pathname === '/elixhealth/doctor' && new URLSearchParams(search).get('id')) {
     const tab = new URLSearchParams(search).get('tab');
     if (tab === 'login') return 'Login access';

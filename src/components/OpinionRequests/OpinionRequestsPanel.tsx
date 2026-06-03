@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ClipboardList, FileText, Loader2, Stethoscope } from 'lucide-react';
+import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
+import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
+import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorRequestRespond from './DoctorRequestRespond';
-import { fetchDoctorOpinionRequests, fetchPatientOpinionRequests, patientRequestStatusLabel } from '../../lib/opinionRequests';
+import { fetchDoctorOpinionRequests, fetchPatientOpinionRequests, isAwaitingDoctorReply, patientRequestStatusLabel } from '../../lib/opinionRequests';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
@@ -37,6 +40,8 @@ type OpinionRequestsPanelProps = {
   subtitle: string;
   emptyHint: string;
   signInHint: string;
+  onNavigate?: (screenId: string) => void;
+  doctorReturnScreen?: string;
 };
 
 export default function OpinionRequestsPanel({
@@ -48,7 +53,9 @@ export default function OpinionRequestsPanel({
   title,
   subtitle,
   emptyHint,
-  signInHint
+  signInHint,
+  onNavigate,
+  doctorReturnScreen = 'case-review'
 }: OpinionRequestsPanelProps) {
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +64,10 @@ export default function OpinionRequestsPanel({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const canLoad = view === 'patient' ? Boolean(patientAuthUserId) : Boolean(doctorId || doctorEmail);
+
+  const doctorConsultationQueue =
+    view === 'doctor' ? requests.filter(canDoctorGiveConsultation) : [];
+  const doctorPendingCount = doctorConsultationQueue.filter(isAwaitingDoctorReply).length;
 
   const load = useCallback(async () => {
     if (!canLoad) {
@@ -148,6 +159,23 @@ export default function OpinionRequestsPanel({
           </p>
         ) : null}
 
+        {view === 'doctor' && !loading && !error && doctorConsultationQueue.length > 0 ? (
+          <div className='case-review-consultation-banner'>
+            <p className='case-review-consultation-banner__text'>
+              {doctorPendingCount > 0
+                ? `${doctorPendingCount} case${doctorPendingCount === 1 ? '' : 's'} ready for your consultation.`
+                : `${doctorConsultationQueue.length} case${doctorConsultationQueue.length === 1 ? '' : 's'} — you can update consultations below.`}
+            </p>
+            {doctorPendingCount === 1 ? (
+              <DoctorGiveConsultationButton
+                request={doctorConsultationQueue.find(isAwaitingDoctorReply) ?? doctorConsultationQueue[0]!}
+                onNavigate={onNavigate}
+                returnScreen={doctorReturnScreen}
+              />
+            ) : null}
+          </div>
+        ) : null}
+
         {!loading && !error && canLoad && requests.length === 0 ? (
           <p className='muted'>
             {emptyHint}
@@ -204,29 +232,48 @@ export default function OpinionRequestsPanel({
                   </div>
                 ) : null}
 
-                {view === 'patient' && !request.doctor_response && request.status !== 'closed' ? (
+                {view === 'patient' ? (
+                  <ConsultationPatientWorkflow
+                    request={request}
+                    onUpdated={() => void load()}
+                    onOpenRecord={(path) => void openRecord(path)}
+                    onMessage={(message, type) => {
+                      if (type === 'error') {
+                        setActionMessage(message);
+                        setSuccessMessage(null);
+                      } else {
+                        setSuccessMessage(message);
+                        setActionMessage(null);
+                      }
+                    }}
+                  />
+                ) : null}
+
+                {view === 'patient' &&
+                !request.consultation_stage &&
+                !request.doctor_response &&
+                request.status !== 'closed' ? (
                   <p className='muted doctor-awaiting-response'>
                     {!request.assigned_to && request.status === 'submitted'
                       ? 'Waiting for admin review before coordination begins.'
-                      : request.status === 'submitted'
-                        ? 'Our patient service team is coordinating with you and the doctor.'
-                        : 'Waiting for the doctor&apos;s written opinion.'}
+                      : 'Our patient service team is coordinating your request.'}
                   </p>
                 ) : null}
 
-                {view === 'doctor' ? (
-                  <DoctorRequestRespond
-                    request={request}
-                    onResponded={() => {
-                      setSuccessMessage(`Response sent to ${request.patient_name ?? 'patient'}.`);
-                      setActionMessage(null);
-                      void load();
-                    }}
-                    onError={(msg) => {
-                      setActionMessage(msg);
-                      setSuccessMessage(null);
-                    }}
-                  />
+                {view === 'doctor' && (request.scheduled_at || request.meeting_link) ? (
+                  <div className='doctor-response-block' role='region' aria-label='Appointment details'>
+                    <h5>Appointment</h5>
+                    {request.scheduled_at ? (
+                      <p className='muted'>{new Date(request.scheduled_at).toLocaleString()}</p>
+                    ) : null}
+                    {request.meeting_link ? (
+                      <p>
+                        <a href={request.meeting_link} target='_blank' rel='noreferrer'>
+                          Join meeting
+                        </a>
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {request.records.length > 0 ? (
@@ -252,6 +299,14 @@ export default function OpinionRequestsPanel({
                       </li>
                     ))}
                   </ul>
+                ) : null}
+
+                {view === 'doctor' && canDoctorGiveConsultation(request) ? (
+                  <DoctorRequestRespond
+                    request={request}
+                    onNavigate={onNavigate}
+                    returnScreen={doctorReturnScreen}
+                  />
                 ) : null}
               </li>
             ))}

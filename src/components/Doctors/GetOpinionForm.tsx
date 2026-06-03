@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
+import { appScreenPath } from '../../lib/navigation/appRoutes';
 import { createOpinionRequest } from '../../lib/opinionRequests';
 import { fetchUserMedicalRecords } from '../../lib/records';
 import type { Doctor } from '../../types/doctor';
@@ -11,7 +13,10 @@ type GetOpinionFormProps = {
   onBack: () => void;
 };
 
+const MY_REQUESTS_REDIRECT_MS = 5000;
+
 export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) {
+  const navigate = useNavigate();
   const { user, patientProfile } = useSupabase();
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
@@ -21,6 +26,27 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [redirectSecondsLeft, setRedirectSecondsLeft] = useState(
+    MY_REQUESTS_REDIRECT_MS / 1000
+  );
+
+  useEffect(() => {
+    if (!submitted) return;
+
+    setRedirectSecondsLeft(MY_REQUESTS_REDIRECT_MS / 1000);
+    const redirectTimer = window.setTimeout(() => {
+      navigate(appScreenPath('my-requests'));
+    }, MY_REQUESTS_REDIRECT_MS);
+
+    const tickTimer = window.setInterval(() => {
+      setRedirectSecondsLeft((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(redirectTimer);
+      window.clearInterval(tickTimer);
+    };
+  }, [submitted, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,10 +139,22 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
           <CheckCircle2 size={40} aria-hidden />
           <h3>Request submitted</h3>
           <p className='muted'>
-            Your second opinion request was submitted. An admin will assign it to our patient service team, who will coordinate with you and {doctor.full_name}.
+            Your second opinion request was submitted. Your request will be assigned to our patient
+            service team, who will coordinate with you and {doctor.full_name}.
           </p>
-          <button type='button' className='primary-btn wide' onClick={onBack}>
-            Back to profile
+          <p className='muted'>
+            Redirecting to My requests in {redirectSecondsLeft} second
+            {redirectSecondsLeft === 1 ? '' : 's'}…
+          </p>
+          <button
+            type='button'
+            className='primary-btn wide'
+            onClick={() => navigate(appScreenPath('my-requests'))}
+          >
+            Go to my requests now
+          </button>
+          <button type='button' className='secondary-btn wide' onClick={onBack}>
+            Back to doctor profile
           </button>
         </div>
       </section>

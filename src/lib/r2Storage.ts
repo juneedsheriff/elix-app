@@ -106,7 +106,28 @@ export async function uploadFileToR2(
   }
 }
 
-export async function downloadMedicalRecordBlob(storagePath: string) {
+export type MedicalRecordDownloadOptions = {
+  /** Opinion request id — required for staff/doctor/patient consultation PDFs and payment proof. */
+  requestId?: string;
+};
+
+export async function createConsultationSummaryUploadUrl(requestId: string, contentLength: number) {
+  return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
+    '/v1/consultation-summary/upload-url',
+    {
+      method: 'POST',
+      json: {
+        requestId,
+        contentLength
+      }
+    }
+  );
+}
+
+export async function downloadMedicalRecordBlob(
+  storagePath: string,
+  options?: MedicalRecordDownloadOptions
+) {
   if (!apiBase) {
     return {
       blob: null,
@@ -126,7 +147,10 @@ export async function downloadMedicalRecordBlob(storagePath: string) {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ storagePath })
+      body: JSON.stringify({
+        storagePath,
+        ...(options?.requestId ? { requestId: options.requestId } : {})
+      })
     });
 
     if (!response.ok) {

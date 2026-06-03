@@ -1,0 +1,945 @@
+.consultation-wizard {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.consultation-wizard__track {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: min(100%, 52rem);
+}
+
+.consultation-wizard__step {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 0;
+  min-width: 5.5rem;
+ 
+}
+
+.consultation-wizard__step-inner {
+  flex: 1;
+  min-width: 0;
+}
+
+.consultation-wizard__button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  color: inherit;
+  font: inherit;
+}
+
+.consultation-wizard__button--static {
+  cursor: default;
+}
+
+.consultation-wizard__circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 2px solid #d1d5db;
+  background: #f3f4f6;
+  color: #6b7280;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.consultation-wizard__step--complete .consultation-wizard__circle {
+  background: var(--brand-cyan, #0891b2);
+  border-color: var(--brand-cyan, #0891b2);
+  color: #fff;
+}
+
+.consultation-wizard__step--current .consultation-wizard__circle {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #dc2626 25%, transparent);
+}
+
+.consultation-wizard__labels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0 0.25rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.consultation-wizard__title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text, #111827);
+  word-wrap: break-word;
+}
+
+.consultation-wizard__subtitle {
+  font-size: 0.62rem;
+  line-height: 1.3;
+  color: var(--muted, #6b7280);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.consultation-wizard__connector {
+  flex: 1 1 auto;
+  height: 2px;
+  min-width: 0.35rem;
+  margin-top: 1rem;
+  background: #e5e7eb;
+}
+
+.consultation-wizard__connector--complete {
+  background: var(--brand-cyan, #0891b2);
+}
+
+.consultation-wizard__button:hover:not(:disabled) .consultation-wizard__title {
+  color: var(--brand-cyan, #0891b2);
+}
+
+/* Mobile: vertical timeline (patient detail & narrow screens) */
+.consultation-wizard--vertical .consultation-wizard,
+.consultation-wizard.consultation-wizard--vertical {
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.consultation-wizard--vertical .consultation-wizard__track,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__track {
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  gap: 0;
+}
+
+.consultation-wizard--vertical .consultation-wizard__step,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__step {
+  flex: none;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.consultation-wizard--vertical .consultation-wizard__button,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__button {
+  flex-direction: row;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+}
+
+.consultation-wizard--vertical .consultation-wizard__labels,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__labels {
+  align-items: flex-start;
+  flex: 1;
+  padding: 0.1rem 0 0;
+}
+
+.consultation-wizard--vertical .consultation-wizard__title,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__title {
+  font-size: 0.85rem;
+}
+
+.consultation-wizard--vertical .consultation-wizard__subtitle,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__subtitle {
+  font-size: 0.75rem;
+  -webkit-line-clamp: 3;
+}
+
+.consultation-wizard--vertical .consultation-wizard__connector,
+.consultation-wizard.consultation-wizard--vertical .consultation-wizard__connector {
+  width: 2px;
+  height: 0.65rem;
+  min-width: 0;
+  min-height: 0.65rem;
+  margin: 0 0 0 0.95rem;
+  flex: none;
+}
+
+.consultation-wizard__mobile-summary {
+  display: none;
+  margin: 0 0 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-cyan) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 25%, var(--border));
+  font-size: 0.85rem;
+}
+
+.consultation-wizard__mobile-summary strong {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.patient-consultation-wizard {
+  margin-top: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.patient-consultation-wizard__panel {
+  margin-top: 0.75rem;
+  min-width: 0;
+}
+
+.patient-consultation-wizard__heading {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text, #111827);
+}
+
+/* Accordion layout (patient my-requests detail) */
+.patient-consultation-wizard--accordion {
+  margin-top: 1rem;
+  overflow: visible;
+}
+
+.consultation-wizard-accordion {
+  min-width: 0;
+  overflow: visible;
+}
+
+.consultation-wizard-accordion__track {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 0 0.5rem;
+  list-style: none;
+}
+
+.consultation-wizard-accordion__item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.consultation-wizard-accordion__header {
+  min-width: 0;
+}
+
+.consultation-wizard-accordion__trigger {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.consultation-wizard-accordion__trigger--locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.consultation-wizard-accordion__item--locked .consultation-wizard__circle {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #9ca3af;
+}
+
+.consultation-wizard-accordion__trigger .consultation-wizard__labels {
+  flex: 1;
+  align-items: flex-start;
+  padding: 0.1rem 0 0;
+}
+
+.consultation-wizard-accordion__trigger .consultation-wizard__title {
+  font-size: 0.85rem;
+}
+
+.consultation-wizard-accordion__trigger .consultation-wizard__subtitle {
+  font-size: 0.75rem;
+  -webkit-line-clamp: 3;
+}
+
+.consultation-wizard-accordion__chevron {
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+  color: var(--muted, #6b7280);
+  transition: transform 0.2s ease;
+}
+
+.consultation-wizard-accordion__item--expanded .consultation-wizard-accordion__chevron {
+  transform: rotate(180deg);
+}
+
+.consultation-wizard-accordion__lock {
+  flex-shrink: 0;
+  margin-top: 0.4rem;
+  color: var(--muted, #9ca3af);
+}
+
+.consultation-wizard-accordion__panel {
+  margin: 0 0 0.35rem 2.75rem;
+  padding: 0 0 0.5rem;
+  min-width: 0;
+}
+
+.consultation-wizard-accordion__panel .doctor-response-block {
+  margin-top: 0;
+}
+
+.consultation-wizard-accordion__item .consultation-wizard__connector {
+  width: 2px;
+  height: 0.65rem;
+  min-width: 0;
+  min-height: 0.65rem;
+  margin: 0 0 0 0.95rem;
+  flex: none;
+}
+
+.consultation-wizard-accordion__item--complete .consultation-wizard__title,
+.consultation-wizard__step--complete .consultation-wizard-accordion__trigger .consultation-wizard__title {
+  color: var(--brand-cyan, #0891b2);
+}
+
+.consultation-wizard-accordion__trigger:hover:not(:disabled) .consultation-wizard__title {
+  color: var(--brand-cyan, #0891b2);
+}
+
+.consultation-wizard-accordion__item--locked .consultation-wizard-accordion__trigger:hover .consultation-wizard__title {
+  color: var(--text, #111827);
+}
+
+@media (max-width: 540px) {
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) {
+    overflow-x: hidden;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__track {
+    flex-direction: column;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__step {
+    flex: none;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__button {
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: left;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__labels {
+    align-items: flex-start;
+    flex: 1;
+    padding: 0.05rem 0 0;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__title {
+    font-size: 0.85rem;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__subtitle {
+    font-size: 0.75rem;
+    -webkit-line-clamp: 3;
+  }
+
+  .consultation-wizard:not(.consultation-wizard--horizontal-only) .consultation-wizard__connector {
+    width: 2px;
+    height: 0.6rem;
+    margin: 0 0 0 0.95rem;
+    flex: none;
+  }
+
+  .consultation-wizard__mobile-summary {
+    display: block;
+  }
+}
+
+[data-theme='dark'] .consultation-wizard__circle {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+[data-theme='dark'] .consultation-wizard__connector {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Patient doctor + preferred time selection */
+.patient-consultation-wizard .patient-doctor-choice-list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.patient-consultation-wizard .patient-doctor-choice {
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.patient-consultation-wizard .patient-doctor-choice--active {
+  border-color: var(--brand-cyan, #0891b2);
+  box-shadow: 0 0 0 1px rgba(8, 145, 178, 0.25);
+}
+
+.patient-consultation-wizard .patient-doctor-choice__name {
+  margin: 0 0 0.65rem;
+}
+
+.patient-consultation-wizard .patient-doctor-choice__schedule {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.patient-consultation-wizard .patient-schedule-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.patient-consultation-wizard .patient-schedule-field__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.patient-consultation-wizard .patient-schedule-field__input {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+}
+
+.patient-consultation-wizard .patient-availability-input {
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font: inherit;
+  resize: vertical;
+  min-height: 3rem;
+}
+
+.patient-consultation-wizard .patient-doctor-choice__btn {
+  width: 100%;
+}
+
+.patient-consultation-wizard .patient-selection-summary {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+}
+
+.patient-consultation-wizard .patient-selection-summary--submitted {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.patient-consultation-wizard .patient-selection-summary__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #0f766e;
+}
+
+.patient-consultation-wizard .patient-selection-summary--submitted .patient-selection-summary__title {
+  color: #475569;
+}
+
+.patient-consultation-wizard .patient-selection-summary__doctor {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.patient-consultation-wizard .patient-selection-summary__label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.15rem;
+}
+
+.patient-consultation-wizard .patient-selection-summary__time {
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
+}
+
+.patient-consultation-wizard .patient-selection-summary__notes {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: #64748b;
+  white-space: pre-wrap;
+}
+
+.patient-consultation-wizard .patient-selection-summary .primary-btn {
+  margin-top: 0.5rem;
+}
+
+.patient-consultation-retain-step {
+  margin-top: 1.25rem;
+}
+
+.patient-consultation-retain-step .patient-consultation-retain {
+  margin-bottom: 0;
+}
+
+.patient-consultation-retain {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #f0fdfa;
+  border: 1px solid #99f6e4;
+}
+
+.patient-consultation-retain__heading {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0f766e;
+}
+
+.patient-consultation-retain__block {
+  margin-top: 0.65rem;
+}
+
+.patient-consultation-retain__block:first-of-type {
+  margin-top: 0;
+}
+
+.patient-consultation-retain__value {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+}
+
+.patient-consultation-retain__meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.patient-consultation-retain__badge {
+  display: inline-block;
+  margin: 0.25rem 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #059669;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.patient-consultation-retain__payment--confirmed {
+  background: rgba(255, 255, 255, 0.65);
+  padding: 0.65rem;
+  border-radius: 8px;
+}
+
+.patient-consultation-retain__pay-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.patient-payment-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 22rem;
+}
+
+.patient-payment-step__amount {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.patient-payment-step__amount-label {
+  font-size: 0.8rem;
+  color: var(--muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.patient-payment-step__amount strong {
+  font-size: 1.35rem;
+}
+
+.patient-payment-step__hint {
+  margin: 0;
+}
+
+.patient-payment-step__pay-btn {
+  align-self: flex-start;
+}
+
+.patient-payment-proof {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.patient-payment-proof__label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #64748b);
+}
+
+.patient-payment-proof__hint {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.patient-payment-proof__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.patient-payment-proof__upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+}
+
+.patient-payment-proof__submitted {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.patient-payment-proof__status {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.patient-payment-proof__preview-link {
+  display: block;
+  max-width: 14rem;
+}
+
+.patient-payment-proof__preview {
+  display: block;
+  width: 100%;
+  max-height: 10rem;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.patient-consultation-retain__payment .patient-payment-proof {
+  border-top-color: rgba(15, 23, 42, 0.1);
+}
+
+.patient-appointment-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.patient-appointment-step > p {
+  margin: 0;
+}
+
+.patient-appointment-step__intro {
+  margin: 0;
+}
+
+.patient-appointment-step__placeholder,
+.patient-appointment-step__footer {
+  margin: 0;
+}
+
+.patient-appointment-step__footer {
+  margin-top: 0.25rem;
+}
+
+.patient-appointment-step__doctor {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+}
+
+.patient-appointment-step__block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.patient-appointment-step__label {
+  display: block;
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.patient-appointment-step__value {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--text, #0f172a);
+}
+
+.patient-appointment-step__block .muted.patient-appointment-step__value {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.patient-appointment-step__join-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.65rem 1.1rem;
+  text-decoration: none;
+  width: auto;
+  max-width: 100%;
+  align-self: flex-start;
+}
+
+.patient-appointment-step__payment .primary-btn {
+  display: inline-flex;
+  margin-top: 0;
+  text-decoration: none;
+}
+
+/* PSE coordination drawer */
+.request-workflow-wizard.consultation-wizard-accordion-root {
+  margin-top: 0.5rem;
+}
+
+.request-workflow-wizard .consultation-wizard-accordion__panel {
+  padding-top: 0.25rem;
+}
+
+.request-workflow-step {
+  padding: 0.15rem 0;
+}
+
+.pse-doctors-overview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+@media (max-width: 720px) {
+  .pse-doctors-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pse-doctors-overview__card {
+  background: #fafbfc;
+}
+
+.pse-payment-panel__form {
+  background: #fafbfc;
+}
+
+.pse-payment-panel__shared {
+  background: #f0fdfa;
+  border-color: rgba(13, 148, 136, 0.2);
+}
+
+.pse-payment-panel__shared-link {
+  word-break: break-all;
+}
+
+.pse-payment-proof-review .image-lightbox-gallery__grid {
+  max-width: 100%;
+}
+
+.doctors-mgmt-drawer .image-lightbox-gallery__grid {
+  max-width: 100%;
+}
+
+.patient-view-documents-btn {
+  margin-bottom: 0.75rem;
+}
+
+.patient-records-modal {
+  max-width: 32rem;
+}
+
+.patient-records-modal__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.consultation-summary-pdf__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.consultation-summary-pdf__toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.consultation-summary-pdf__toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.consultation-summary-pdf__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.consultation-summary-pdf__viewer {
+  margin-bottom: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  overflow: hidden;
+}
+
+.consultation-summary-pdf__viewer-status {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+}
+
+.consultation-summary-pdf__iframe {
+  display: block;
+  width: 100%;
+  min-height: 22rem;
+  border: 0;
+  background: #fff;
+}
+
+.consultation-summary-pdf__page {
+  background: #fff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 2rem 2.25rem;
+  max-height: 28rem;
+  overflow-y: auto;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.5;
+}
+
+.consultation-summary-pdf__brand {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0891b2;
+  font-family: system-ui, sans-serif;
+}
+
+.consultation-summary-pdf__title {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 1.25rem;
+  font-family: system-ui, sans-serif;
+}
+
+.consultation-summary-pdf__meta {
+  margin: 0.15rem 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+  font-family: system-ui, sans-serif;
+}
+
+.consultation-summary-pdf__section {
+  margin-top: 1.25rem;
+}
+
+.consultation-summary-pdf__section h6 {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #374151;
+  font-family: system-ui, sans-serif;
+}
+
+.consultation-summary-pdf__section p {
+  margin: 0;
+  white-space: pre-wrap;
+}

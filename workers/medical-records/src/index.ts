@@ -1,6 +1,7 @@
 type Env = {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
   R2_BUCKET_NAME: string;
   MEDICAL_RECORDS: R2Bucket;
   ALLOWED_ORIGIN?: string;
@@ -55,6 +56,156 @@ function assertOwnsPath(allowedPrefixes: string[], storagePath: string): void {
   }
 }
 
+function supabaseRestHeaders(authHeader: string, env: Env, useServiceRole = false) {
+  const key = useServiceRole && env.SUPABASE_SERVICE_ROLE_KEY
+    ? env.SUPABASE_SERVICE_ROLE_KEY
+    : env.SUPABASE_ANON_KEY;
+  return {
+    Authorization: useServiceRole && env.SUPABASE_SERVICE_ROLE_KEY
+      ? `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+      : authHeader,
+    apikey: key,
+    Accept: 'application/json'
+  };
+}
+
+async function isStaffMember(userId: string, authHeader: string, env: Env): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/admins?auth_user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!res.ok) return false;
+
+  const rows = (await res.json()) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function getDoctorIdForAuthUser(
+  userId: string,
+  authHeader: string,
+  env: Env
+): Promise<string | null> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/doctors?auth_user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!res.ok) return null;
+
+  const rows = (await res.json()) as { id?: string }[];
+  return rows[0]?.id ?? null;
+}
+
+async function canDoctorUploadConsultationSummary(
+  userId: string,
+  authHeader: string,
+  requestId: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  const expectedPrefix = `consultation-summaries/${requestId.trim()}/`;
+  if (!storagePath.startsWith(expectedPrefix)) return false;
+
+  const doctorId = await getDoctorIdForAuthUser(userId, authHeader, env);
+  if (!doctorId) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&doctor_id=eq.${encodeURIComponent(doctorId)}&select=id&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!res.ok) return false;
+
+  const rows = (await res.json()) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function canAccessConsultationSummaryPdfForRequest(
+  authHeader: string,
+  userId: string,
+  requestId: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const normalizedPath = storagePath.trim();
+  const select = 'id,request_id,pdf_storage_path,patient_auth_user_id,doctor_id';
+
+  const fetchSummary = async (useServiceRole: boolean) => {
+    const url = `${base}/rest/v1/consultation_summaries?request_id=eq.${encodeURIComponent(requestId.trim())}&select=${select}&limit=1`;
+    const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, useServiceRole) });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as {
+      pdf_storage_path?: string | null;
+      patient_auth_user_id?: string | null;
+      doctor_id?: string | null;
+    }[];
+    return rows[0] ?? null;
+  };
+
+  let summary = await fetchSummary(false);
+  const staff = await isStaffMember(userId, authHeader, env);
+
+  if (!summary && staff && env.SUPABASE_SERVICE_ROLE_KEY) {
+    summary = await fetchSummary(true);
+    if (summary) {
+      const visibleToStaff = await fetchSummary(false);
+      if (!visibleToStaff) return false;
+    }
+  }
+
+  if (!summary?.pdf_storage_path?.trim()) return false;
+  if (summary.pdf_storage_path.trim() !== normalizedPath) return false;
+
+  if (summary.patient_auth_user_id === userId) return true;
+  if (staff) return true;
+
+  const doctorId = await getDoctorIdForAuthUser(userId, authHeader, env);
+  return Boolean(doctorId && summary.doctor_id === doctorId);
+}
+
+async function canAccessPaymentProofForRequest(
+  authHeader: string,
+  userId: string,
+  requestId: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const normalizedPath = storagePath.trim();
+  const select = 'id,payment_proof_storage_path,patient_id';
+
+  const fetchRow = async (useServiceRole: boolean) => {
+    const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId)}&select=${select}&limit=1`;
+    const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, useServiceRole) });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as {
+      payment_proof_storage_path?: string | null;
+      patient_id?: string | null;
+    }[];
+    return rows[0] ?? null;
+  };
+
+  let row = await fetchRow(false);
+  const staff = await isStaffMember(userId, authHeader, env);
+
+  if (!row && staff && env.SUPABASE_SERVICE_ROLE_KEY) {
+    row = await fetchRow(true);
+    if (row) {
+      const visibleToStaff = await fetchRow(false);
+      if (!visibleToStaff) return false;
+    }
+  }
+
+  if (!row?.payment_proof_storage_path?.trim()) return false;
+  if (row.payment_proof_storage_path.trim() !== normalizedPath) return false;
+  if (row.patient_id === userId) return true;
+  return staff;
+}
+
 async function canAccessStoragePathViaRls(
   authHeader: string,
   storagePath: string,
@@ -63,27 +214,36 @@ async function canAccessStoragePathViaRls(
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
 
   const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const url = `${base}/rest/v1/uploaded_files?storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const headers = supabaseRestHeaders(authHeader, env);
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: authHeader,
-      apikey: env.SUPABASE_ANON_KEY,
-      Accept: 'application/json'
-    }
-  });
+  const filesUrl = `${base}/rest/v1/uploaded_files?storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const filesRes = await fetch(filesUrl, { headers });
+  if (filesRes.ok) {
+    const rows = (await filesRes.json()) as unknown[];
+    if (Array.isArray(rows) && rows.length > 0) return true;
+  }
 
-  if (!res.ok) return false;
+  const proofUrl = `${base}/rest/v1/opinion_requests?payment_proof_storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const proofRes = await fetch(proofUrl, { headers });
+  if (proofRes.ok) {
+    const proofRows = (await proofRes.json()) as unknown[];
+    if (Array.isArray(proofRows) && proofRows.length > 0) return true;
+  }
 
-  const rows = (await res.json()) as unknown[];
-  return Array.isArray(rows) && rows.length > 0;
+  const summaryUrl = `${base}/rest/v1/consultation_summaries?pdf_storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const summaryRes = await fetch(summaryUrl, { headers });
+  if (!summaryRes.ok) return false;
+
+  const summaryRows = (await summaryRes.json()) as unknown[];
+  return Array.isArray(summaryRows) && summaryRows.length > 0;
 }
 
 async function assertCanAccessPath(
   allowedPrefixes: string[],
   authHeader: string,
   storagePath: string,
-  env: Env
+  env: Env,
+  options?: { userId?: string; requestId?: string }
 ): Promise<void> {
   if (storagePath.includes('..')) {
     throw new Error('Forbidden');
@@ -91,6 +251,27 @@ async function assertCanAccessPath(
 
   if (allowedPrefixes.some((prefix) => storagePath.startsWith(prefix))) {
     return;
+  }
+
+  if (options?.requestId?.trim() && options.userId) {
+    const requestId = options.requestId.trim();
+    const proofAllowed = await canAccessPaymentProofForRequest(
+      authHeader,
+      options.userId,
+      requestId,
+      storagePath,
+      env
+    );
+    if (proofAllowed) return;
+
+    const summaryAllowed = await canAccessConsultationSummaryPdfForRequest(
+      authHeader,
+      options.userId,
+      requestId,
+      storagePath,
+      env
+    );
+    if (summaryAllowed) return;
   }
 
   const allowed = await canAccessStoragePathViaRls(authHeader, storagePath, env);
@@ -196,6 +377,50 @@ export default {
 
       const pathPrefixes = await getAllowedPathPrefixes(user, authHeader, env);
 
+      if (pathname === '/v1/consultation-summary/upload-url' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          contentLength?: number;
+        };
+
+        if (!body.requestId?.trim()) {
+          return jsonResponse({ error: 'requestId is required' }, 400, origin, env);
+        }
+
+        const contentLength = Number(body.contentLength ?? 0);
+        if (!contentLength || contentLength > 10 * 1024 * 1024) {
+          return jsonResponse({ error: 'File must be between 1 byte and 10 MB' }, 400, origin, env);
+        }
+
+        const requestId = body.requestId.trim();
+        const storagePath = storagePathFor(
+          `consultation-summaries/${requestId}`,
+          'consultation-summary.pdf'
+        );
+
+        const canUpload = await canDoctorUploadConsultationSummary(
+          user.id,
+          authHeader,
+          requestId,
+          storagePath,
+          env
+        );
+        if (!canUpload) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        return jsonResponse(
+          {
+            uploadUrl: `${workerOrigin(request)}/v1/records/object`,
+            storagePath,
+            storageBucket: env.R2_BUCKET_NAME || 'medical-records'
+          },
+          200,
+          origin,
+          env
+        );
+      }
+
       if (pathname === '/v1/records/upload-url' && request.method === 'POST') {
         const body = (await request.json()) as {
           fileName?: string;
@@ -235,7 +460,27 @@ export default {
           return jsonResponse({ error: 'X-Storage-Path header is required' }, 400, origin, env);
         }
 
-        assertOwnsPath(pathPrefixes, storagePath);
+        const ownsPrefix = pathPrefixes.some((prefix) => storagePath.startsWith(prefix));
+        if (!ownsPrefix) {
+          const consultationPrefix = 'consultation-summaries/';
+          if (!storagePath.startsWith(consultationPrefix)) {
+            throw new Error('Forbidden');
+          }
+          const requestId = storagePath.slice(consultationPrefix.length).split('/')[0];
+          if (!requestId) {
+            throw new Error('Forbidden');
+          }
+          const canUpload = await canDoctorUploadConsultationSummary(
+            user.id,
+            authHeader,
+            requestId,
+            storagePath,
+            env
+          );
+          if (!canUpload) {
+            throw new Error('Forbidden');
+          }
+        }
 
         const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
         if (!request.body) {
@@ -250,13 +495,16 @@ export default {
       }
 
       if (pathname === '/v1/records/download' && request.method === 'POST') {
-        const body = (await request.json()) as { storagePath?: string };
+        const body = (await request.json()) as { storagePath?: string; requestId?: string };
         if (!body.storagePath?.trim()) {
           return jsonResponse({ error: 'storagePath is required' }, 400, origin, env);
         }
 
         const storagePath = body.storagePath.trim();
-        await assertCanAccessPath(pathPrefixes, authHeader, storagePath, env);
+        await assertCanAccessPath(pathPrefixes, authHeader, storagePath, env, {
+          userId: user.id,
+          requestId: body.requestId
+        });
 
         const object = await env.MEDICAL_RECORDS.get(storagePath);
         if (!object) {

@@ -56,7 +56,7 @@ export default function RequestsFilterDrawer({
           data={QUEUE_OPTIONS}
           value={filters.queue}
           onChange={(value) =>
-            onChange({ ...filters, queue: (value as RequestQueueFilter) ?? 'pending' })
+            onChange({ ...filters, queue: (value as RequestQueueFilter) ?? filters.queue })
           }
         />
 

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Stack, Text } from '@mantine/core';
+import { Alert, Button, Group, Modal, Stack, Text } from '@mantine/core';
 import { fetchAllPatientsForAdmin } from '../../lib/admins';
-import { canEditProfiles } from '../../lib/staffPermissions';
+import {
+  countOpinionRequestsForPatient,
+  deleteAllOpinionRequestsForPatientForAdmin
+} from '../../lib/opinionRequests';
+import { canEditProfiles, isAdministrator } from '../../lib/staffPermissions';
 import type { Patient } from '../../types/patient';
 import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
 import PatientsDataTable from './patients/PatientsDataTable';
@@ -48,13 +52,19 @@ function matchesSearch(patient: Patient, query: string) {
 export default function ElixHealthPatientsPage() {
   const staff = useElixHealthStaff();
   const canEdit = canEditProfiles(staff);
+  const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<PatientQuickFilters>(DEFAULT_FILTERS);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [deleteRequestsPatient, setDeleteRequestsPatient] = useState<Patient | null>(null);
+  const [deleteRequestsCount, setDeleteRequestsCount] = useState<number | null>(null);
+  const [deleteRequestsBusy, setDeleteRequestsBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,7 +117,52 @@ export default function ElixHealthPatientsPage() {
     Boolean(filters.bloodGroup) ||
     filters.login !== 'all';
 
-  const columns = usePatientsTableColumns({ canEdit });
+  const openDeleteAllRequests = useCallback(async (patient: Patient) => {
+    if (!patient.auth_user_id) {
+      setActionMessage('This patient has no login account — opinion requests cannot be bulk-deleted by profile.');
+      setSuccessMessage(null);
+      return;
+    }
+
+    setDeleteRequestsPatient(patient);
+    setDeleteRequestsCount(null);
+    const { count, error: countError } = await countOpinionRequestsForPatient(patient.auth_user_id);
+    if (countError) {
+      setActionMessage(countError.message);
+      setDeleteRequestsPatient(null);
+      return;
+    }
+    setDeleteRequestsCount(count);
+  }, []);
+
+  const confirmDeleteAllRequests = useCallback(async () => {
+    const patient = deleteRequestsPatient;
+    if (!patient?.auth_user_id) return;
+
+    setDeleteRequestsBusy(true);
+    setActionMessage(null);
+    const { deletedCount, error: deleteError } = await deleteAllOpinionRequestsForPatientForAdmin(
+      patient.auth_user_id
+    );
+    setDeleteRequestsBusy(false);
+
+    if (deleteError) {
+      setActionMessage(deleteError.message);
+      return;
+    }
+
+    setDeleteRequestsPatient(null);
+    setDeleteRequestsCount(null);
+    setSuccessMessage(
+      `Deleted ${deletedCount} opinion request${deletedCount === 1 ? '' : 's'} for ${patient.full_name}.`
+    );
+  }, [deleteRequestsPatient]);
+
+  const columns = usePatientsTableColumns({
+    canEdit,
+    isAdmin,
+    onDeleteAllRequests: isAdmin ? (patient) => void openDeleteAllRequests(patient) : undefined
+  });
 
   const clearFilters = useCallback(() => {
     setSearch('');
@@ -139,6 +194,18 @@ export default function ElixHealthPatientsPage() {
         onExport={handleExport}
         onAddPatient={() => setAddModalOpen(true)}
       />
+
+      {actionMessage ? (
+        <Alert color='red' radius='md' onClose={() => setActionMessage(null)} withCloseButton>
+          {actionMessage}
+        </Alert>
+      ) : null}
+
+      {successMessage ? (
+        <Alert color='green' radius='md' onClose={() => setSuccessMessage(null)} withCloseButton>
+          {successMessage}
+        </Alert>
+      ) : null}
 
       <PatientsAnalyticsCards analytics={analytics} loading={loading} />
 
@@ -175,6 +242,60 @@ export default function ElixHealthPatientsPage() {
         onChange={setFilters}
         onReset={clearFilters}
       />
+
+      <Modal
+        opened={Boolean(deleteRequestsPatient)}
+        onClose={() => {
+          if (!deleteRequestsBusy) {
+            setDeleteRequestsPatient(null);
+            setDeleteRequestsCount(null);
+          }
+        }}
+        title='Delete all opinion requests'
+        radius='lg'
+        centered
+        classNames={{ content: 'doctors-mgmt-modal' }}
+      >
+        <Stack gap='md'>
+          <Text size='sm'>
+            {deleteRequestsPatient ? (
+              <>
+                Permanently delete{' '}
+                <strong>
+                  {deleteRequestsCount === null
+                    ? '…'
+                    : `${deleteRequestsCount} request${deleteRequestsCount === 1 ? '' : 's'}`}
+                </strong>{' '}
+                for <strong>{deleteRequestsPatient.full_name}</strong>? This removes them from the
+                patient app, PSE queue, and doctor dashboard. Medical record files in the vault are
+                not deleted.
+              </>
+            ) : null}
+          </Text>
+          <Group justify='flex-end' gap='sm'>
+            <Button
+              variant='default'
+              radius='md'
+              disabled={deleteRequestsBusy}
+              onClick={() => {
+                setDeleteRequestsPatient(null);
+                setDeleteRequestsCount(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              color='red'
+              radius='md'
+              loading={deleteRequestsBusy}
+              disabled={deleteRequestsCount === 0}
+              onClick={() => void confirmDeleteAllRequests()}
+            >
+              Delete all
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={addModalOpen}

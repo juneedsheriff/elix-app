@@ -184,7 +184,7 @@ export default function ElixHealthLayout({
                   </>
                 ) : null}
               </p>
-              <h1 className='elixhealth-page-title'>{pageTitle}</h1>
+              
             </div>
           </div>
           <div className='elixhealth-topbar-end'>
