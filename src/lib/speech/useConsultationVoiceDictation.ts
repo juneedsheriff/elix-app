@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConsultationSummaryFieldKey } from '../consultationSummaryFields';
+import { composeLiveTranscript } from './previewDictationText';
 import { createSpeechRecognition, isSpeechRecognitionSupported } from './speechRecognitionSupport';
 
 type UseConsultationVoiceDictationOptions = {
@@ -7,12 +8,20 @@ type UseConsultationVoiceDictationOptions = {
   lang?: string;
 };
 
+function joinCommittedSegments(prior: string, segment: string): string {
+  return composeLiveTranscript(prior.trim(), segment.trim());
+}
+
 export function useConsultationVoiceDictation({
   onDictated,
   lang = 'en-US'
 }: UseConsultationVoiceDictationOptions) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const activeFieldRef = useRef<ConsultationSummaryFieldKey | null>(null);
+  /** Finals from completed recognition segments (before auto-restart). */
+  const priorCommittedRef = useRef('');
+  /** Finals accumulated in the current recognition segment. */
+  const segmentCommittedRef = useRef('');
   const sessionTranscriptRef = useRef('');
   const interimTextRef = useRef('');
 
@@ -23,44 +32,69 @@ export function useConsultationVoiceDictation({
 
   const supported = isSpeechRecognitionSupported();
 
+  const syncTranscriptState = useCallback((committed: string, interim: string) => {
+    sessionTranscriptRef.current = committed;
+    interimTextRef.current = interim;
+    setSessionText(committed);
+    setInterimText(interim);
+  }, []);
+
+  const resetTranscriptState = useCallback(() => {
+    priorCommittedRef.current = '';
+    segmentCommittedRef.current = '';
+    sessionTranscriptRef.current = '';
+    interimTextRef.current = '';
+    setSessionText('');
+    setInterimText('');
+  }, []);
+
   const finalizeSession = useCallback(
     (field: ConsultationSummaryFieldKey | null) => {
       if (!field) return;
 
-      const pending = `${sessionTranscriptRef.current} ${interimTextRef.current}`.trim();
-      sessionTranscriptRef.current = '';
-      interimTextRef.current = '';
-      setSessionText('');
-      setInterimText('');
+      const pending = composeLiveTranscript(
+        sessionTranscriptRef.current,
+        interimTextRef.current
+      ).trim();
+
+      resetTranscriptState();
 
       if (pending) {
         onDictated(field, pending);
       }
     },
-    [onDictated]
+    [onDictated, resetTranscriptState]
   );
 
-  const stop = useCallback(() => {
-    const field = activeFieldRef.current;
-    const recognition = recognitionRef.current;
+  const stop = useCallback(
+    (options?: { discard?: boolean }) => {
+      const field = activeFieldRef.current;
+      const recognition = recognitionRef.current;
 
-    activeFieldRef.current = null;
-    setActiveField(null);
+      activeFieldRef.current = null;
+      setActiveField(null);
 
-    if (recognition) {
-      recognition.onresult = null;
-      recognition.onerror = null;
-      recognition.onend = null;
-      recognitionRef.current = null;
-      try {
-        recognition.stop();
-      } catch {
-        /* already stopped */
+      if (recognition) {
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+        recognitionRef.current = null;
+        try {
+          recognition.stop();
+        } catch {
+          /* already stopped */
+        }
       }
-    }
 
-    finalizeSession(field);
-  }, [finalizeSession]);
+      if (options?.discard) {
+        resetTranscriptState();
+        return;
+      }
+
+      finalizeSession(field);
+    },
+    [finalizeSession, resetTranscriptState]
+  );
 
   const start = useCallback(
     (fieldKey: ConsultationSummaryFieldKey) => {
@@ -85,10 +119,10 @@ export function useConsultationVoiceDictation({
       }
 
       setError(null);
-      sessionTranscriptRef.current = '';
-      interimTextRef.current = '';
-      setSessionText('');
-      setInterimText('');
+      priorCommittedRef.current = '';
+      segmentCommittedRef.current = '';
+      syncTranscriptState('', '');
+
       activeFieldRef.current = fieldKey;
       setActiveField(fieldKey);
 
@@ -98,18 +132,25 @@ export function useConsultationVoiceDictation({
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         let interim = '';
+
         for (let index = event.resultIndex; index < event.results.length; index += 1) {
           const result = event.results[index];
           const transcript = result[0]?.transcript ?? '';
+          if (!transcript) continue;
+
           if (result.isFinal) {
-            sessionTranscriptRef.current = `${sessionTranscriptRef.current} ${transcript}`.trim();
-            setSessionText(sessionTranscriptRef.current);
+            segmentCommittedRef.current += transcript;
           } else {
-            interim = `${interim} ${transcript}`.trim();
+            interim += transcript;
           }
         }
-        interimTextRef.current = interim;
-        setInterimText(interim);
+
+        const committed = joinCommittedSegments(
+          priorCommittedRef.current,
+          segmentCommittedRef.current.trim()
+        );
+
+        syncTranscriptState(committed, interim.trim());
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -124,10 +165,6 @@ export function useConsultationVoiceDictation({
         const failedField = activeFieldRef.current;
         activeFieldRef.current = null;
         setActiveField(null);
-        sessionTranscriptRef.current = '';
-        interimTextRef.current = '';
-        setSessionText('');
-        setInterimText('');
 
         recognition.onresult = null;
         recognition.onerror = null;
@@ -144,12 +181,19 @@ export function useConsultationVoiceDictation({
       };
 
       recognition.onend = () => {
-        if (activeFieldRef.current && recognitionRef.current) {
-          try {
-            recognition.start();
-          } catch {
-            /* ignore restart errors */
-          }
+        if (!activeFieldRef.current || !recognitionRef.current) return;
+
+        priorCommittedRef.current = joinCommittedSegments(
+          priorCommittedRef.current,
+          segmentCommittedRef.current.trim()
+        );
+        segmentCommittedRef.current = '';
+        syncTranscriptState(priorCommittedRef.current, '');
+
+        try {
+          recognition.start();
+        } catch {
+          /* ignore restart errors */
         }
       };
 
@@ -164,7 +208,7 @@ export function useConsultationVoiceDictation({
         recognitionRef.current = null;
       }
     },
-    [finalizeSession, lang, stop, supported]
+    [finalizeSession, lang, stop, supported, syncTranscriptState]
   );
 
   useEffect(() => {

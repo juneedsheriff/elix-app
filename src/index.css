@@ -2160,6 +2160,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  align-items: center;
 }
 
 .doctor-consultation-page__back {
@@ -2175,6 +2176,7 @@ select {
   gap: 0.35rem;
   min-width: 0;
   overflow: hidden;
+  width: 100%;
 }
 
 .doctor-consultation-page__title {
@@ -2311,10 +2313,47 @@ select {
   gap: 0.5rem;
 }
 
+.doctor-respond-label__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
 .doctor-respond-voice-tip {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.45;
+}
+
+.doctor-consultation-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.doctor-consultation-clear-btn:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.doctor-consultation-clear-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .voice-dictation-btn {

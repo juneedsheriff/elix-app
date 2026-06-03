@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Eraser } from 'lucide-react';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
 import {
@@ -63,6 +63,16 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
   } = useMicrophonePermissionGate(consultationReady && voiceSupported);
 
   const voiceEnabled = voiceSupported && micGranted;
+
+  const handleClearField = useCallback(
+    (fieldKey: keyof ConsultationSummaryFormValues) => {
+      if (voiceField === fieldKey) {
+        stopVoice({ discard: true });
+      }
+      setValues((prev) => ({ ...prev, [fieldKey]: '' }));
+    },
+    [stopVoice, voiceField]
+  );
 
   const goBack = useCallback(() => {
     stopVoice();
@@ -183,6 +193,8 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
   return (
     <div className='doctor-consultation-page'>
       <header className='doctor-consultation-page__header'>
+       
+        <div className='doctor-consultation-page__heading'>
         <button
           type='button'
           className='secondary-btn doctor-consultation-page__back'
@@ -190,9 +202,8 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
           disabled={submitting}
         >
           <ArrowLeft size={18} aria-hidden />
-          Back
+       
         </button>
-        <div className='doctor-consultation-page__heading'>
           <h2 className='doctor-consultation-page__title'>Consultation</h2>
           {request ? (
             <p className='doctor-consultation-page__subtitle muted'>
@@ -247,18 +258,34 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
             const displayValue = isRecording
               ? previewDictationText(values[key], voiceSessionText, voiceInterimText)
               : values[key];
+            const fieldHasContent =
+              Boolean(values[key].trim()) ||
+              (isRecording && Boolean(voiceSessionText.trim() || voiceInterimText.trim()));
 
             return (
               <label key={key} className='doctor-respond-label'>
                 <span className='doctor-respond-label__head'>
                   <span>{label}</span>
-                  <VoiceDictationButton
-                    active={isRecording}
-                    supported={voiceEnabled}
-                    disabled={submitting || micGateActive}
-                    label={label}
-                    onClick={() => startVoice(key)}
-                  />
+                  <span className='doctor-respond-label__actions'>
+                    <button
+                      type='button'
+                      className='doctor-consultation-clear-btn'
+                      onClick={() => handleClearField(key)}
+                      disabled={submitting || micGateActive || !fieldHasContent}
+                      aria-label={`Clear ${label}`}
+                      title={`Clear ${label}`}
+                    >
+                      <Eraser size={14} aria-hidden />
+                      <span>Clear</span>
+                    </button>
+                    <VoiceDictationButton
+                      active={isRecording}
+                      supported={voiceEnabled}
+                      disabled={submitting || micGateActive}
+                      label={label}
+                      onClick={() => startVoice(key)}
+                    />
+                  </span>
                 </span>
                 <textarea
                   className={`doctor-respond-textarea ${isRecording ? 'doctor-respond-textarea--recording' : ''}`}
