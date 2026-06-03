@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ClipboardList, FileText, Loader2, Stethoscope } from 'lucide-react';
 import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
 import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
+import DoctorCaseMeetingPanel from './DoctorCaseMeetingPanel';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorRequestRespond from './DoctorRequestRespond';
 import { fetchDoctorOpinionRequests, fetchPatientOpinionRequests, isAwaitingDoctorReply, patientRequestStatusLabel } from '../../lib/opinionRequests';
@@ -220,6 +221,8 @@ export default function OpinionRequestsPanel({
                   <strong>{view === 'doctor' ? 'Patient message:' : 'Your message:'}</strong> {request.message}
                 </p>
 
+                {view === 'doctor' ? <DoctorCaseMeetingPanel request={request} /> : null}
+
                 {view === 'patient' && request.doctor_response ? (
                   <div className='doctor-response-block patient-view' role='region' aria-label='Doctor response'>
                     <h5>
@@ -258,22 +261,6 @@ export default function OpinionRequestsPanel({
                       ? 'Waiting for admin review before coordination begins.'
                       : 'Our patient service team is coordinating your request.'}
                   </p>
-                ) : null}
-
-                {view === 'doctor' && (request.scheduled_at || request.meeting_link) ? (
-                  <div className='doctor-response-block' role='region' aria-label='Appointment details'>
-                    <h5>Appointment</h5>
-                    {request.scheduled_at ? (
-                      <p className='muted'>{new Date(request.scheduled_at).toLocaleString()}</p>
-                    ) : null}
-                    {request.meeting_link ? (
-                      <p>
-                        <a href={request.meeting_link} target='_blank' rel='noreferrer'>
-                          Join meeting
-                        </a>
-                      </p>
-                    ) : null}
-                  </div>
                 ) : null}
 
                 {request.records.length > 0 ? (
