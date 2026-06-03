@@ -2146,6 +2146,69 @@ select {
   max-width: 16rem;
 }
 
+.case-review-meeting-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #4285f4 28%, var(--border));
+  background: color-mix(in srgb, #4285f4 6%, var(--surface));
+}
+
+.case-review-meeting-panel__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.case-review-meeting-panel__head svg {
+  color: #4285f4;
+  flex-shrink: 0;
+}
+
+.case-review-meeting-panel__when {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.case-review-meeting-panel__when svg {
+  flex-shrink: 0;
+  color: var(--text-soft);
+}
+
+.case-review-meeting-panel__join {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  max-width: 16rem;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+.case-review-meeting-panel__url {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-soft);
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.case-review-meeting-panel__url:hover {
+  color: #4285f4;
+  text-decoration: underline;
+}
+
 .doctor-consultation-page {
   
   margin: 0 auto;

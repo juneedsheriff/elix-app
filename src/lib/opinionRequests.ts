@@ -1362,7 +1362,8 @@ export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequests
   try {
     const patientMap = await loadPatientEmailMap(authUserIds);
     const mapped = (rows ?? []).map((row) => mapRequestRow(row, patientMap));
-    const data = await attachRequestRecords(mapped);
+    const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
+    const data = await attachRequestRecords(withWorkflow);
     return {
       data,
       error: null,
