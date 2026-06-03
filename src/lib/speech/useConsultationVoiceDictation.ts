@@ -74,6 +74,16 @@ export function useConsultationVoiceDictation({
     [onDictated, resetTranscriptState]
   );
 
+  const persistSegmentToPrior = useCallback(() => {
+    const segment = normalizeSpeechTranscript(segmentCommittedRef.current);
+    if (!segment) return;
+
+    priorCommittedRef.current = normalizeSpeechTranscript(
+      joinCommittedSegments(priorCommittedRef.current, segment)
+    );
+    segmentCommittedRef.current = '';
+  }, []);
+
   const stop = useCallback(
     (options?: { discard?: boolean }) => {
       const field = activeFieldRef.current;
@@ -105,18 +115,8 @@ export function useConsultationVoiceDictation({
 
       finalizeSession(field);
     },
-    [finalizeSession, persistSegmentToPrior, resetTranscriptState]
+    [finalizeSession, persistSegmentToPrior, resetTranscriptState, syncTranscriptState]
   );
-
-  const persistSegmentToPrior = useCallback(() => {
-    const segment = normalizeSpeechTranscript(segmentCommittedRef.current);
-    if (!segment) return;
-
-    priorCommittedRef.current = normalizeSpeechTranscript(
-      joinCommittedSegments(priorCommittedRef.current, segment)
-    );
-    segmentCommittedRef.current = '';
-  }, []);
 
   const start = useCallback(
     (fieldKey: ConsultationSummaryFieldKey) => {
