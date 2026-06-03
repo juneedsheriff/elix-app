@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Stack, Text } from '@mantine/core';
+import { useNavigate } from 'react-router-dom';
+import { Alert } from '@mantine/core';
 import { fetchAllDoctorsForAdmin } from '../../lib/admins';
 import { canEditProfiles } from '../../lib/staffPermissions';
 import type { Doctor } from '../../types/doctor';
@@ -18,6 +19,7 @@ import {
 } from './doctors/doctorsUtils';
 import { useDoctorsTableColumns } from './doctors/doctorsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import './doctors/doctors-management.css';
 
 const DEFAULT_FILTERS: DoctorQuickFilters = {
@@ -49,6 +51,7 @@ function matchesSearch(doctor: Doctor, query: string) {
 }
 
 export default function ElixHealthDoctorsPage() {
+  const navigate = useNavigate();
   const staff = useElixHealthStaff();
   const canEdit = canEditProfiles(staff);
   const [loading, setLoading] = useState(true);
@@ -57,7 +60,6 @@ export default function ElixHealthDoctorsPage() {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<DoctorQuickFilters>(DEFAULT_FILTERS);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [addModalOpen, setAddModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,7 +139,7 @@ export default function ElixHealthDoctorsPage() {
         canEdit={canEdit}
         onOpenFilters={() => setDrawerOpen(true)}
         onExport={handleExport}
-        onAddDoctor={() => setAddModalOpen(true)}
+        onAddDoctor={() => navigate(ELIX_HEALTH_PATHS.doctorNew)}
       />
 
       <DoctorsAnalyticsCards analytics={analytics} loading={loading} />
@@ -175,25 +177,6 @@ export default function ElixHealthDoctorsPage() {
         onReset={clearFilters}
       />
 
-      <Modal
-        opened={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        title='Add doctor'
-        radius='lg'
-        centered
-        classNames={{ content: 'doctors-mgmt-modal' }}
-      >
-        <Stack gap='sm'>
-          <Text size='sm' c='dimmed'>
-            New doctor profiles are provisioned through your healthcare onboarding workflow or
-            database administration. Once a record exists, you can complete clinic, scheduler, and
-            login settings from this console.
-          </Text>
-          <Text size='sm'>
-            To edit an existing provider, use the table actions or open a doctor name from the list.
-          </Text>
-        </Stack>
-      </Modal>
     </div>
   );
 }

@@ -290,13 +290,24 @@ export const NAV_IDS: Record<Role, string[]> = {
     'ai-insights',
     'settings'
   ],
-  doctor: ['doctor-dashboard', 'case-review', 'availability', 'doctor-analytics', 'settings'],
+  doctor: [
+    'doctor-dashboard',
+    'case-review',
+    'doctor-consultation',
+    'availability',
+    'doctor-analytics',
+    'settings'
+  ],
   admin: ['admin-dashboard', 'user-management', 'fraud-monitoring', 'admin-analytics', 'cms', 'audit', 'settings']
 };
 
+const SIDEBAR_HIDDEN_SCREENS = new Set(['doctor-consultation']);
+
 export function getNavItems(role: Role, language: Language) {
   const labels = TRANSLATIONS[language].nav[role];
-  return NAV_IDS[role].map((id) => ({ id, label: labels[id] ?? id }));
+  return NAV_IDS[role]
+    .filter((id) => !SIDEBAR_HIDDEN_SCREENS.has(id))
+    .map((id) => ({ id, label: labels[id] ?? id }));
 }
 
 export function roleLabel(language: Language, role: Role): string {

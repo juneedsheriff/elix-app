@@ -62,7 +62,7 @@ function RequestsTableToolbar({
           data={queueData}
           value={filters.queue}
           onChange={(value) =>
-            onFilterChange({ ...filters, queue: (value as RequestQueueFilter) ?? 'pending' })
+            onFilterChange({ ...filters, queue: (value as RequestQueueFilter) ?? filters.queue })
           }
           radius='md'
         />

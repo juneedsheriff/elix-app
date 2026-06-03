@@ -1,4 +1,4 @@
-import OpinionRequestsPanel from './OpinionRequestsPanel';
+import PatientMyRequests from './PatientMyRequests';
 
 type PatientOpinionRequestsProps = {
   patientAuthUserId: string | null | undefined;
@@ -6,15 +6,5 @@ type PatientOpinionRequestsProps = {
 };
 
 export default function PatientOpinionRequests({ patientAuthUserId, configured }: PatientOpinionRequestsProps) {
-  return (
-    <OpinionRequestsPanel
-      view='patient'
-      patientAuthUserId={patientAuthUserId}
-      configured={configured}
-      title='My opinion requests'
-      subtitle='Track second opinion requests you sent to doctors'
-      signInHint='Sign in as a patient to view your requests.'
-      emptyHint='No requests yet. Browse doctors and tap Get opinion to send your first case.'
-    />
-  );
+  return <PatientMyRequests patientAuthUserId={patientAuthUserId} configured={configured} />;
 }

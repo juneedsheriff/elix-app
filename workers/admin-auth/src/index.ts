@@ -21,19 +21,16 @@ const BAN_DURATION = '876000h';
 function corsHeaders(origin: string | null, env: Env): HeadersInit {
   const allowed = env.ALLOWED_ORIGIN?.trim();
   let value = '*';
+
   if (origin) {
-    if (!allowed || allowed === '*' || origin === allowed) {
-      value = origin;
-    } else if (isLocalDevOrigin(origin) && allowed && isLocalDevOrigin(allowed)) {
-      value = origin;
-    } else if (allowed) {
-      value = allowed;
-    } else {
+    // Always echo localhost so Vite (http://localhost:3000) works while ALLOWED_ORIGIN is production.
+    if (isLocalDevOrigin(origin) || !allowed || allowed === '*' || origin === allowed) {
       value = origin;
     }
-  } else if (allowed) {
+  } else if (allowed && allowed !== '*') {
     value = allowed;
   }
+
   return {
     'Access-Control-Allow-Origin': value,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -538,14 +535,19 @@ export default {
     }
 
     const url = new URL(request.url);
+    const pathname = url.pathname.replace(/\/+$/, '') || '/';
 
-    if (request.method === 'POST' && (url.pathname === '/staff' || url.pathname === '/staff/manage')) {
+    if ((pathname === '/' || pathname === '/health') && request.method === 'GET') {
+      return json({ ok: true, service: 'elix-admin-auth' }, 200, origin, env);
+    }
+
+    if (request.method === 'POST' && (pathname === '/staff' || pathname === '/staff/manage')) {
       const administratorId = await verifyAdministrator(request, env);
       if (!administratorId) {
         return json({ error: 'Unauthorized. Sign in as an administrator.' }, 403, origin, env);
       }
 
-      if (url.pathname === '/staff') {
+      if (pathname === '/staff') {
         let body: CreateStaffBody;
         try {
           body = (await request.json()) as CreateStaffBody;
@@ -579,7 +581,7 @@ export default {
       return json({ error: 'Unauthorized. Sign in as an active admin.' }, 401, origin, env);
     }
 
-    if (request.method === 'GET' && url.pathname === '/status') {
+    if (request.method === 'GET' && pathname === '/status') {
       const role = url.searchParams.get('role') as Role | null;
       const profileId = url.searchParams.get('profileId');
       if ((role !== 'doctor' && role !== 'patient') || !profileId) {
@@ -590,7 +592,7 @@ export default {
       return json(status, 200, origin, env);
     }
 
-    if (request.method === 'POST' && url.pathname === '/manage') {
+    if (request.method === 'POST' && pathname === '/manage') {
       let body: ManageBody;
       try {
         body = (await request.json()) as ManageBody;

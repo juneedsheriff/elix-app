@@ -1,7 +1,97 @@
-import type { OpinionRequest, OpinionRequestFile, OpinionRequestStatus } from '../types/opinionRequest';
+import type {
+  ConsultationStage,
+  ConsultationSummary,
+  OpinionRequest,
+  OpinionRequestFile,
+  OpinionRequestRecommendation,
+  OpinionRequestStatus,
+  PaymentStatus
+} from '../types/opinionRequest';
 import { fetchDoctorByAuthUserId, fetchDoctorById } from './doctors';
 import { fetchPatientByAuthUserId } from './patients';
+import {
+  consultationSummaryPdfMetaFromRequest,
+  generateConsultationSummaryPdfBlob
+} from './consultationSummaryPdf';
+import {
+  createConsultationSummaryUploadUrl,
+  createR2UploadUrl,
+  isR2StorageConfigured,
+  uploadFileToR2
+} from './r2Storage';
 import { supabase } from './supabase';
+
+const PAYMENT_PROOF_MAX_BYTES = 10 * 1024 * 1024;
+const PAYMENT_PROOF_ACCEPTED_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/pdf'
+]);
+
+const workflowFieldsScheduling = `
+  payment_link,
+  pse_scheduling_message,
+  schedule_confirmed_at
+`;
+
+const workflowFieldsPaymentProof = `
+  payment_proof_storage_path,
+  payment_proof_file_name,
+  payment_proof_mime_type,
+  payment_proof_submitted_at
+`;
+
+const workflowFieldsExtended = `
+  ${workflowFieldsScheduling},
+  ${workflowFieldsPaymentProof}
+`;
+
+/** Migration 019 workflow columns (always required for consultation flow). */
+const workflowFieldsCore = `
+  consultation_stage,
+  selected_doctor_id,
+  patient_availability,
+  scheduled_at,
+  meeting_link,
+  payment_status,
+  payment_amount,
+  payment_currency,
+  payment_reference,
+  payment_confirmed_at
+`;
+
+const workflowFields = `
+  ${workflowFieldsCore},
+  records_verified_at,
+  ${workflowFieldsExtended}
+`;
+
+function stripRecordsVerifiedFromSelect(select: string) {
+  return select.replace(/,?\s*records_verified_at\s*/g, '');
+}
+
+function stripPaymentProofFromSelect(select: string) {
+  return select
+    .replace(/,?\s*payment_proof_storage_path\s*/g, '')
+    .replace(/,?\s*payment_proof_file_name\s*/g, '')
+    .replace(/,?\s*payment_proof_mime_type\s*/g, '')
+    .replace(/,?\s*payment_proof_submitted_at\s*/g, '');
+}
+
+function stripSchedulingFromSelect(select: string) {
+  return select
+    .replace(/,?\s*payment_link\s*/g, '')
+    .replace(/,?\s*pse_scheduling_message\s*/g, '')
+    .replace(/,?\s*schedule_confirmed_at\s*/g, '');
+}
+
+/** @deprecated Use stripPaymentProofFromSelect / stripSchedulingFromSelect */
+function stripExtendedWorkflowFromSelect(select: string) {
+  return stripSchedulingFromSelect(stripPaymentProofFromSelect(stripRecordsVerifiedFromSelect(select)));
+}
 
 const requestListSelectBase = `
   id,
@@ -12,6 +102,7 @@ const requestListSelectBase = `
   patient_name,
   doctor_id,
   doctor_name,
+  ${workflowFields},
   doctors (
     id,
     full_name,
@@ -37,6 +128,7 @@ const requestListSelectMinimal = `
   patient_name,
   doctor_id,
   doctor_name,
+  ${workflowFields},
   doctor_response,
   responded_at
 `;
@@ -70,6 +162,7 @@ const requestListSelectWithResponse = `
   patient_name,
   doctor_id,
   doctor_name,
+  ${workflowFields},
   doctor_response,
   responded_at,
   ${assignmentFields},
@@ -97,6 +190,87 @@ const requestListSelectWithResponseNoAssign = `
   patient_name,
   doctor_id,
   doctor_name,
+  ${workflowFields},
+  doctor_response,
+  responded_at,
+  assigned_to,
+  assigned_at,
+  coordination_notes,
+  doctors (
+    id,
+    full_name,
+    specialty
+  ),
+  opinion_request_records (
+    uploaded_files (
+      id,
+      file_name,
+      summary,
+      storage_path
+    )
+  )
+`;
+
+/** Patient list — no staff assignee embed (RLS blocks admins join for patients). */
+const requestListSelectPatient = `
+  id,
+  message,
+  status,
+  created_at,
+  patient_id,
+  patient_name,
+  doctor_id,
+  doctor_name,
+  ${workflowFields},
+  doctor_response,
+  responded_at,
+  assigned_to,
+  assigned_at,
+  coordination_notes,
+  doctors (
+    id,
+    full_name,
+    specialty
+  )
+`;
+
+/** Selects without consultation workflow columns (pre-migration 019). */
+const requestListSelectWithResponseLegacy = `
+  id,
+  message,
+  status,
+  created_at,
+  patient_id,
+  patient_name,
+  doctor_id,
+  doctor_name,
+  doctor_response,
+  responded_at,
+  ${assignmentFields},
+  doctors (
+    id,
+    full_name,
+    specialty
+  ),
+  opinion_request_records (
+    uploaded_files (
+      id,
+      file_name,
+      summary,
+      storage_path
+    )
+  )
+`;
+
+const requestListSelectWithResponseNoAssignLegacy = `
+  id,
+  message,
+  status,
+  created_at,
+  patient_id,
+  patient_name,
+  doctor_id,
+  doctor_name,
   doctor_response,
   responded_at,
   doctors (
@@ -112,6 +286,43 @@ const requestListSelectWithResponseNoAssign = `
       storage_path
     )
   )
+`;
+
+const requestListSelectBaseLegacy = `
+  id,
+  message,
+  status,
+  created_at,
+  patient_id,
+  patient_name,
+  doctor_id,
+  doctor_name,
+  doctors (
+    id,
+    full_name,
+    specialty
+  ),
+  opinion_request_records (
+    uploaded_files (
+      id,
+      file_name,
+      summary,
+      storage_path
+    )
+  )
+`;
+
+const requestListSelectMinimalLegacy = `
+  id,
+  message,
+  status,
+  created_at,
+  patient_id,
+  patient_name,
+  doctor_id,
+  doctor_name,
+  doctor_response,
+  responded_at
 `;
 
 /** Patient-facing: waiting for a doctor opinion (no response text yet). */
@@ -139,21 +350,74 @@ export function isAssignedToPatientService(
   return request.status === 'submitted' && Boolean(request.assigned_to);
 }
 
+export function consultationStageLabel(stage: ConsultationStage | null | undefined) {
+  switch (stage) {
+    case 'new':
+      return 'New';
+    case 'assigned':
+      return 'Assigned to PSE';
+    case 'recommended':
+      return 'Doctors recommended';
+    case 'doctor_selected':
+      return 'Doctor selected';
+    case 'availability_submitted':
+      return 'Availability submitted';
+    case 'schedule_proposed':
+      return 'Schedule proposed';
+    case 'schedule_confirmed':
+      return 'Schedule confirmed';
+    case 'scheduled':
+      return 'Scheduled';
+    case 'payment_pending':
+      return 'Payment pending';
+    case 'paid':
+      return 'Paid';
+    case 'completed':
+      return 'Completed';
+    default:
+      return 'In progress';
+  }
+}
+
 export function patientRequestStatusLabel(
-  request: Pick<OpinionRequest, 'status' | 'doctor_response' | 'assigned_to'>
+  request: Pick<
+    OpinionRequest,
+    | 'status'
+    | 'doctor_response'
+    | 'assigned_to'
+    | 'consultation_stage'
+    | 'payment_status'
+    | 'records_verified_at'
+  >
 ): string {
-  if (request.doctor_response?.trim()) return 'Reply received';
+  if (request.consultation_stage === 'completed' || request.doctor_response?.trim()) {
+    return 'Consultation complete';
+  }
+  if (request.consultation_stage === 'paid') return 'Ready for consultation';
+  if (request.consultation_stage === 'payment_pending') return 'Payment required';
+  if (request.consultation_stage === 'schedule_confirmed') return 'Awaiting payment link';
+  if (request.consultation_stage === 'schedule_proposed') return 'Confirm proposed schedule';
+  if (request.consultation_stage === 'scheduled') return 'Appointment scheduled';
+  if (request.consultation_stage === 'availability_submitted') return 'Checking availability';
+  if (request.consultation_stage === 'doctor_selected') return 'Submit your availability';
+  if (request.consultation_stage === 'recommended') return 'Choose a doctor';
+  if (request.records_verified_at) return 'Documents verified';
   if (request.status === 'submitted' && !request.assigned_to) return 'Pending admin review';
   if (request.status === 'submitted' && request.assigned_to) return 'Being coordinated by our team';
-  if (request.status === 'in_review') return 'Awaiting doctor reply';
+  if (request.status === 'in_review') return 'Consultation in progress';
   if (request.status === 'closed') return 'Closed';
   return 'Submitted';
 }
 
 export function staffRequestStatusLabel(
-  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'doctor_response'>
+  request: Pick<
+    OpinionRequest,
+    'status' | 'assigned_to' | 'doctor_response' | 'consultation_stage' | 'payment_status'
+  >
 ): string {
-  if (request.doctor_response?.trim() || request.status === 'closed') return 'Closed';
+  if (request.consultation_stage === 'completed' || request.status === 'closed') return 'Completed';
+  if (request.consultation_stage) return consultationStageLabel(request.consultation_stage);
+  if (request.doctor_response?.trim()) return 'Closed';
   if (request.status === 'in_review') return 'With doctor';
   if (request.status === 'submitted' && request.assigned_to) return 'With patient service';
   if (request.status === 'submitted') return 'Pending assignment';
@@ -170,6 +434,30 @@ function isMissingResponseColumnsError(error: { message?: string } | null) {
   return msg.includes('doctor_response') || msg.includes('responded_at');
 }
 
+function isMissingRecordsVerifiedColumnError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('records_verified_at');
+}
+
+function isMissingWorkflowColumnsError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('consultation_stage') ||
+    msg.includes('selected_doctor_id') ||
+    msg.includes('patient_availability') ||
+    msg.includes('scheduled_at') ||
+    msg.includes('meeting_link') ||
+    msg.includes('payment_status') ||
+    msg.includes('payment_amount') ||
+    msg.includes('payment_reference') ||
+    msg.includes('payment_confirmed_at') ||
+    msg.includes('payment_link') ||
+    msg.includes('payment_proof_') ||
+    msg.includes('pse_scheduling_message') ||
+    msg.includes('schedule_confirmed_at')
+  );
+}
+
 type RequestListRow = {
   id: string;
   message: string;
@@ -179,6 +467,24 @@ type RequestListRow = {
   patient_name: string | null;
   doctor_id: string;
   doctor_name: string | null;
+  consultation_stage?: string | null;
+  selected_doctor_id?: string | null;
+  patient_availability?: unknown | null;
+  scheduled_at?: string | null;
+  meeting_link?: string | null;
+  payment_status?: string | null;
+  payment_amount?: number | string | null;
+  payment_currency?: string | null;
+  payment_reference?: string | null;
+  payment_confirmed_at?: string | null;
+  payment_link?: string | null;
+  payment_proof_storage_path?: string | null;
+  payment_proof_file_name?: string | null;
+  payment_proof_mime_type?: string | null;
+  payment_proof_submitted_at?: string | null;
+  pse_scheduling_message?: string | null;
+  schedule_confirmed_at?: string | null;
+  records_verified_at?: string | null;
   doctor_response: string | null;
   responded_at: string | null;
   assigned_to: string | null;
@@ -188,6 +494,7 @@ type RequestListRow = {
   doctors: { id: string; full_name: string; specialty: string } | null;
   opinion_request_records: Array<{
     uploaded_files: OpinionRequestFile | null;
+    medical_records?: OpinionRequestFile | null;
   }> | null;
 };
 
@@ -237,18 +544,37 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
 
   const { patientName, doctorName } = await resolveNames(input, doctor);
 
-  const { data: request, error: requestError } = await supabase
+  const baseInsert = {
+    doctor_id: doctor.id,
+    doctor_name: doctorName,
+    message: input.message.trim(),
+    patient_id: input.patientId,
+    patient_name: patientName,
+    status: 'submitted' as const
+  };
+
+  let requestError = null;
+  let request: { id: string } | null = null;
+
+  const withWorkflow = await supabase
     .from('opinion_requests')
     .insert({
-      doctor_id: doctor.id,
-      doctor_name: doctorName,
-      message: input.message.trim(),
-      patient_id: input.patientId,
-      patient_name: patientName,
-      status: 'submitted'
+      ...baseInsert,
+      consultation_stage: 'new',
+      selected_doctor_id: doctor.id
     })
     .select('id')
     .single();
+
+  if (!withWorkflow.error && withWorkflow.data) {
+    request = withWorkflow.data;
+  } else if (isMissingWorkflowColumnsError(withWorkflow.error)) {
+    const legacy = await supabase.from('opinion_requests').insert(baseInsert).select('id').single();
+    requestError = legacy.error;
+    request = legacy.data;
+  } else {
+    requestError = withWorkflow.error;
+  }
 
   if (requestError || !request) {
     return { data: null, error: requestError };
@@ -263,7 +589,11 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
     const { error: linkError } = await supabase.from('opinion_request_records').insert(links);
 
     if (linkError) {
-      return { data: null, error: linkError };
+      const hint =
+        linkError.message?.includes('foreign key') || linkError.message?.includes('record_id')
+          ? ' Run supabase/migrations/020_opinion_request_files_access.sql in the Supabase SQL Editor.'
+          : '';
+      return { data: null, error: { message: `${linkError.message}${hint}` } };
     }
   }
 
@@ -278,7 +608,7 @@ function mapRequestRow(
   const records: OpinionRequestFile[] = [];
 
   for (const link of row.opinion_request_records ?? []) {
-    const file = link.uploaded_files;
+    const file = link.uploaded_files ?? link.medical_records ?? null;
     if (file?.id) records.push(file);
   }
 
@@ -299,6 +629,29 @@ function mapRequestRow(
     assigned_at: row.assigned_at ?? null,
     assigned_to_name: row.assignee?.full_name ?? null,
     coordination_notes: row.coordination_notes ?? null,
+    consultation_stage: (row.consultation_stage as ConsultationStage | undefined) ?? null,
+    selected_doctor_id: row.selected_doctor_id ?? null,
+    patient_availability: row.patient_availability ?? null,
+    scheduled_at: row.scheduled_at ?? null,
+    meeting_link: row.meeting_link ?? null,
+    payment_status: (row.payment_status as PaymentStatus | undefined) ?? null,
+    payment_amount:
+      row.payment_amount === null || row.payment_amount === undefined
+        ? null
+        : typeof row.payment_amount === 'string'
+          ? Number(row.payment_amount)
+          : Number(row.payment_amount),
+    payment_currency: row.payment_currency ?? null,
+    payment_reference: row.payment_reference ?? null,
+    payment_confirmed_at: row.payment_confirmed_at ?? null,
+    payment_link: row.payment_link ?? null,
+    payment_proof_storage_path: row.payment_proof_storage_path ?? null,
+    payment_proof_file_name: row.payment_proof_file_name ?? null,
+    payment_proof_mime_type: row.payment_proof_mime_type ?? null,
+    payment_proof_submitted_at: row.payment_proof_submitted_at ?? null,
+    pse_scheduling_message: row.pse_scheduling_message ?? null,
+    schedule_confirmed_at: row.schedule_confirmed_at ?? null,
+    records_verified_at: row.records_verified_at ?? null,
     records
   };
 }
@@ -355,6 +708,244 @@ type FetchOpinionRequestsResult = {
   responsesEnabled: boolean;
 };
 
+type WorkflowFieldRow = Pick<
+  RequestListRow,
+  | 'id'
+  | 'consultation_stage'
+  | 'selected_doctor_id'
+  | 'patient_availability'
+  | 'scheduled_at'
+  | 'meeting_link'
+  | 'payment_status'
+  | 'payment_amount'
+  | 'payment_currency'
+  | 'payment_reference'
+  | 'payment_confirmed_at'
+  | 'payment_link'
+  | 'payment_proof_storage_path'
+  | 'payment_proof_file_name'
+  | 'payment_proof_mime_type'
+  | 'payment_proof_submitted_at'
+  | 'pse_scheduling_message'
+  | 'schedule_confirmed_at'
+  | 'records_verified_at'
+>;
+
+function mergeWorkflowFields(request: OpinionRequest, row: WorkflowFieldRow): OpinionRequest {
+  return {
+    ...request,
+    consultation_stage: (row.consultation_stage as ConsultationStage | undefined) ?? request.consultation_stage,
+    selected_doctor_id: row.selected_doctor_id ?? request.selected_doctor_id,
+    patient_availability: row.patient_availability ?? request.patient_availability,
+    scheduled_at: row.scheduled_at ?? request.scheduled_at,
+    meeting_link: row.meeting_link ?? request.meeting_link,
+    payment_status: (row.payment_status as PaymentStatus | undefined) ?? request.payment_status,
+    payment_amount:
+      row.payment_amount === null || row.payment_amount === undefined
+        ? request.payment_amount
+        : typeof row.payment_amount === 'string'
+          ? Number(row.payment_amount)
+          : Number(row.payment_amount),
+    payment_currency: row.payment_currency ?? request.payment_currency,
+    payment_reference: row.payment_reference ?? request.payment_reference,
+    payment_confirmed_at: row.payment_confirmed_at ?? request.payment_confirmed_at,
+    payment_link: row.payment_link ?? request.payment_link,
+    payment_proof_storage_path:
+      row.payment_proof_storage_path ?? request.payment_proof_storage_path,
+    payment_proof_file_name: row.payment_proof_file_name ?? request.payment_proof_file_name,
+    payment_proof_mime_type: row.payment_proof_mime_type ?? request.payment_proof_mime_type,
+    payment_proof_submitted_at:
+      row.payment_proof_submitted_at ?? request.payment_proof_submitted_at,
+    pse_scheduling_message: row.pse_scheduling_message ?? request.pse_scheduling_message,
+    schedule_confirmed_at: row.schedule_confirmed_at ?? request.schedule_confirmed_at,
+    records_verified_at: row.records_verified_at ?? request.records_verified_at
+  };
+}
+
+/** Second query so workflow fields load even when list select falls back without them. */
+async function enrichRequestsWithWorkflowFields(requests: OpinionRequest[]): Promise<OpinionRequest[]> {
+  if (!requests.length) return requests;
+
+  const ids = requests.map((request) => request.id);
+  const selectAttempts = [
+    `id, ${workflowFields}`,
+    `id, ${workflowFieldsCore}, records_verified_at, ${workflowFieldsScheduling}`,
+    `id, ${workflowFieldsCore}, ${workflowFieldsScheduling}`,
+    `id, ${workflowFieldsCore}, records_verified_at`,
+    `id, ${workflowFieldsCore}`,
+    'id, consultation_stage, selected_doctor_id, patient_availability, doctor_id, doctor_name'
+  ];
+
+  let data: WorkflowFieldRow[] | null = null;
+  for (const workflowSelect of selectAttempts) {
+    const result = await supabase.from('opinion_requests').select(workflowSelect).in('id', ids);
+    if (!result.error && result.data?.length) {
+      data = result.data as WorkflowFieldRow[];
+      break;
+    }
+    if (result.error && isMissingWorkflowColumnsError(result.error)) {
+      const withoutProof = stripPaymentProofFromSelect(workflowSelect);
+      if (withoutProof !== workflowSelect) {
+        const retryProof = await supabase.from('opinion_requests').select(withoutProof).in('id', ids);
+        if (!retryProof.error && retryProof.data?.length) {
+          data = retryProof.data as WorkflowFieldRow[];
+          break;
+        }
+      }
+      const withoutScheduling = stripSchedulingFromSelect(stripPaymentProofFromSelect(workflowSelect));
+      if (withoutScheduling !== workflowSelect) {
+        const retryScheduling = await supabase
+          .from('opinion_requests')
+          .select(withoutScheduling)
+          .in('id', ids);
+        if (!retryScheduling.error && retryScheduling.data?.length) {
+          data = retryScheduling.data as WorkflowFieldRow[];
+          break;
+        }
+      }
+    }
+  }
+
+  if (!data?.length) return enrichRequestsWithPaymentLink(requests);
+
+  const byId = new Map(data.map((row) => [row.id, row]));
+  const merged = requests.map((request) => {
+    const workflow = byId.get(request.id);
+    return workflow ? mergeWorkflowFields(request, workflow) : request;
+  });
+  return enrichRequestsWithPaymentLink(merged);
+}
+
+type PaymentLinkRow = Pick<
+  OpinionRequest,
+  'id' | 'payment_link' | 'payment_amount' | 'payment_currency' | 'payment_status' | 'consultation_stage'
+>;
+
+/** Loads payment link fields when the main workflow select omitted them (e.g. missing payment_proof columns). */
+async function enrichRequestsWithPaymentLink(requests: OpinionRequest[]): Promise<OpinionRequest[]> {
+  const needsLink = requests.filter(
+    (request) =>
+      !request.payment_link?.trim() &&
+      (request.payment_status === 'pending' ||
+        request.consultation_stage === 'payment_pending' ||
+        request.consultation_stage === 'schedule_confirmed')
+  );
+  if (!needsLink.length) return requests;
+
+  const ids = needsLink.map((request) => request.id);
+  const selectAttempts = [
+    'id, payment_link, payment_amount, payment_currency, payment_status, consultation_stage',
+    'id, payment_link, payment_amount, payment_currency, payment_status',
+    'id, payment_link'
+  ];
+
+  let rows: PaymentLinkRow[] | null = null;
+  for (const paymentSelect of selectAttempts) {
+    const result = await supabase.from('opinion_requests').select(paymentSelect).in('id', ids);
+    if (!result.error && result.data?.length) {
+      rows = result.data as PaymentLinkRow[];
+      break;
+    }
+  }
+
+  if (!rows?.length) return requests;
+
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return requests.map((request) => {
+    const row = byId.get(request.id);
+    if (!row?.payment_link?.trim()) return request;
+    return {
+      ...request,
+      payment_link: row.payment_link,
+      payment_amount: row.payment_amount ?? request.payment_amount,
+      payment_currency: row.payment_currency ?? request.payment_currency,
+      payment_status: row.payment_status ?? request.payment_status,
+      consultation_stage: row.consultation_stage ?? request.consultation_stage
+    };
+  });
+}
+
+/** Resolve PSE names when the assignee embed is omitted (RLS / select fallback). */
+async function enrichRequestsWithAssigneeNames(
+  requests: OpinionRequest[]
+): Promise<OpinionRequest[]> {
+  const missingIds = [
+    ...new Set(
+      requests
+        .filter((request) => request.assigned_to && !request.assigned_to_name?.trim())
+        .map((request) => request.assigned_to as string)
+    )
+  ];
+
+  if (!missingIds.length) return requests;
+
+  const { data, error } = await supabase.from('admins').select('id, full_name').in('id', missingIds);
+
+  if (error || !data?.length) return requests;
+
+  const nameById = new Map(data.map((row) => [row.id, row.full_name as string]));
+
+  return requests.map((request) => {
+    if (!request.assigned_to || request.assigned_to_name?.trim()) return request;
+    const name = nameById.get(request.assigned_to);
+    return name ? { ...request, assigned_to_name: name } : request;
+  });
+}
+
+async function fetchPatientOpinionRequestRows(
+  patientAuthUserId: string
+): Promise<{ rows: RequestListRow[] | null; error: { message: string; code?: string } | null; responsesEnabled: boolean }> {
+  const buildQuery = (select: string) =>
+    supabase
+      .from('opinion_requests')
+      .select(select)
+      .eq('patient_id', patientAuthUserId)
+      .order('created_at', { ascending: false })
+      .returns<RequestListRow[]>();
+
+  let result = await buildQuery(requestListSelectPatient);
+  if (!result.error) {
+    return { rows: result.data, error: null, responsesEnabled: true };
+  }
+
+  let lastError = result.error;
+
+  if (isMissingRecordsVerifiedColumnError(lastError)) {
+    result = await buildQuery(stripRecordsVerifiedFromSelect(requestListSelectPatient));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingWorkflowColumnsError(lastError)) {
+    result = await buildQuery(
+      `
+      id,
+      message,
+      status,
+      created_at,
+      patient_id,
+      patient_name,
+      doctor_id,
+      doctor_name,
+      doctor_response,
+      responded_at,
+      assigned_to,
+      assigned_at,
+      coordination_notes,
+      doctors (id, full_name, specialty)
+    `
+    );
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  return fetchOpinionRequestRows({ column: 'patient_id', value: patientAuthUserId });
+}
+
 async function fetchOpinionRequestRows(
   filter?: { column: 'patient_id' | 'doctor_id'; value: string }
 ): Promise<{ rows: RequestListRow[] | null; error: { message: string; code?: string } | null; responsesEnabled: boolean }> {
@@ -369,36 +960,85 @@ async function fetchOpinionRequestRows(
     return { rows: result.data, error: null, responsesEnabled: true };
   }
 
-  if (isMissingAssignmentColumnsError(result.error)) {
+  let lastError = result.error;
+
+  if (isMissingRecordsVerifiedColumnError(lastError)) {
+    result = await buildQuery(stripRecordsVerifiedFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingWorkflowColumnsError(lastError)) {
+    result = await buildQuery(stripExtendedWorkflowFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+
+    result = await buildQuery(
+      stripRecordsVerifiedFromSelect(stripExtendedWorkflowFromSelect(requestListSelectWithResponse))
+    );
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingWorkflowColumnsError(lastError)) {
+    result = await buildQuery(requestListSelectWithResponseLegacy);
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingAssignmentColumnsError(lastError)) {
+    result = await buildQuery(requestListSelectWithResponseNoAssignLegacy);
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+
     result = await buildQuery(requestListSelectWithResponseNoAssign);
     if (!result.error) {
       return { rows: result.data, error: null, responsesEnabled: true };
     }
+    lastError = result.error;
   }
 
-  if (isMissingResponseColumnsError(result.error)) {
+  if (isMissingResponseColumnsError(lastError)) {
+    result = await buildQuery(requestListSelectBaseLegacy);
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: false };
+    }
+    lastError = result.error;
+
     result = await buildQuery(requestListSelectBase);
     if (!result.error) {
       return { rows: result.data, error: null, responsesEnabled: false };
     }
+    lastError = result.error;
   }
 
-  if (result.error) {
-    result = await buildQuery(requestListSelectMinimal);
+  result = await buildQuery(requestListSelectMinimalLegacy);
+  if (!result.error) {
+    return { rows: result.data, error: null, responsesEnabled: true };
+  }
+  lastError = result.error;
+
+  if (isMissingResponseColumnsError(lastError)) {
+    result = await buildQuery(requestListSelectMinimalBase);
     if (!result.error) {
-      return { rows: result.data, error: null, responsesEnabled: true };
+      return { rows: result.data, error: null, responsesEnabled: false };
     }
-    if (isMissingResponseColumnsError(result.error)) {
-      result = await buildQuery(requestListSelectMinimalBase);
-      if (!result.error) {
-        return { rows: result.data, error: null, responsesEnabled: false };
-      }
-    }
+    lastError = result.error;
   }
 
   return {
     rows: null,
-    error: result.error ? { message: result.error.message, code: result.error.code } : { message: 'Unknown error' },
+    error: lastError ? { message: lastError.message, code: lastError.code } : { message: 'Unknown error' },
     responsesEnabled: false
   };
 }
@@ -410,17 +1050,62 @@ function permissionHint(code?: string, message?: string) {
   return '';
 }
 
-export async function fetchPatientOpinionRequests(patientAuthUserId: string): Promise<FetchOpinionRequestsResult> {
-  let { rows, error, responsesEnabled } = await fetchOpinionRequestRows({
-    column: 'patient_id',
-    value: patientAuthUserId
+/** Loads request↔file links in a second query so RLS/embed issues do not hide attachments. */
+async function attachRequestRecords(requests: OpinionRequest[]): Promise<OpinionRequest[]> {
+  if (!requests.length) return requests;
+
+  const requestIds = requests.map((request) => request.id);
+  const { data: links, error: linksError } = await supabase
+    .from('opinion_request_records')
+    .select('request_id, record_id')
+    .in('request_id', requestIds);
+
+  if (linksError || !links?.length) {
+    return requests;
+  }
+
+  const recordIds = [...new Set(links.map((link) => link.record_id))];
+  const { data: files, error: filesError } = await supabase
+    .from('uploaded_files')
+    .select('id, file_name, summary, storage_path')
+    .in('id', recordIds);
+
+  if (filesError || !files?.length) {
+    return requests;
+  }
+
+  const fileMap = new Map<string, OpinionRequestFile>();
+  for (const file of files) {
+    if (file.id) fileMap.set(file.id, file);
+  }
+
+  const recordsByRequest = new Map<string, OpinionRequestFile[]>();
+  for (const link of links) {
+    const file = fileMap.get(link.record_id);
+    if (!file) continue;
+    const list = recordsByRequest.get(link.request_id) ?? [];
+    list.push(file);
+    recordsByRequest.set(link.request_id, list);
+  }
+
+  return requests.map((request) => {
+    const attached = recordsByRequest.get(request.id);
+    if (!attached?.length) return request;
+    return {
+      ...request,
+      records: attached.length >= request.records.length ? attached : request.records
+    };
   });
+}
+
+export async function fetchPatientOpinionRequests(patientAuthUserId: string): Promise<FetchOpinionRequestsResult> {
+  let { rows, error, responsesEnabled } = await fetchPatientOpinionRequestRows(patientAuthUserId);
 
   if (!error && (rows?.length ?? 0) === 0) {
-    const fallback = await fetchOpinionRequestRows();
-    if (!fallback.error && (fallback.rows?.length ?? 0) > 0) {
-      rows = (fallback.rows ?? []).filter((row) => row.patient_id === patientAuthUserId);
-      responsesEnabled = fallback.responsesEnabled;
+    const broad = await fetchOpinionRequestRows();
+    if (!broad.error && (broad.rows?.length ?? 0) > 0) {
+      rows = (broad.rows ?? []).filter((row) => row.patient_id === patientAuthUserId);
+      responsesEnabled = broad.responsesEnabled;
     }
   }
 
@@ -432,8 +1117,11 @@ export async function fetchPatientOpinionRequests(patientAuthUserId: string): Pr
     };
   }
 
+  const mapped = (rows ?? []).map((row) => mapRequestRow(row, new Map()));
+  const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
+  const data = await attachRequestRecords(withWorkflow);
   return {
-    data: (rows ?? []).map((row) => mapRequestRow(row, new Map())),
+    data,
     error: null,
     responsesEnabled
   };
@@ -455,8 +1143,10 @@ export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequests
 
   try {
     const patientMap = await loadPatientEmailMap(authUserIds);
+    const mapped = (rows ?? []).map((row) => mapRequestRow(row, patientMap));
+    const data = await attachRequestRecords(mapped);
     return {
-      data: (rows ?? []).map((row) => mapRequestRow(row, patientMap)),
+      data,
       error: null,
       responsesEnabled
     };
@@ -482,8 +1172,12 @@ export async function fetchOpinionRequestsForStaff(): Promise<FetchOpinionReques
 
   try {
     const patientMap = await loadPatientEmailMap(authUserIds);
+    const mapped = (rows ?? []).map((row) => mapRequestRow(row, patientMap));
+    const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
+    const withRecords = await attachRequestRecords(withWorkflow);
+    const data = await enrichRequestsWithAssigneeNames(withRecords);
     return {
-      data: (rows ?? []).map((row) => mapRequestRow(row, patientMap)),
+      data,
       error: null,
       responsesEnabled
     };
@@ -496,18 +1190,780 @@ export async function fetchOpinionRequestsForStaff(): Promise<FetchOpinionReques
 /** @deprecated Use fetchOpinionRequestsForStaff */
 export const fetchAllOpinionRequestsForAdmin = fetchOpinionRequestsForStaff;
 
-/** Administrator assigns a submitted request to a Patient Service Executive. */
-export async function assignOpinionRequest(requestId: string, assigneeAdminId: string) {
+function isMissingDeletePolicyError(error: { message?: string; code?: string } | null) {
+  if (!error) return false;
+  const msg = (error.message ?? '').toLowerCase();
+  return error.code === '42501' || msg.includes('policy') || msg.includes('permission denied');
+}
+
+function isMissingDeleteRpcError(error: { message?: string; code?: string } | null) {
+  if (!error) return false;
+  const msg = (error.message ?? '').toLowerCase();
+  return (
+    msg.includes('admin_delete_opinion_request') ||
+    msg.includes('admin_delete_patient_opinion_requests') ||
+    (msg.includes('function') && msg.includes('does not exist'))
+  );
+}
+
+const DELETE_MIGRATION_HINT =
+  'Run npm run db:apply-admin-delete-requests or apply supabase/apply-admin-delete-requests-in-sql-editor.sql in the Supabase SQL Editor.';
+
+async function deleteOpinionRequestDirect(requestId: string) {
+  return supabase.from('opinion_requests').delete().eq('id', requestId).select('id');
+}
+
+/** Permanently delete one opinion request (admin only). Cascades related rows. */
+export async function deleteOpinionRequestForAdmin(requestId: string) {
+  const { data: rpcOk, error: rpcError } = await supabase.rpc('admin_delete_opinion_request', {
+    p_request_id: requestId
+  });
+
+  if (!rpcError) {
+    if (rpcOk === true) {
+      return { data: [{ id: requestId }], error: null };
+    }
+    return { data: null, error: { message: 'Request not found or could not be deleted.' } };
+  }
+
+  if (!isMissingDeleteRpcError(rpcError)) {
+    if (isMissingDeletePolicyError(rpcError)) {
+      return { data: null, error: { message: `Delete is not enabled in the database. ${DELETE_MIGRATION_HINT}` } };
+    }
+    const msg = rpcError.message ?? '';
+    if (msg.toLowerCase().includes('administrator access required')) {
+      return {
+        data: null,
+        error: { message: 'Only administrators can delete requests. Sign in with an admin account.' }
+      };
+    }
+    return { data: null, error: rpcError };
+  }
+
+  const { data, error } = await deleteOpinionRequestDirect(requestId);
+
+  if (error) {
+    if (isMissingDeletePolicyError(error)) {
+      return {
+        data: null,
+        error: { message: `Delete is not enabled in the database. ${DELETE_MIGRATION_HINT}` }
+      };
+    }
+    return { data: null, error };
+  }
+
+  if (!data?.length) {
+    return {
+      data: null,
+      error: {
+        message: `Request could not be deleted. ${DELETE_MIGRATION_HINT}`
+      }
+    };
+  }
+
+  return { data, error: null };
+}
+
+/** Count opinion requests for a patient auth user (admin). */
+export async function countOpinionRequestsForPatient(patientAuthUserId: string) {
+  const { count, error } = await supabase
+    .from('opinion_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('patient_id', patientAuthUserId);
+
+  if (error) return { count: 0, error };
+  return { count: count ?? 0, error: null };
+}
+
+/** Delete all opinion requests for a patient (admin only). */
+export async function deleteAllOpinionRequestsForPatientForAdmin(patientAuthUserId: string) {
+  const { data: rpcCount, error: rpcError } = await supabase.rpc(
+    'admin_delete_patient_opinion_requests',
+    { p_patient_auth_user_id: patientAuthUserId }
+  );
+
+  if (!rpcError) {
+    const deletedCount = typeof rpcCount === 'number' ? rpcCount : Number(rpcCount) || 0;
+    return { data: null, deletedCount, error: null };
+  }
+
+  if (!isMissingDeleteRpcError(rpcError)) {
+    if (isMissingDeletePolicyError(rpcError)) {
+      return {
+        data: null,
+        deletedCount: 0,
+        error: { message: `Delete is not enabled in the database. ${DELETE_MIGRATION_HINT}` }
+      };
+    }
+    return { data: null, deletedCount: 0, error: rpcError };
+  }
+
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .delete()
+    .eq('patient_id', patientAuthUserId)
+    .select('id');
+
+  if (error) {
+    if (isMissingDeletePolicyError(error)) {
+      return {
+        data: null,
+        deletedCount: 0,
+        error: { message: `Delete is not enabled in the database. ${DELETE_MIGRATION_HINT}` }
+      };
+    }
+    return { data: null, deletedCount: 0, error };
+  }
+
+  return { data, deletedCount: data?.length ?? 0, error: null };
+}
+
+// -----------------------------------------------------------------------------
+// Consultation workflow mutations
+// -----------------------------------------------------------------------------
+
+export async function pseMarkRecordsVerified(requestId: string) {
+  const verifiedAt = new Date().toISOString();
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update({ records_verified_at: verifiedAt })
+    .eq('id', requestId)
+    .select('id, records_verified_at')
+    .single();
+
+  if (error && isMissingRecordsVerifiedColumnError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Records verification requires migration 021. Run npm run db:apply-records-verified or apply supabase/migrations/021_records_verified.sql in the Supabase SQL Editor.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function saveOpinionRequestRecommendations(
+  requestId: string,
+  input: Array<{ doctorId: string; rank?: number | null; note?: string | null }>
+) {
+  // Replace list: delete then insert
+  const { error: deleteError } = await supabase
+    .from('opinion_request_recommendations')
+    .delete()
+    .eq('request_id', requestId);
+  if (deleteError) return { data: null, error: deleteError };
+
+  if (!input.length) return { data: [], error: null };
+
+  const payload = input.map((item) => ({
+    request_id: requestId,
+    doctor_id: item.doctorId,
+    rank: item.rank ?? null,
+    note: item.note?.trim() || null
+  }));
+
+  const { data, error } = await supabase
+    .from('opinion_request_recommendations')
+    .insert(payload)
+    .select('id, request_id, doctor_id, rank, note, created_at');
+
+  if (error) return { data: null, error };
+  return { data: (data ?? []) as unknown as OpinionRequestRecommendation[], error: null };
+}
+
+export async function fetchOpinionRequestRecommendations(requestId: string) {
+  const { data, error } = await supabase
+    .from('opinion_request_recommendations')
+    .select(
+      `
+      id,
+      request_id,
+      doctor_id,
+      rank,
+      note,
+      created_at,
+      doctors (
+        full_name,
+        specialty
+      )
+    `
+    )
+    .eq('request_id', requestId)
+    .order('rank', { ascending: true, nullsFirst: true })
+    .returns<
+      Array<
+        Omit<OpinionRequestRecommendation, 'doctor_name' | 'doctor_specialty'> & {
+          doctors: { full_name: string; specialty: string } | null;
+        }
+      >
+    >();
+
+  if (error) return { data: null, error };
+  return {
+    data: (data ?? []).map((row) => ({
+      id: row.id,
+      request_id: row.request_id,
+      doctor_id: row.doctor_id,
+      rank: row.rank,
+      note: row.note,
+      created_at: row.created_at,
+      doctor_name: row.doctors?.full_name ?? null,
+      doctor_specialty: row.doctors?.specialty ?? null
+    })),
+    error: null
+  };
+}
+
+export async function markRecommendationsShared(requestId: string) {
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update({ consultation_stage: 'recommended' })
+    .eq('id', requestId)
+    .select('id, consultation_stage')
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation workflow is not enabled in the database. Run npm run db:apply-consultation-workflow or apply supabase/migrations/019_consultation_workflow.sql.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function patientSelectRecommendedDoctor(requestId: string, doctorId: string) {
+  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId);
+  if (doctorError || !doctor) {
+    return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
+  }
+
   const { data, error } = await supabase
     .from('opinion_requests')
     .update({
-      assigned_to: assigneeAdminId,
-      assigned_at: new Date().toISOString()
+      selected_doctor_id: doctor.id,
+      doctor_id: doctor.id,
+      doctor_name: doctor.full_name,
+      consultation_stage: 'doctor_selected'
     })
     .eq('id', requestId)
-    .eq('status', 'submitted')
-    .select('id, assigned_to, assigned_at')
+    .select('id, selected_doctor_id, doctor_id, consultation_stage')
     .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** Patient picks a doctor and preferred appointment time in one step (routes to PSE for review). */
+export async function patientSelectDoctorWithAvailability(
+  requestId: string,
+  doctorId: string,
+  availability: unknown
+) {
+  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId);
+  if (doctorError || !doctor) {
+    return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
+  }
+
+  const payload = {
+    selected_doctor_id: doctor.id,
+    doctor_id: doctor.id,
+    doctor_name: doctor.full_name,
+    patient_availability: availability,
+    consultation_stage: 'availability_submitted' as const
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', requestId)
+    .select('id, selected_doctor_id, doctor_id, doctor_name, patient_availability, consultation_stage')
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation workflow is not enabled in the database. Run npm run db:apply-consultation-workflow (migration 019).'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function patientSubmitAvailability(requestId: string, availability: unknown) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      patient_availability: availability,
+      consultation_stage: 'availability_submitted'
+    })
+    .eq('id', requestId)
+    .select('id, consultation_stage')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** PSE confirms the doctor is free at the patient's requested time and proposes a slot for patient approval. */
+export async function pseProposeConfirmedSchedule(
+  requestId: string,
+  input: { scheduledAt: string; message?: string | null }
+) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      scheduled_at: input.scheduledAt,
+      pse_scheduling_message: input.message?.trim() || null,
+      consultation_stage: 'schedule_proposed'
+    })
+    .eq('id', requestId)
+    .select('id, scheduled_at, pse_scheduling_message, consultation_stage')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** PSE informs the patient the doctor is not available at the requested time; offers alternative slots. */
+export async function pseProposeScheduleAlternatives(
+  requestId: string,
+  input: { alternativeSlots: string; message?: string | null }
+) {
+  const trimmed = input.alternativeSlots.trim();
+  if (!trimmed) {
+    return { data: null, error: { message: 'Enter alternative dates and times for the patient.' } };
+  }
+  const combined = input.message?.trim()
+    ? `${input.message.trim()}\n\n${trimmed}`
+    : trimmed;
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      pse_scheduling_message: combined,
+      consultation_stage: 'schedule_proposed'
+    })
+    .eq('id', requestId)
+    .select('id, pse_scheduling_message, consultation_stage')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** Patient accepts the proposed schedule (or alternatives) so PSE can send payment. */
+export async function patientConfirmSchedule(requestId: string) {
+  const confirmedAt = new Date().toISOString();
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      consultation_stage: 'schedule_confirmed',
+      schedule_confirmed_at: confirmedAt
+    })
+    .eq('id', requestId)
+    .select('id, consultation_stage, schedule_confirmed_at')
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    const retry = await supabase
+      .from('opinion_requests')
+      .update({ consultation_stage: 'schedule_confirmed' })
+      .eq('id', requestId)
+      .select('id, consultation_stage')
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+function paymentProofMimeForFile(file: File): string {
+  const type = file.type?.trim().toLowerCase();
+  if (type && PAYMENT_PROOF_ACCEPTED_TYPES.has(type)) return type;
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.webp')) return 'image/webp';
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  return 'image/jpeg';
+}
+
+export function paymentProofValidationError(file: File): string | null {
+  if (file.size < 1 || file.size > PAYMENT_PROOF_MAX_BYTES) {
+    return 'Payment proof must be between 1 byte and 10 MB.';
+  }
+  const mime = paymentProofMimeForFile(file);
+  if (!PAYMENT_PROOF_ACCEPTED_TYPES.has(mime)) {
+    return 'Upload a screenshot or receipt (JPEG, PNG, WebP, or PDF).';
+  }
+  return null;
+}
+
+/** Patient shares payment screenshot after paying via the external link. */
+export async function patientSubmitPaymentProof(requestId: string, file: File) {
+  const validationError = paymentProofValidationError(file);
+  if (validationError) {
+    return { data: null, error: { message: validationError } };
+  }
+
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: { message: 'File storage is not configured. Contact support to share your payment proof.' }
+    };
+  }
+
+  const contentType = paymentProofMimeForFile(file);
+  const { data: uploadTarget, error: presignError } = await createR2UploadUrl(file);
+  if (presignError || !uploadTarget) {
+    return { data: null, error: presignError ?? { message: 'Could not prepare upload.' } };
+  }
+
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    contentType,
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { data: null, error: uploadError };
+  }
+
+  const submittedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      payment_proof_storage_path: uploadTarget.storagePath,
+      payment_proof_file_name: file.name,
+      payment_proof_mime_type: contentType,
+      payment_proof_submitted_at: submittedAt,
+      payment_status: 'pending',
+      consultation_stage: 'payment_pending'
+    })
+    .eq('id', requestId)
+    .select(
+      'id, payment_proof_storage_path, payment_proof_file_name, payment_proof_mime_type, payment_proof_submitted_at, payment_status, consultation_stage'
+    )
+    .single();
+
+  if (error) {
+    if (isMissingWorkflowColumnsError(error)) {
+      return {
+        data: null,
+        error: {
+          message:
+            'Payment proof is not enabled in the database. Run npm run db:apply-payment-proof or apply supabase/migrations/026_payment_proof.sql.'
+        }
+      };
+    }
+    return { data: null, error };
+  }
+
+  return { data, error: null };
+}
+
+/** PSE sends payment link after schedule is confirmed by the patient. */
+export async function pseSendPaymentLink(
+  requestId: string,
+  input: { paymentLink: string; amount?: number | null; currency?: string | null }
+) {
+  const link = input.paymentLink.trim();
+  if (!link) {
+    return { data: null, error: { message: 'Enter a payment link for the patient.' } };
+  }
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      payment_link: link,
+      payment_status: 'pending',
+      consultation_stage: 'payment_pending',
+      payment_amount: input.amount ?? null,
+      payment_currency: input.currency?.trim() || null
+    })
+    .eq('id', requestId)
+    .select('id, payment_link, payment_status, consultation_stage, payment_amount, payment_currency')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function pseScheduleAppointment(
+  requestId: string,
+  input: { scheduledAt: string; meetingLink?: string | null }
+) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      scheduled_at: input.scheduledAt,
+      meeting_link: input.meetingLink?.trim() || null,
+      consultation_stage: 'scheduled'
+    })
+    .eq('id', requestId)
+    .select('id, scheduled_at, meeting_link, consultation_stage')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function pseSetPaymentPending(requestId: string) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({ payment_status: 'pending', consultation_stage: 'payment_pending' })
+    .eq('id', requestId)
+    .select('id, payment_status, consultation_stage')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function pseConfirmPayment(
+  requestId: string,
+  input: { amount?: number | null; currency?: string | null; reference?: string | null }
+) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      payment_status: 'paid',
+      payment_amount: input.amount ?? null,
+      payment_currency: input.currency?.trim() || null,
+      payment_reference: input.reference?.trim() || null,
+      payment_confirmed_at: new Date().toISOString(),
+      consultation_stage: 'paid'
+    })
+    .eq('id', requestId)
+    .select('id, payment_status, consultation_stage, payment_confirmed_at')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function pseReleaseToDoctor(requestId: string) {
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({ status: 'in_review' })
+    .eq('id', requestId)
+    .select('id, status')
+    .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+export async function fetchPatientConsultationSummaries(patientAuthUserId: string) {
+  const { data, error } = await supabase
+    .from('consultation_summaries')
+    .select(
+      `
+      id,
+      request_id,
+      doctor_id,
+      patient_auth_user_id,
+      chief_complaint,
+      history_present_illness,
+      vital_signs,
+      current_medications,
+      labs_diagnostics,
+      assessment_plan,
+      prescription,
+      pdf_storage_path,
+      created_at,
+      updated_at
+    `
+    )
+    .eq('patient_auth_user_id', patientAuthUserId)
+    .order('created_at', { ascending: false })
+    .returns<ConsultationSummary[]>();
+
+  if (error) return { data: null, error };
+  return { data: data ?? [], error: null };
+}
+
+const CONSULTATION_SUMMARY_SELECT = `
+  id,
+  request_id,
+  doctor_id,
+  patient_auth_user_id,
+  chief_complaint,
+  history_present_illness,
+  vital_signs,
+  current_medications,
+  labs_diagnostics,
+  assessment_plan,
+  prescription,
+  pdf_storage_path,
+  created_at,
+  updated_at
+`;
+
+export async function fetchConsultationSummary(requestId: string) {
+  const { data, error } = await supabase
+    .from('consultation_summaries')
+    .select(CONSULTATION_SUMMARY_SELECT)
+    .eq('request_id', requestId)
+    .maybeSingle<ConsultationSummary>();
+
+  if (error) return { data: null, error };
+  return { data: data ?? null, error: null };
+}
+
+function shouldCloseRequestAfterConsultation(request: OpinionRequest): boolean {
+  return (
+    request.payment_status === 'paid' ||
+    request.consultation_stage === 'paid' ||
+    request.consultation_stage === 'completed'
+  );
+}
+
+/** Doctor submits structured consultation notes, uploads PDF to R2, and updates the request. */
+export async function saveDoctorConsultation(
+  requestId: string,
+  request: OpinionRequest,
+  input: Omit<ConsultationSummary, 'id' | 'request_id' | 'created_at' | 'updated_at' | 'pdf_storage_path'>,
+  responseText: string
+) {
+  const trimmedResponse = responseText.trim();
+  if (!trimmedResponse) {
+    return { data: null, error: { message: 'Write your response before sending.' } };
+  }
+
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: {
+        message:
+          'File storage is not configured. Set VITE_R2_API_URL so consultation PDFs can be saved.'
+      }
+    };
+  }
+
+  const summaryForPdf: ConsultationSummary = {
+    id: '',
+    request_id: requestId,
+    pdf_storage_path: null,
+    created_at: '',
+    updated_at: '',
+    ...input
+  };
+
+  const blob = await generateConsultationSummaryPdfBlob(
+    summaryForPdf,
+    consultationSummaryPdfMetaFromRequest(request)
+  );
+  const file = new File([blob], `consultation-summary-${requestId}.pdf`, {
+    type: 'application/pdf'
+  });
+
+  const { data: uploadTarget, error: presignError } = await createConsultationSummaryUploadUrl(
+    requestId,
+    file.size
+  );
+  if (presignError || !uploadTarget) {
+    return { data: null, error: presignError ?? { message: 'Could not prepare PDF upload.' } };
+  }
+
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    'application/pdf',
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { data: null, error: uploadError };
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('consultation_summaries')
+    .upsert(
+      {
+        request_id: requestId,
+        ...input,
+        pdf_storage_path: uploadTarget.storagePath,
+        updated_at: now
+      },
+      { onConflict: 'request_id' }
+    )
+    .select(CONSULTATION_SUMMARY_SELECT)
+    .single<ConsultationSummary>();
+
+  if (error) {
+    const hint =
+      error.message?.includes('pdf_storage_path') || error.code === '42703'
+        ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
+        : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+
+  const requestUpdate: {
+    doctor_response: string;
+    responded_at: string;
+    consultation_stage?: ConsultationStage;
+    status?: OpinionRequestStatus;
+  } = {
+    doctor_response: trimmedResponse,
+    responded_at: now
+  };
+
+  if (shouldCloseRequestAfterConsultation(request)) {
+    requestUpdate.consultation_stage = 'completed';
+    requestUpdate.status = 'closed';
+  }
+
+  const { error: requestError } = await supabase
+    .from('opinion_requests')
+    .update(requestUpdate)
+    .eq('id', requestId);
+
+  if (requestError) return { data: null, error: requestError };
+  return { data, error: null };
+}
+
+/** @deprecated Use saveDoctorConsultation — kept for any legacy callers. */
+export async function doctorSubmitConsultationSummary(
+  requestId: string,
+  input: Omit<ConsultationSummary, 'id' | 'request_id' | 'created_at' | 'updated_at' | 'pdf_storage_path'>,
+  request: OpinionRequest,
+  responseText: string
+) {
+  return saveDoctorConsultation(requestId, request, input, responseText);
+}
+
+/** Administrator assigns a submitted request to a Patient Service Executive. */
+export async function assignOpinionRequest(requestId: string, assigneeAdminId: string) {
+  const assignedAt = new Date().toISOString();
+  const payload = {
+    assigned_to: assigneeAdminId,
+    assigned_at: assignedAt,
+    consultation_stage: 'assigned' as const
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', requestId)
+    .select('id, assigned_to, assigned_at, consultation_stage')
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    const legacy = await supabase
+      .from('opinion_requests')
+      .update({
+        assigned_to: assigneeAdminId,
+        assigned_at: assignedAt
+      })
+      .eq('id', requestId)
+      .select('id, assigned_to, assigned_at')
+      .single();
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error) {
     const hint =
@@ -549,4 +2005,153 @@ export async function forwardOpinionRequestToDoctor(requestId: string, coordinat
   }
 
   return { data, error: null };
+}
+
+/** Live updates for a single request detail view (recommendations, stage, summary). */
+export function subscribeOpinionRequestLiveUpdates(
+  requestId: string,
+  onChange: () => void
+): () => void {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const scheduleRefresh = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => onChange(), 200);
+  };
+
+  const channel = supabase
+    .channel(`opinion-request-live:${requestId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'opinion_requests',
+        filter: `id=eq.${requestId}`
+      },
+      scheduleRefresh
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'opinion_request_recommendations',
+        filter: `request_id=eq.${requestId}`
+      },
+      scheduleRefresh
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'consultation_summaries',
+        filter: `request_id=eq.${requestId}`
+      },
+      scheduleRefresh
+    )
+    .subscribe();
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    void supabase.removeChannel(channel);
+  };
+}
+
+/** Push updates from Supabase Realtime when PSE/staff change a patient's requests (replaces polling). */
+export function subscribePatientOpinionRequestUpdates(
+  patientAuthUserId: string,
+  onChange: () => void
+): () => void {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const scheduleRefresh = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => onChange(), 350);
+  };
+
+  const channel = supabase
+    .channel(`patient-opinion-requests:${patientAuthUserId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'opinion_requests',
+        filter: `patient_id=eq.${patientAuthUserId}`
+      },
+      scheduleRefresh
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'opinion_request_recommendations' },
+      scheduleRefresh
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'consultation_summaries',
+        filter: `patient_auth_user_id=eq.${patientAuthUserId}`
+      },
+      scheduleRefresh
+    )
+    .subscribe();
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    void supabase.removeChannel(channel);
+  };
+}
+
+/** Realtime updates for PSE/admin request queues (patient doctor selection, stage changes, etc.). */
+export function subscribeStaffOpinionRequestUpdates(
+  onChange: () => void,
+  options?: { assignedToAdminId?: string | null }
+): () => void {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const scheduleRefresh = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => onChange(), 300);
+  };
+
+  const assigneeId = options?.assignedToAdminId?.trim() || null;
+  const channelName = assigneeId
+    ? `staff-opinion-requests:${assigneeId}`
+    : 'staff-opinion-requests:all';
+
+  const matchesAssignee = (row: { assigned_to?: string | null } | null | undefined) => {
+    if (!assigneeId) return true;
+    return row?.assigned_to === assigneeId;
+  };
+
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'opinion_requests' },
+      (payload) => {
+        const row = (payload.new ?? payload.old) as { assigned_to?: string | null } | null;
+        if (matchesAssignee(row)) scheduleRefresh();
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'opinion_request_recommendations' },
+      () => scheduleRefresh()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'consultation_summaries' },
+      () => scheduleRefresh()
+    )
+    .subscribe();
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    void supabase.removeChannel(channel);
+  };
 }

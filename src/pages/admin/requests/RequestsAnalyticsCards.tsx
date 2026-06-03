@@ -4,13 +4,15 @@ import {
   IconClipboardList,
   IconClock,
   IconStethoscope,
-  IconCircleCheck
+  IconCircleCheck,
+  IconCalendarUser
 } from '@tabler/icons-react';
 import type { RequestAnalytics } from './requestsUtils';
 
 type RequestsAnalyticsCardsProps = {
   analytics: RequestAnalytics;
   pendingLabel: string;
+  showPatientSelections?: boolean;
   loading?: boolean;
 };
 
@@ -45,10 +47,28 @@ const CARDS = [
   }
 ] as const;
 
-function RequestsAnalyticsCards({ analytics, pendingLabel, loading }: RequestsAnalyticsCardsProps) {
+function RequestsAnalyticsCards({
+  analytics,
+  pendingLabel,
+  showPatientSelections = false,
+  loading
+}: RequestsAnalyticsCardsProps) {
+  const cards = showPatientSelections
+    ? CARDS.map((card) =>
+        card.key === 'pending'
+          ? {
+              ...card,
+              label: 'Patient selections',
+              icon: IconCalendarUser,
+              value: (a: RequestAnalytics) => a.patientSelectionsToReview.toLocaleString()
+            }
+          : card
+      )
+    : CARDS;
+
   return (
     <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} className='doctors-mgmt-stats'>
-      {CARDS.map(({ key, label, icon: Icon, gradient, value }) => (
+      {cards.map(({ key, label, icon: Icon, gradient, value }) => (
         <Paper
           key={key}
           className={`doctors-mgmt-stat ${gradient}`}

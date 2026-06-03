@@ -17,7 +17,7 @@ export type ElixHealthNavId = 'overview' | 'doctors' | 'patients' | 'requests' |
 
 export function navItemsForRole(role: AdminRole): ElixHealthNavId[] {
   if (role === 'patient_service_executive') {
-    return ['overview', 'doctors', 'patients', 'requests'];
+    return ['overview', 'requests', 'doctors', 'patients'];
   }
   return ['overview', 'doctors', 'patients', 'requests', 'staff'];
 }

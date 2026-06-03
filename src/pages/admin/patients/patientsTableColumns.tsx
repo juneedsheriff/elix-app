@@ -16,7 +16,8 @@ import {
   IconEye,
   IconMail,
   IconPencil,
-  IconPhone
+  IconPhone,
+  IconTrash
 } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import type { Patient } from '../../../types/patient';
@@ -30,6 +31,8 @@ import {
 
 type UsePatientsTableColumnsOptions = {
   canEdit: boolean;
+  isAdmin: boolean;
+  onDeleteAllRequests?: (patient: Patient) => void;
 };
 
 function displayCell(value: string | null | undefined) {
@@ -42,7 +45,11 @@ function formatDate(iso: string | null | undefined) {
   return new Date(iso).toLocaleDateString();
 }
 
-export function usePatientsTableColumns({ canEdit }: UsePatientsTableColumnsOptions) {
+export function usePatientsTableColumns({
+  canEdit,
+  isAdmin,
+  onDeleteAllRequests
+}: UsePatientsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<Patient>[]>(
     () => [
       {
@@ -249,6 +256,16 @@ export function usePatientsTableColumns({ canEdit }: UsePatientsTableColumnsOpti
                       Call patient
                     </Menu.Item>
                   ) : null}
+                  {isAdmin && onDeleteAllRequests ? (
+                    <Menu.Item
+                      color='red'
+                      leftSection={<IconTrash size={16} />}
+                      disabled={!patient.auth_user_id}
+                      onClick={() => onDeleteAllRequests(patient)}
+                    >
+                      Delete all opinion requests
+                    </Menu.Item>
+                  ) : null}
                 </Menu.Dropdown>
               </Menu>
             </Group>
@@ -256,6 +273,6 @@ export function usePatientsTableColumns({ canEdit }: UsePatientsTableColumnsOpti
         }
       }
     ],
-    [canEdit]
+    [canEdit, isAdmin, onDeleteAllRequests]
   );
 }
