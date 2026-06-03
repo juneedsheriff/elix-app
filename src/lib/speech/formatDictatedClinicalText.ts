@@ -1,4 +1,5 @@
 import type { ConsultationSummaryFieldKey } from '../consultationSummaryFields';
+import { normalizeSpeechTranscript } from './speechTranscriptMerge';
 
 function normalizeSpokenPunctuation(text: string): string {
   return text
@@ -102,7 +103,7 @@ export function mergeDictatedFieldText(
   dictatedRaw: string,
   fieldKey: ConsultationSummaryFieldKey
 ): string {
-  const formatted = formatDictatedClinicalText(dictatedRaw, fieldKey);
+  const formatted = formatDictatedClinicalText(normalizeSpeechTranscript(dictatedRaw), fieldKey);
   if (!formatted) return existing;
   if (!existing.trim()) return formatted;
 

@@ -17,6 +17,10 @@ export function composeLiveTranscript(committed: string, interim: string): strin
     return finals;
   }
 
+  if (pendingLower.startsWith(finalsLower)) {
+    return pending;
+  }
+
   const needsSpace = /[a-z0-9]$/i.test(finals) && /^[a-z0-9]/i.test(pending);
   return needsSpace ? `${finals} ${pending}` : `${finals}${pending}`;
 }
