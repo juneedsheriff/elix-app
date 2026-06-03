@@ -1,5 +1,5 @@
 import type { User } from '@supabase/supabase-js';
-import type { Patient, PatientUpsertInput } from '../types/patient';
+import type { Patient, PatientProfileUpdateInput } from '../types/patient';
 import { supabase } from './supabase';
 
 const patientColumnsWithElix =
@@ -101,4 +101,57 @@ export async function ensurePatientProfile(user: User, input?: Partial<PatientUp
 
   if (result.error) return { data: null, error: result.error, created: false };
   return { data: withFallbackElixId(result.data), error: null, created: true };
+}
+
+/** Split stored full_name for profile edit forms. */
+export function splitPatientFullName(fullName: string): { firstName: string; lastName: string } {
+  const trimmed = fullName.trim();
+  if (!trimmed) return { firstName: '', lastName: '' };
+  const space = trimmed.indexOf(' ');
+  if (space === -1) return { firstName: trimmed, lastName: '' };
+  return { firstName: trimmed.slice(0, space), lastName: trimmed.slice(space + 1).trim() };
+}
+
+export function joinPatientFullName(firstName: string, lastName: string): string {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim();
+}
+
+/** Patient updates their own profile (RLS: patients_update_own). */
+export async function updatePatientProfileForUser(
+  authUserId: string,
+  input: PatientProfileUpdateInput
+) {
+  const full_name = input.full_name.trim();
+  if (!full_name) {
+    return { data: null, error: { message: 'Enter your first name.' } };
+  }
+
+  let { data, error } = await supabase
+    .from('patients')
+    .update({
+      full_name,
+      phone: input.phone?.trim() || null,
+      updated_at: new Date().toISOString()
+    })
+    .eq('auth_user_id', authUserId)
+    .select(patientColumnsWithElix)
+    .single<Patient>();
+
+  if (error?.message.includes('elix_id')) {
+    const legacy = await supabase
+      .from('patients')
+      .update({
+        full_name,
+        phone: input.phone?.trim() || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('auth_user_id', authUserId)
+      .select(patientColumnsLegacy)
+      .single<Patient>();
+    data = legacy.data;
+    error = legacy.error;
+  }
+
+  if (error) return { data: null, error };
+  return { data: withFallbackElixId(data), error: null };
 }

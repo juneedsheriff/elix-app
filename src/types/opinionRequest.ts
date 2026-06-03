@@ -15,6 +15,8 @@ export type ConsultationStage =
 
 export type PaymentStatus = 'unpaid' | 'pending' | 'paid';
 
+export type DoctorSelectionMode = 'self_select' | 'needs_recommendation';
+
 export type OpinionRequestFile = {
   id: string;
   file_name: string;
@@ -57,9 +59,11 @@ export type OpinionRequest = {
   created_at: string;
   patient_id: string | null;
   patient_name: string | null;
-  doctor_id: string;
+  doctor_id: string | null;
   doctor_name: string | null;
   doctor_specialty: string | null;
+  doctor_selection_mode: DoctorSelectionMode | null;
+  requested_specialty: string | null;
   patient_email: string | null;
   doctor_response: string | null;
   responded_at: string | null;

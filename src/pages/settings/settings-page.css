@@ -1,0 +1,148 @@
+/* Settings — vault-style account banner */
+
+.settings-page {
+  --settings-radius: 18px;
+  --settings-shadow: 0 1px 2px rgba(15, 47, 70, 0.04), 0 10px 32px rgba(9, 171, 192, 0.08);
+}
+
+.settings-page.screen-grid {
+  gap: 0.85rem;
+}
+
+.settings-hero-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 1.15rem 1.15rem 1.1rem;
+  border-radius: calc(var(--settings-radius) + 2px);
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 14%, var(--border));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--brand-cyan) 12%, var(--surface)) 0%,
+    var(--surface) 48%,
+    color-mix(in srgb, var(--brand-cyan) 4%, var(--surface-soft)) 100%
+  );
+  box-shadow: var(--settings-shadow);
+  overflow: hidden;
+}
+
+.settings-hero-banner__content {
+  min-width: 0;
+  z-index: 1;
+}
+
+.settings-hero-banner__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.settings-hero-banner__text {
+  margin: 0.4rem 0 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.settings-hero-banner__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.settings-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  max-width: 100%;
+}
+
+.settings-hero-badge svg {
+  flex-shrink: 0;
+}
+
+.settings-hero-badge__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-hero-badge--connected {
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid rgba(34, 197, 94, 0.18);
+}
+
+.settings-hero-badge--disconnected {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.settings-hero-badge--account {
+  color: #0e7490;
+  background: #ecfeff;
+  border: 1px solid rgba(8, 145, 178, 0.18);
+}
+
+.settings-hero-badge--guest {
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid rgba(100, 116, 139, 0.16);
+}
+
+.settings-hero-banner__art {
+  position: relative;
+  flex-shrink: 0;
+  width: 5.5rem;
+  height: 5.5rem;
+  display: grid;
+  place-items: center;
+}
+
+.settings-hero-banner__logo {
+  display: block;
+  width: 4.5rem;
+  height: auto;
+  max-height: 4.5rem;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (max-width: 420px) {
+  .settings-hero-banner {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+
+  .settings-hero-banner__art {
+    justify-self: center;
+    width: 4.25rem;
+    height: 4.25rem;
+  }
+
+  .settings-hero-banner__logo {
+    width: 3.75rem;
+    max-height: 3.75rem;
+  }
+}
+
+[data-theme='dark'] .settings-hero-banner {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--brand-cyan) 8%, var(--surface)) 0%,
+    var(--surface) 55%
+  );
+}

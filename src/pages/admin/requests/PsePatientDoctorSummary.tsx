@@ -1,21 +1,48 @@
-import { Badge, Group, Paper, Stack, Text } from '@mantine/core';
-import { IconCalendar, IconStethoscope, IconUsers } from '@tabler/icons-react';
+import { useState } from 'react';
+import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { IconCalendar, IconCheck, IconStethoscope, IconUsers } from '@tabler/icons-react';
+import { canPseApprovePatientSelection, isScheduleConfirmed } from '../../../lib/consultationWizard';
 import { formatPatientAvailability } from '../../../lib/doctorSchedule';
-import { isScheduleConfirmed } from '../../../lib/consultationWizard';
+import { pseApprovePatientSelection } from '../../../lib/opinionRequests';
 import type { OpinionRequest, OpinionRequestRecommendation } from '../../../types/opinionRequest';
 
 type PsePatientDoctorSummaryProps = {
   request: OpinionRequest;
   recommendations: OpinionRequestRecommendation[];
+  canCoordinate?: boolean;
+  onUpdated?: () => void;
+  onError?: (message: string) => void;
+  onSuccess?: (message: string) => void;
+  onApproved?: () => void;
 };
 
 export default function PsePatientDoctorSummary({
   request,
-  recommendations
+  recommendations,
+  canCoordinate = false,
+  onUpdated,
+  onError,
+  onSuccess,
+  onApproved
 }: PsePatientDoctorSummaryProps) {
+  const [busy, setBusy] = useState(false);
   const patientAvailability = formatPatientAvailability(request.patient_availability);
   const hasPatientDoctor = Boolean(request.doctor_name || request.selected_doctor_id);
   const scheduleConfirmed = isScheduleConfirmed(request);
+  const showApprove = canCoordinate && canPseApprovePatientSelection(request);
+
+  const handleApprove = async () => {
+    setBusy(true);
+    const { error } = await pseApprovePatientSelection(request.id);
+    setBusy(false);
+    if (error) {
+      onError?.(error.message);
+      return;
+    }
+    onSuccess?.('Patient selection approved. Continue to Step 4 — Send payment link.');
+    onUpdated?.();
+    onApproved?.();
+  };
 
   return (
     <div className='pse-doctors-overview'>
@@ -55,7 +82,7 @@ export default function PsePatientDoctorSummary({
           </Group>
           {scheduleConfirmed ? (
             <Badge variant='light' color='green' radius='xl'>
-              Schedule confirmed
+              Approved
             </Badge>
           ) : hasPatientDoctor ? (
             <Badge variant='light' color='cyan' radius='xl'>
@@ -100,13 +127,13 @@ export default function PsePatientDoctorSummary({
 
             {request.schedule_confirmed_at ? (
               <Text size='xs' c='dimmed'>
-                Confirmed {new Date(request.schedule_confirmed_at).toLocaleString()}
+                Approved {new Date(request.schedule_confirmed_at).toLocaleString()}
               </Text>
             ) : null}
 
             {scheduleConfirmed ? (
               <Text size='sm' c='green' mt={4}>
-                Patient confirmed the schedule. Continue to Step 4 — Send payment link.
+                Patient selection approved. Continue to Step 4 — Send payment link.
               </Text>
             ) : null}
 
@@ -117,6 +144,18 @@ export default function PsePatientDoctorSummary({
                 </Text>
                 <Text size='sm'>{new Date(request.scheduled_at).toLocaleString()}</Text>
               </Stack>
+            ) : null}
+
+            {showApprove ? (
+              <Button
+                className='doctors-mgmt-header__primary'
+                radius='md'
+                leftSection={<IconCheck size={16} />}
+                loading={busy}
+                onClick={() => void handleApprove()}
+              >
+                Approve
+              </Button>
             ) : null}
           </Stack>
         ) : (

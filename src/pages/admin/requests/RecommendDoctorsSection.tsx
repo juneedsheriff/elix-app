@@ -28,6 +28,7 @@ type RecommendDoctorsSectionProps = {
   onUpdated: () => void;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
+  onPatientSelectionApproved?: () => void;
 };
 
 export default function RecommendDoctorsSection({
@@ -36,7 +37,8 @@ export default function RecommendDoctorsSection({
   canCoordinate = false,
   onUpdated,
   onError,
-  onSuccess
+  onSuccess,
+  onPatientSelectionApproved
 }: RecommendDoctorsSectionProps) {
   const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [selectedDoctorIds, setSelectedDoctorIds] = useState<string[]>([]);
@@ -133,7 +135,15 @@ export default function RecommendDoctorsSection({
 
   return (
     <Stack gap='md' className='doctors-mgmt-recommend'>
-      <PsePatientDoctorSummary request={request} recommendations={recommendations} />
+      <PsePatientDoctorSummary
+        request={request}
+        recommendations={recommendations}
+        canCoordinate={canCoordinate}
+        onUpdated={onUpdated}
+        onError={onError}
+        onSuccess={onSuccess}
+        onApproved={onPatientSelectionApproved}
+      />
 
       <Paper radius='md' p='md' withBorder className='doctors-mgmt-detail-block doctors-mgmt-recommend__actions'>
       {patientSubmittedSelection ? (

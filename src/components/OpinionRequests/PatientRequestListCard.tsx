@@ -1,6 +1,13 @@
-import { Calendar, ChevronRight, CircleDollarSign, Clock } from 'lucide-react';
+import {
+  BadgeCheck,
+  Calendar,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  ShieldCheck
+} from 'lucide-react';
 import { formatPatientAvailability } from '../../lib/doctorSchedule';
-import { patientRequestStatusLabel } from '../../lib/opinionRequests';
+import { isRecommendationOpinionRequest, patientRequestStatusLabel } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 function doctorInitials(name: string | null | undefined): string {
@@ -26,21 +33,28 @@ function formatPreferredTimeDisplay(request: OpinionRequest): string | null {
   return firstLine;
 }
 
-function formatPaymentDisplay(request: OpinionRequest): string | null {
-  if (request.payment_status !== 'paid') return null;
-  const parts: string[] = [];
-  if (request.payment_confirmed_at) {
-    parts.push(
-      new Date(request.payment_confirmed_at).toLocaleString(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short'
-      })
-    );
+function formatPaymentDate(request: OpinionRequest): string | null {
+  const iso = request.payment_confirmed_at ?? request.scheduled_at;
+  if (!iso) return null;
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function formatPaymentAmount(request: OpinionRequest): string | null {
+  if (request.payment_amount == null) return null;
+  const currency = (request.payment_currency ?? 'USD').toUpperCase();
+  if (currency === 'INR') {
+    return `₹${Number(request.payment_amount).toLocaleString()}`;
   }
-  if (request.payment_amount != null) {
-    parts.push(`${request.payment_amount} ${request.payment_currency ?? 'USD'}`);
+  if (currency === 'USD') {
+    return `$${Number(request.payment_amount).toLocaleString()}`;
   }
-  return parts.length ? parts.join(' · ') : 'Confirmed';
+  return `${request.payment_amount} ${currency}`;
+}
+
+function isAppointmentScheduled(request: OpinionRequest): boolean {
+  if (request.scheduled_at) return true;
+  const stage = request.consultation_stage;
+  return stage === 'scheduled' || stage === 'schedule_confirmed' || stage === 'paid' || stage === 'completed';
 }
 
 function statusPillClass(request: OpinionRequest): string {
@@ -70,9 +84,20 @@ export default function PatientRequestListCard({
   onOpen
 }: PatientRequestListCardProps) {
   const preferredTime = formatPreferredTimeDisplay(request);
-  const paymentLine = formatPaymentDisplay(request);
+  const paymentDate = formatPaymentDate(request);
+  const paymentAmount = formatPaymentAmount(request);
+  const isPaid = request.payment_status === 'paid';
   const statusLabel = patientRequestStatusLabel(request);
-  const doctorName = request.doctor_name ?? 'Doctor';
+  const awaitingRecommendation = isRecommendationOpinionRequest(request) && !request.doctor_name;
+  const doctorName = awaitingRecommendation ? 'Doctor recommendations' : (request.doctor_name ?? 'Doctor');
+  const specialtyLine =
+    request.requested_specialty ??
+    request.doctor_specialty ??
+    (awaitingRecommendation ? 'Our care team will recommend specialists' : null);
+  const showAppointmentBadge = isAppointmentScheduled(request);
+  const showStatusPill =
+    !showAppointmentBadge ||
+    !['Appointment scheduled', 'Ready for consultation', 'Consultation complete'].includes(statusLabel);
 
   return (
     <li className='pmr-card'>
@@ -88,50 +113,77 @@ export default function PatientRequestListCard({
           </span>
           <div className='pmr-card__identity'>
             <h4 className='pmr-card__name'>{doctorName}</h4>
-            {request.doctor_specialty ? (
-              <p className='pmr-card__specialty'>{request.doctor_specialty}</p>
-            ) : null}
+            {specialtyLine ? <p className='pmr-card__specialty'>{specialtyLine}</p> : null}
           </div>
-          <ChevronRight size={20} className='pmr-card__chevron' aria-hidden />
+          <ChevronRight size={18} className='pmr-card__chevron' aria-hidden />
         </div>
 
         <div className='pmr-card__badges'>
           {request.records_verified_at ? (
-            <span className='pmr-pill pmr-pill--verified'>Verified</span>
+            <span className='pmr-pill pmr-pill--verified'>
+              <ShieldCheck size={12} strokeWidth={2.25} aria-hidden />
+              Verified
+            </span>
           ) : null}
-          {request.payment_status === 'paid' ? (
-            <span className='pmr-pill pmr-pill--paid'>Payment confirmed</span>
+          {isPaid ? (
+            <span className='pmr-pill pmr-pill--paid'>
+              <CreditCard size={12} strokeWidth={2.25} aria-hidden />
+              Payment confirmed
+            </span>
           ) : null}
-          <span className={statusPillClass(request)}>{statusLabel}</span>
+          {showAppointmentBadge ? (
+            <span className='pmr-pill pmr-pill--appointment'>
+              <Calendar size={12} strokeWidth={2.25} aria-hidden />
+              Appointment scheduled
+            </span>
+          ) : null}
+          {showStatusPill ? <span className={statusPillClass(request)}>{statusLabel}</span> : null}
         </div>
 
-        {preferredTime || paymentLine ? (
+        {isPaid && (paymentDate || paymentAmount) ? (
+          <div className='pmr-card__payment-panel'>
+            <Calendar size={14} className='pmr-card__payment-icon' aria-hidden />
+            <div className='pmr-card__payment-main'>
+              <span className='pmr-card__payment-label'>Payment</span>
+              {paymentDate ? <span className='pmr-card__payment-date'>{paymentDate}</span> : null}
+            </div>
+            <div className='pmr-card__payment-side'>
+              {paymentAmount ? <span className='pmr-card__payment-amount'>{paymentAmount}</span> : null}
+              <span className='pmr-card__payment-status'>
+                <span>Paid</span>
+                <BadgeCheck size={12} strokeWidth={2.5} aria-hidden />
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {preferredTime && !isPaid ? (
           <ul className='pmr-card__details'>
-            {preferredTime ? (
-              <li className='pmr-detail'>
-                <Calendar size={15} className='pmr-detail__icon' aria-hidden />
-                <span>
-                  <span className='pmr-detail__label'>Preferred time</span>
-                  <span className='pmr-detail__value'>{preferredTime}</span>
-                </span>
-              </li>
-            ) : null}
-            {paymentLine ? (
-              <li className='pmr-detail'>
-                <CircleDollarSign size={15} className='pmr-detail__icon' aria-hidden />
-                <span>
-                  <span className='pmr-detail__label'>Payment</span>
-                  <span className='pmr-detail__value'>{paymentLine}</span>
-                </span>
-              </li>
-            ) : null}
+            <li className='pmr-detail'>
+              <Calendar size={15} className='pmr-detail__icon' aria-hidden />
+              <span>
+                <span className='pmr-detail__label'>Preferred time</span>
+                <span className='pmr-detail__value'>{preferredTime}</span>
+              </span>
+            </li>
           </ul>
+        ) : null}
+
+        {preferredTime && isPaid ? (
+          <p className='pmr-card__preferred-hint'>
+            <Calendar size={13} aria-hidden />
+            Preferred: {preferredTime}
+          </p>
         ) : null}
 
         <footer className='pmr-card__footer'>
           <span className='pmr-card__updated'>
-            <Clock size={14} aria-hidden />
+            <Clock size={13} aria-hidden />
             Updated {relativeTime}
+          </span>
+          <span className='pmr-card__view-details'>
+            View details
+            <ChevronRight size={13} aria-hidden />
           </span>
         </footer>
       </button>

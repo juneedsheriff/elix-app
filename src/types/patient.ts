@@ -29,3 +29,8 @@ export type PatientUpsertInput = {
   country?: string | null;
   preferred_language?: string;
 };
+
+export type PatientProfileUpdateInput = {
+  full_name: string;
+  phone?: string | null;
+};

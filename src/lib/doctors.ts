@@ -84,3 +84,26 @@ export async function fetchDoctorByAuthUserId(authUserId: string) {
     error: null
   };
 }
+
+/** Distinct specialties from visible doctors (for patient recommendation requests). */
+export async function fetchDoctorSpecialties() {
+  const result = await supabase
+    .from('doctors')
+    .select('specialty')
+    .eq('is_visible', true)
+    .is('deleted_at', null);
+
+  if (result.error) {
+    return { data: null, error: result.error };
+  }
+
+  const specialties = [
+    ...new Set(
+      (result.data ?? [])
+        .map((row) => row.specialty?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  ].sort((a, b) => a.localeCompare(b));
+
+  return { data: specialties, error: null };
+}

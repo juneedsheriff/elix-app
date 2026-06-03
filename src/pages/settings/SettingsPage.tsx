@@ -1,27 +1,64 @@
+import { Check, Mail, User, WifiOff } from 'lucide-react';
+import PatientProfileEditSection from '../../components/patient/PatientProfileEditSection';
 import SectionCard from '../../components/ui/SectionCard';
-import Tag from '../../components/ui/Tag';
 import type { ScreenPageProps } from '../types';
+import './settings-page.css';
 
 export default function SettingsPage({
+  userId,
   userEmail,
   doctorProfile,
   patientProfile,
-  dbConnected,
-  onSignOut
+  dbConnected
 }: ScreenPageProps) {
   return (
-    <div className='screen-grid'>
-      <SectionCard title='Elix' subtitle='Second Opinion'>
-        <div className='feature-row'>
-          <Tag label={dbConnected ? 'Connected' : 'Not connected'} />
-          {userEmail ? <Tag label={userEmail} /> : <Tag label='Guest / demo mode' />}
+    <div className='screen-grid settings-page'>
+      <section className='settings-hero-banner' aria-labelledby='settings-hero-heading'>
+        <div className='settings-hero-banner__content'>
+          <h2 id='settings-hero-heading' className='settings-hero-banner__title'>
+            Elix
+          </h2>
+          <p className='settings-hero-banner__text'>Second Opinion</p>
+          <div className='settings-hero-banner__badges'>
+            <span
+              className={`settings-hero-badge ${
+                dbConnected ? 'settings-hero-badge--connected' : 'settings-hero-badge--disconnected'
+              }`}
+            >
+              {dbConnected ? (
+                <Check size={12} strokeWidth={3} aria-hidden />
+              ) : (
+                <WifiOff size={12} strokeWidth={2.25} aria-hidden />
+              )}
+              {dbConnected ? 'Connected' : 'Not connected'}
+            </span>
+            <span
+              className={`settings-hero-badge ${
+                userEmail ? 'settings-hero-badge--account' : 'settings-hero-badge--guest'
+              }`}
+            >
+              {userEmail ? (
+                <Mail size={12} strokeWidth={2.25} aria-hidden />
+              ) : (
+                <User size={12} strokeWidth={2.25} aria-hidden />
+              )}
+              <span className='settings-hero-badge__label'>
+                {userEmail ?? 'Guest / demo mode'}
+              </span>
+            </span>
+          </div>
         </div>
-        {onSignOut && userEmail ? (
-          <button type='button' className='secondary-btn' onClick={onSignOut} style={{ marginTop: '0.75rem' }}>
-            Sign out
-          </button>
-        ) : null}
-      </SectionCard>
+        <div className='settings-hero-banner__art' aria-hidden>
+          <img
+            src='/icons/elix-logo-transparent.png'
+            alt=''
+            className='settings-hero-banner__logo'
+            width={72}
+            height={72}
+            decoding='async'
+          />
+        </div>
+      </section>
 
       {doctorProfile ? (
         <SectionCard title='Doctor account' subtitle='Login credentials on file'>
@@ -46,41 +83,8 @@ export default function SettingsPage({
       ) : null}
 
       {patientProfile ? (
-        <SectionCard title='Patient profile' subtitle='Stored in patients table'>
-          <ul className='list doctor-credentials-list'>
-            <li>
-              <strong>{patientProfile.full_name}</strong>
-              <span>
-                Patient ID: {patientProfile.elix_id}
-                {' • '}
-                {[patientProfile.city, patientProfile.country].filter(Boolean).join(', ') || 'Location not set'}
-              </span>
-            </li>
-            <li>
-              <strong>Email</strong>
-              <span>{patientProfile.email}</span>
-            </li>
-            {patientProfile.phone ? (
-              <li>
-                <strong>Phone</strong>
-                <span>{patientProfile.phone}</span>
-              </li>
-            ) : null}
-            {patientProfile.blood_group ? (
-              <li>
-                <strong>Blood group</strong>
-                <span>{patientProfile.blood_group}</span>
-              </li>
-            ) : null}
-            {patientProfile.allergies ? (
-              <li>
-                <strong>Allergies</strong>
-                <span>{patientProfile.allergies}</span>
-              </li>
-            ) : null}
-          </ul>
-        </SectionCard>
-      ) : userEmail ? (
+        <PatientProfileEditSection patientProfile={patientProfile} userId={userId} />
+      ) : userEmail && !doctorProfile ? (
         <SectionCard title='Patient profile' subtitle='Complete your health profile'>
           <p className='muted'>Sign in again to sync your profile to the patients table.</p>
         </SectionCard>
