@@ -269,9 +269,9 @@ export default function RequestWorkflowWizard({
             </Text>
             <Text size='sm'>
               <Text span fw={600}>
-                Doctor requested:{' '}
+                {request.doctor_name ? 'Doctor requested: ' : 'Specialty requested: '}
               </Text>
-              {request.doctor_name ?? '—'}
+              {request.doctor_name ?? request.requested_specialty ?? '—'}
               {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
             </Text>
             <Text size='sm' c='dimmed'>
@@ -335,6 +335,7 @@ export default function RequestWorkflowWizard({
               }}
               onError={onError}
               onSuccess={onSuccess}
+              onPatientSelectionApproved={() => setExpandedStepTracked(3)}
             />
             {canPseSendPaymentLink(request) ? (
               <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(3)}>
@@ -414,6 +415,7 @@ export default function RequestWorkflowWizard({
     <ConsultationWizardAccordion
       className='request-workflow-wizard patient-consultation-wizard--accordion'
       heading='Coordination workflow'
+      subheading='Manage each step of this patient request.'
       steps={wizardSteps}
       expandedIndex={expandedStep}
       suggestedIndex={suggestedStep}

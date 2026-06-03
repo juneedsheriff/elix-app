@@ -1,3 +1,4 @@
+import { CheckCircle2, LogOut } from 'lucide-react';
 import { Globe, Menu, Moon, Sun, X } from '../navIcons';
 import NavIcon from '../components/navigation/NavIcon';
 import LanguagePickerModal from '../components/Language/LanguagePickerModal';
@@ -79,8 +80,11 @@ export default function AppShell({
           </button>
           <div className='mobile-header-titles'>
             <h1>{isDashboardScreen(activeScreen) ? copy.dashboard : (activeNavItem?.label ?? copy.welcome)}</h1>
-            <p>
-              {roleLabel(language, role)} • Elix
+            <p className='mobile-header-titles__sub'>
+              <CheckCircle2 size={13} className='mobile-header-titles__verified' aria-hidden />
+              <span>
+                {roleLabel(language, role)} • Elix
+              </span>
             </p>
           </div>
           <div className='topbar-controls'>
@@ -119,17 +123,34 @@ export default function AppShell({
         ) : null}
 
         <nav className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`} aria-label='Main navigation' aria-hidden={!menuOpen}>
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type='button'
-              className={`nav-btn ${item.id === activeScreen ? 'active' : ''}`}
-              onClick={() => onNavigate(item.id)}
-            >
-              <NavIcon screenId={item.id} />
-              <span>{item.label}</span>
-            </button>
-          ))}
+          <div className='sidebar-nav'>
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                type='button'
+                className={`nav-btn ${item.id === activeScreen ? 'active' : ''}`}
+                onClick={() => onNavigate(item.id)}
+              >
+                <NavIcon screenId={item.id} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+          {onSignOut && userEmail ? (
+            <div className='sidebar-footer'>
+              <button
+                type='button'
+                className='sidebar-signout'
+                onClick={() => {
+                  onMenuClose();
+                  onSignOut();
+                }}
+              >
+                <LogOut size={18} strokeWidth={2} aria-hidden />
+                <span>Sign out</span>
+              </button>
+            </div>
+          ) : null}
         </nav>
 
         <div className='layout'>

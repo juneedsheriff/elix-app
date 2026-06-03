@@ -23,9 +23,9 @@ export function getBottomTabs(role: Role, language: Language): BottomTab[] {
     ];
   }
   return [
-    { id: 'doctor-dashboard', label: t.bottom.home, icon: SCREEN_ICONS['doctor-dashboard'] },
+    { id: 'patient-dashboard', label: t.bottom.home, icon: SCREEN_ICONS['patient-dashboard'] },
     { id: 'my-requests', label: t.bottom.requests, icon: SCREEN_ICONS['my-requests'] },
-    { id: 'doctor-list', label: t.nav.patient['doctor-list'], icon: SCREEN_ICONS['doctor-list'] },
+    { id: 'upload-records', label: t.nav.patient['upload-records'], icon: SCREEN_ICONS['upload-records'] },
     { id: 'settings', label: t.profile, icon: BOTTOM_TAB_ICONS.profile }
   ];
 }

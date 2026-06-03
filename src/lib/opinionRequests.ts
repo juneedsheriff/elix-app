@@ -1,6 +1,7 @@
 import type {
   ConsultationStage,
   ConsultationSummary,
+  DoctorSelectionMode,
   OpinionRequest,
   OpinionRequestFile,
   OpinionRequestRecommendation,
@@ -73,6 +74,14 @@ function stripRecordsVerifiedFromSelect(select: string) {
   return select.replace(/,?\s*records_verified_at\s*/g, '');
 }
 
+function stripDoctorSelectionModeFromSelect(select: string) {
+  return select.replace(/,?\s*doctor_selection_mode\s*/g, '');
+}
+
+function stripRequestedSpecialtyFromSelect(select: string) {
+  return select.replace(/,?\s*requested_specialty\s*/g, '');
+}
+
 function stripPaymentProofFromSelect(select: string) {
   return select
     .replace(/,?\s*payment_proof_storage_path\s*/g, '')
@@ -102,6 +111,8 @@ const requestListSelectBase = `
   patient_name,
   doctor_id,
   doctor_name,
+  doctor_selection_mode,
+  requested_specialty,
   ${workflowFields},
   doctors (
     id,
@@ -162,6 +173,8 @@ const requestListSelectWithResponse = `
   patient_name,
   doctor_id,
   doctor_name,
+  doctor_selection_mode,
+  requested_specialty,
   ${workflowFields},
   doctor_response,
   responded_at,
@@ -221,6 +234,8 @@ const requestListSelectPatient = `
   patient_name,
   doctor_id,
   doctor_name,
+  doctor_selection_mode,
+  requested_specialty,
   ${workflowFields},
   doctor_response,
   responded_at,
@@ -388,6 +403,7 @@ export function patientRequestStatusLabel(
     | 'consultation_stage'
     | 'payment_status'
     | 'records_verified_at'
+    | 'doctor_id'
   >
 ): string {
   if (request.consultation_stage === 'completed' || request.doctor_response?.trim()) {
@@ -401,6 +417,7 @@ export function patientRequestStatusLabel(
   if (request.consultation_stage === 'availability_submitted') return 'Checking availability';
   if (request.consultation_stage === 'doctor_selected') return 'Submit your availability';
   if (request.consultation_stage === 'recommended') return 'Choose a doctor';
+  if (request.records_verified_at && !request.doctor_id) return 'Awaiting doctor recommendations';
   if (request.records_verified_at) return 'Documents verified';
   if (request.status === 'submitted' && !request.assigned_to) return 'Pending admin review';
   if (request.status === 'submitted' && request.assigned_to) return 'Being coordinated by our team';
@@ -439,6 +456,25 @@ function isMissingRecordsVerifiedColumnError(error: { message?: string } | null)
   return msg.includes('records_verified_at');
 }
 
+function isMissingDoctorSelectionModeError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('doctor_selection_mode');
+}
+
+function isMissingRequestedSpecialtyError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('requested_specialty');
+}
+
+function isNullableDoctorIdBlocked(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('doctor_id') && (msg.includes('not-null') || msg.includes('null value'));
+}
+
+function recommendationMigrationHint() {
+  return 'Run npm run db:apply-recommendation-opinion-requests, or paste supabase/migrations/029_recommendation_opinion_requests.sql and 030_requested_specialty.sql into the Supabase SQL Editor.';
+}
+
 function isMissingWorkflowColumnsError(error: { message?: string } | null) {
   const msg = error?.message?.toLowerCase() ?? '';
   return (
@@ -465,8 +501,10 @@ type RequestListRow = {
   created_at: string;
   patient_id: string | null;
   patient_name: string | null;
-  doctor_id: string;
+  doctor_id: string | null;
   doctor_name: string | null;
+  doctor_selection_mode?: DoctorSelectionMode | null;
+  requested_specialty?: string | null;
   consultation_stage?: string | null;
   selected_doctor_id?: string | null;
   patient_availability?: unknown | null;
@@ -505,6 +543,14 @@ export type CreateOpinionRequestInput = {
   patientId: string | null;
   patientName?: string | null;
   doctorName?: string | null;
+};
+
+export type CreateRecommendationOpinionRequestInput = {
+  message: string;
+  recordIds: string[];
+  patientId: string | null;
+  patientName?: string | null;
+  requestedSpecialty: string;
 };
 
 /** Resolve doctors.id — never persist auth.users id in opinion_requests.doctor_id */
@@ -550,7 +596,8 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
     message: input.message.trim(),
     patient_id: input.patientId,
     patient_name: patientName,
-    status: 'submitted' as const
+    status: 'submitted' as const,
+    doctor_selection_mode: 'self_select' as const
   };
 
   let requestError = null;
@@ -568,8 +615,32 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
 
   if (!withWorkflow.error && withWorkflow.data) {
     request = withWorkflow.data;
+  } else if (isMissingDoctorSelectionModeError(withWorkflow.error)) {
+    const withoutMode = await supabase
+      .from('opinion_requests')
+      .insert({
+        doctor_id: doctor.id,
+        doctor_name: doctorName,
+        message: input.message.trim(),
+        patient_id: input.patientId,
+        patient_name: patientName,
+        status: 'submitted',
+        consultation_stage: 'new',
+        selected_doctor_id: doctor.id
+      })
+      .select('id')
+      .single();
+    requestError = withoutMode.error;
+    request = withoutMode.data;
   } else if (isMissingWorkflowColumnsError(withWorkflow.error)) {
-    const legacy = await supabase.from('opinion_requests').insert(baseInsert).select('id').single();
+    const legacy = await supabase.from('opinion_requests').insert({
+      doctor_id: doctor.id,
+      doctor_name: doctorName,
+      message: input.message.trim(),
+      patient_id: input.patientId,
+      patient_name: patientName,
+      status: 'submitted'
+    }).select('id').single();
     requestError = legacy.error;
     request = legacy.data;
   } else {
@@ -600,6 +671,119 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
   return { data: { id: request.id }, error: null };
 }
 
+async function resolvePatientName(patientId: string | null, patientName?: string | null) {
+  let resolved = patientName?.trim() || null;
+  if (!resolved && patientId) {
+    const { data: patient } = await fetchPatientByAuthUserId(patientId);
+    resolved = patient?.full_name ?? null;
+  }
+  return resolved;
+}
+
+export async function createRecommendationOpinionRequest(input: CreateRecommendationOpinionRequestInput) {
+  const patientName = await resolvePatientName(input.patientId, input.patientName);
+  const requestedSpecialty = input.requestedSpecialty.trim();
+
+  if (!requestedSpecialty) {
+    return { data: null, error: { message: 'Select a specialty for your recommendation request.' } };
+  }
+
+  const baseInsert = {
+    doctor_id: null,
+    doctor_name: null,
+    message: input.message.trim(),
+    patient_id: input.patientId,
+    patient_name: patientName,
+    status: 'submitted' as const,
+    doctor_selection_mode: 'needs_recommendation' as const,
+    requested_specialty: requestedSpecialty
+  };
+
+  let requestError = null;
+  let request: { id: string } | null = null;
+
+  const withWorkflow = await supabase
+    .from('opinion_requests')
+    .insert({
+      ...baseInsert,
+      consultation_stage: 'new',
+      selected_doctor_id: null
+    })
+    .select('id')
+    .single();
+
+  if (!withWorkflow.error && withWorkflow.data) {
+    request = withWorkflow.data;
+  } else if (isNullableDoctorIdBlocked(withWorkflow.error) || isMissingDoctorSelectionModeError(withWorkflow.error)) {
+    return {
+      data: null,
+      error: {
+        message: `Recommendation requests need database migration 029 (nullable doctor_id). ${recommendationMigrationHint()}`
+      }
+    };
+  } else if (isMissingWorkflowColumnsError(withWorkflow.error)) {
+    return {
+      data: null,
+      error: {
+        message: `Recommendation requests need the consultation workflow columns (migration 019). ${recommendationMigrationHint()}`
+      }
+    };
+  } else if (isMissingRequestedSpecialtyError(withWorkflow.error)) {
+    const withoutSpecialty = await supabase
+      .from('opinion_requests')
+      .insert({
+        doctor_id: null,
+        doctor_name: null,
+        message: input.message.trim(),
+        patient_id: input.patientId,
+        patient_name: patientName,
+        status: 'submitted',
+        doctor_selection_mode: 'needs_recommendation',
+        consultation_stage: 'new',
+        selected_doctor_id: null
+      })
+      .select('id')
+      .single();
+    requestError = withoutSpecialty.error;
+    request = withoutSpecialty.data;
+  } else {
+    requestError = withWorkflow.error;
+  }
+
+  if (requestError || !request) {
+    const baseMessage = requestError?.message ?? 'Could not create recommendation request.';
+    return {
+      data: null,
+      error: { message: `${baseMessage} ${recommendationMigrationHint()}` }
+    };
+  }
+
+  if (input.recordIds.length > 0) {
+    const links = input.recordIds.map((recordId) => ({
+      request_id: request.id,
+      record_id: recordId
+    }));
+
+    const { error: linkError } = await supabase.from('opinion_request_records').insert(links);
+
+    if (linkError) {
+      const hint =
+        linkError.message?.includes('foreign key') || linkError.message?.includes('record_id')
+          ? ' Run supabase/migrations/020_opinion_request_files_access.sql in the Supabase SQL Editor.'
+          : '';
+      return { data: null, error: { message: `${linkError.message}${hint}` } };
+    }
+  }
+
+  return { data: { id: request.id }, error: null };
+}
+
+export function isRecommendationOpinionRequest(
+  request: Pick<OpinionRequest, 'doctor_selection_mode' | 'doctor_id'>
+): boolean {
+  return request.doctor_selection_mode === 'needs_recommendation' || (!request.doctor_id && !request.doctor_selection_mode);
+}
+
 function mapRequestRow(
   row: RequestListRow,
   patientMap: Map<string, { full_name: string; email: string }>
@@ -622,6 +806,8 @@ function mapRequestRow(
     doctor_id: row.doctor_id,
     doctor_name: row.doctor_name ?? row.doctors?.full_name ?? null,
     doctor_specialty: row.doctors?.specialty ?? null,
+    doctor_selection_mode: row.doctor_selection_mode ?? (row.doctor_id ? 'self_select' : 'needs_recommendation'),
+    requested_specialty: row.requested_specialty ?? null,
     patient_email: patient?.email ?? null,
     doctor_response: row.doctor_response,
     responded_at: row.responded_at,
@@ -910,6 +1096,22 @@ async function fetchPatientOpinionRequestRows(
 
   let lastError = result.error;
 
+  if (isMissingDoctorSelectionModeError(lastError)) {
+    result = await buildQuery(stripDoctorSelectionModeFromSelect(requestListSelectPatient));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingRequestedSpecialtyError(lastError)) {
+    result = await buildQuery(stripRequestedSpecialtyFromSelect(requestListSelectPatient));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
   if (isMissingRecordsVerifiedColumnError(lastError)) {
     result = await buildQuery(stripRecordsVerifiedFromSelect(requestListSelectPatient));
     if (!result.error) {
@@ -961,6 +1163,22 @@ async function fetchOpinionRequestRows(
   }
 
   let lastError = result.error;
+
+  if (isMissingDoctorSelectionModeError(lastError)) {
+    result = await buildQuery(stripDoctorSelectionModeFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingRequestedSpecialtyError(lastError)) {
+    result = await buildQuery(stripRequestedSpecialtyFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
 
   if (isMissingRecordsVerifiedColumnError(lastError)) {
     result = await buildQuery(stripRecordsVerifiedFromSelect(requestListSelectWithResponse));
@@ -1554,6 +1772,34 @@ export async function pseProposeScheduleAlternatives(
     .eq('id', requestId)
     .select('id, pse_scheduling_message, consultation_stage')
     .single();
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** PSE approves the patient's doctor selection so the workflow can continue to payment. */
+export async function pseApprovePatientSelection(requestId: string) {
+  const confirmedAt = new Date().toISOString();
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      consultation_stage: 'schedule_confirmed',
+      schedule_confirmed_at: confirmedAt
+    })
+    .eq('id', requestId)
+    .select('id, consultation_stage, schedule_confirmed_at')
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    const retry = await supabase
+      .from('opinion_requests')
+      .update({ consultation_stage: 'schedule_confirmed' })
+      .eq('id', requestId)
+      .select('id, consultation_stage')
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
+
   if (error) return { data: null, error };
   return { data, error: null };
 }

@@ -27,7 +27,7 @@ export default function ScreenRouter({ screenId, onNavigate, ...pageProps }: Scr
     case 'upload-records':
       return <UploadRecordsPage {...pageProps} />;
     case 'my-requests':
-      return <MyRequestsPage {...pageProps} />;
+      return <MyRequestsPage {...pageProps} onNavigate={onNavigate} />;
     case 'doctor-list':
     case 'doctor-profile':
       return <DoctorsPage />;

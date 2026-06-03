@@ -68,6 +68,37 @@ export function areDoctorsSharedWithPatient(request: OpinionRequest, recommendat
   return isDoctorsShared(request, recommendationsCount);
 }
 
+const PAST_SELF_SELECT_AVAILABILITY_STAGES = new Set([
+  'availability_submitted',
+  'schedule_proposed',
+  'schedule_confirmed',
+  'scheduled',
+  'payment_pending',
+  'paid',
+  'completed'
+]);
+
+/** Patient chose a doctor up front (self-select flow), not PSE recommendation-only. */
+export function hasSelfSelectedDoctor(
+  request: Pick<OpinionRequest, 'doctor_selection_mode' | 'doctor_id' | 'selected_doctor_id'>
+): boolean {
+  if (request.doctor_selection_mode === 'needs_recommendation') return false;
+  if (request.doctor_selection_mode === 'self_select') return true;
+  return Boolean(request.doctor_id || request.selected_doctor_id);
+}
+
+/** Self-select: show the chosen doctor while PSE checks availability (before alternatives are shared). */
+export function isAwaitingPseAvailabilityForSelfSelectedDoctor(
+  request: OpinionRequest,
+  recommendationsCount: number
+): boolean {
+  if (!hasSelfSelectedDoctor(request)) return false;
+  if (!request.doctor_name && !request.selected_doctor_id && !request.doctor_id) return false;
+  if (recommendationsCount > 0) return false;
+  if (request.consultation_stage === 'recommended') return false;
+  return !PAST_SELF_SELECT_AVAILABILITY_STAGES.has(request.consultation_stage ?? '');
+}
+
 export function isScheduleConfirmed(request: OpinionRequest) {
   const stage = request.consultation_stage;
   return (
@@ -94,6 +125,15 @@ export function canPseSendPaymentLink(request: OpinionRequest) {
 export function isPatientSelectionAwaitingPseReview(request: OpinionRequest) {
   const stage = request.consultation_stage;
   return stage === 'doctor_selected' || stage === 'availability_submitted';
+}
+
+/** PSE may approve the patient's doctor choice to unlock the payment step. */
+export function canPseApprovePatientSelection(request: OpinionRequest) {
+  const hasPatientDoctor = Boolean(
+    request.doctor_name || request.selected_doctor_id || request.doctor_id
+  );
+  if (!hasPatientDoctor) return false;
+  return !isScheduleConfirmed(request);
 }
 
 function isPaymentConfirmed(request: OpinionRequest) {

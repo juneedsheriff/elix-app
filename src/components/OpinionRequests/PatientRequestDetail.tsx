@@ -1,6 +1,6 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock, FileText, MessageSquare, Stethoscope } from 'lucide-react';
 import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
-import { patientRequestStatusLabel } from '../../lib/opinionRequests';
+import { isRecommendationOpinionRequest, patientRequestStatusLabel } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 function formatRequestDate(iso: string): string {
@@ -34,6 +34,8 @@ export default function PatientRequestDetail({
   onMessage
 }: PatientRequestDetailProps) {
   const statusText = patientRequestStatusLabel(request);
+  const awaitingRecommendation = isRecommendationOpinionRequest(request) && !request.doctor_name;
+  const headline = awaitingRecommendation ? 'Doctor recommendations' : (request.doctor_name ?? 'Doctor');
 
   return (
     <div className='patient-request-detail'>
@@ -43,7 +45,7 @@ export default function PatientRequestDetail({
 
       <div className='doctor-request-card patient-request-detail-card'>
         <div className='doctor-request-head'>
-          <strong>{request.doctor_name ?? 'Doctor'}</strong>
+          <strong>{headline}</strong>
           <div className='patient-request-detail-badges'>
             {request.records_verified_at ? (
               <span className='patient-docs-verified-badge patient-docs-verified-badge--inline'>
@@ -54,27 +56,74 @@ export default function PatientRequestDetail({
           </div>
         </div>
 
-        {request.doctor_specialty ? (
-          <p className='doctor-request-meta' style={{ marginTop: '0.35rem' }}>
-            {request.doctor_specialty}
-          </p>
-        ) : null}
-
-        <p className='doctor-request-meta patient-request-detail-meta'>
-          <span>Submitted {formatRequestDate(request.created_at)}</span>
-          <span className='patient-request-detail-meta__date'>
-            {new Date(request.created_at).toLocaleString()}
-          </span>
-          {request.records.length ? (
-            <span>
-              {request.records.length} file{request.records.length === 1 ? '' : 's'} attached
-            </span>
+        <section className='patient-request-detail-summary' aria-label='Request summary'>
+          {awaitingRecommendation ? (
+            <div className='patient-request-detail-summary__notice'>
+              {request.requested_specialty ? (
+                <div className='patient-request-detail-summary__row'>
+                  <span className='patient-request-detail-summary__icon' aria-hidden>
+                    <Stethoscope size={18} />
+                  </span>
+                  <div className='patient-request-detail-summary__content'>
+                    <span className='patient-request-detail-summary__label'>Requested specialty</span>
+                    <p className='patient-request-detail-summary__value'>{request.requested_specialty}</p>
+                  </div>
+                </div>
+              ) : null}
+              <p className='patient-request-detail-summary__hint'>
+                Our care team will review your case and recommend suitable specialists.
+              </p>
+            </div>
+          ) : request.doctor_specialty ? (
+            <div className='patient-request-detail-summary__row patient-request-detail-summary__row--solo'>
+              <span className='patient-request-detail-summary__icon' aria-hidden>
+                <Stethoscope size={18} />
+              </span>
+              <div className='patient-request-detail-summary__content'>
+                <span className='patient-request-detail-summary__label'>Specialty</span>
+                <p className='patient-request-detail-summary__value'>{request.doctor_specialty}</p>
+              </div>
+            </div>
           ) : null}
-        </p>
 
-        <p className='doctor-request-message'>
-          <strong>Your message:</strong> {request.message}
-        </p>
+          <ul className='patient-request-detail-summary__facts'>
+            <li className='patient-request-detail-summary__row'>
+              <span className='patient-request-detail-summary__icon' aria-hidden>
+                <Clock size={18} />
+              </span>
+              <div className='patient-request-detail-summary__content'>
+                <span className='patient-request-detail-summary__label'>Submitted</span>
+                <p className='patient-request-detail-summary__value'>
+                  {formatRequestDate(request.created_at)}
+                  <span className='patient-request-detail-summary__value-sub'>
+                    {new Date(request.created_at).toLocaleString()}
+                  </span>
+                </p>
+              </div>
+            </li>
+            {request.records.length > 0 ? (
+              <li className='patient-request-detail-summary__row'>
+                <span className='patient-request-detail-summary__icon' aria-hidden>
+                  <FileText size={18} />
+                </span>
+                <div className='patient-request-detail-summary__content'>
+                  <span className='patient-request-detail-summary__label'>Attachments</span>
+                  <p className='patient-request-detail-summary__value'>
+                    {request.records.length} file{request.records.length === 1 ? '' : 's'} attached
+                  </p>
+                </div>
+              </li>
+            ) : null}
+          </ul>
+
+          <div className='patient-request-detail-summary__message'>
+            <div className='patient-request-detail-summary__message-head'>
+              <MessageSquare size={16} aria-hidden />
+              <span className='patient-request-detail-summary__label'>Your message</span>
+            </div>
+            <p className='patient-request-detail-summary__message-text'>{request.message}</p>
+          </div>
+        </section>
 
         {/* {request.doctor_response ? (
           <div className='doctor-response-block patient-view' role='region' aria-label='Doctor response'>

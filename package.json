@@ -29,6 +29,7 @@
     "db:apply-scheduling-coordination": "node scripts/apply-scheduling-coordination.mjs",
     "db:apply-payment-proof": "node scripts/apply-payment-proof.mjs",
     "db:apply-consultation-summary-pdf": "node scripts/apply-consultation-summary-pdf.mjs",
+    "db:apply-recommendation-opinion-requests": "node scripts/apply-recommendation-opinion-requests.mjs",
     "db:apply-doctors-insert-admins": "node scripts/apply-doctors-insert-admins.mjs",
     "db:apply-admin-delete-requests": "node scripts/apply-admin-delete-requests.mjs",
     "db:setup-staff-roles": "node scripts/apply-staff-roles.mjs && node scripts/seed-admin.mjs && node scripts/seed-pse.mjs",

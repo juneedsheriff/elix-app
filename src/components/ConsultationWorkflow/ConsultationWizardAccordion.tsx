@@ -1,6 +1,26 @@
-import { ChevronDown, Lock } from 'lucide-react';
+import {
+  Calendar,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  Lock,
+  ShieldCheck,
+  Users
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { WizardStepDef, WizardStepState } from '../../lib/consultationWizard';
 import './consultation-wizard.css';
+
+const COORDINATION_STEP_ICONS: LucideIcon[] = [
+  ClipboardList,
+  FileText,
+  Users,
+  CreditCard,
+  Calendar,
+  FileText
+];
 
 type ConsultationWizardAccordionProps = {
   steps: Array<WizardStepDef & { state: WizardStepState }>;
@@ -10,7 +30,10 @@ type ConsultationWizardAccordionProps = {
   onToggle: (index: number) => void;
   renderPanel: (index: number) => React.ReactNode;
   heading?: string;
+  subheading?: string;
   className?: string;
+  ariaLabel?: string;
+  panelIdPrefix?: string;
 };
 
 export default function ConsultationWizardAccordion({
@@ -21,13 +44,36 @@ export default function ConsultationWizardAccordion({
   onToggle,
   renderPanel,
   heading,
-  className = ''
+  subheading,
+  className = '',
+  ariaLabel = 'Coordination progress',
+  panelIdPrefix = 'coordination-step'
 }: ConsultationWizardAccordionProps) {
   const activeStep = steps[expandedIndex ?? suggestedIndex];
 
   return (
-    <div className={`consultation-wizard-accordion-root ${className}`.trim()}>
-      {heading ? <h4 className='patient-consultation-wizard__heading'>{heading}</h4> : null}
+    <div
+      className={`consultation-wizard-accordion-root patient-consultation-wizard--modern ${className}`.trim()}
+    >
+      {heading ? (
+        <header className='patient-consultation-wizard__hero'>
+          <div className='patient-consultation-wizard__hero-text'>
+            <h4 className='patient-consultation-wizard__heading'>{heading}</h4>
+            {subheading ? (
+              <p className='patient-consultation-wizard__subheading'>{subheading}</p>
+            ) : null}
+          </div>
+          <div className='patient-consultation-wizard__hero-art' aria-hidden>
+            <span className='patient-consultation-wizard__hero-clipboard'>
+              <ClipboardList size={34} strokeWidth={1.5} />
+            </span>
+            <span className='patient-consultation-wizard__hero-shield'>
+              <ShieldCheck size={18} strokeWidth={2} />
+            </span>
+          </div>
+        </header>
+      ) : null}
+
       {activeStep ? (
         <p className='consultation-wizard__mobile-summary' aria-live='polite'>
           <strong>
@@ -36,79 +82,90 @@ export default function ConsultationWizardAccordion({
           {activeStep.title}
         </p>
       ) : null}
-      <nav className='consultation-wizard-accordion' aria-label='Coordination progress'>
-        <ol className='consultation-wizard-accordion__track'>
-          {steps.map((step, index) => {
-            const stepDef = steps[index];
+
+      <nav className='patient-wizard-timeline' aria-label={ariaLabel}>
+        <ol className='patient-wizard-timeline__track'>
+          {steps.map((stepDef, index) => {
+            const step = steps[index];
             const isLast = index === steps.length - 1;
             const isAccessible = canNavigate(index);
             const isExpanded = expandedIndex === index;
             const isCurrent = index === suggestedIndex;
-            const stateClass =
-              step.state === 'complete'
-                ? 'consultation-wizard__step--complete'
-                : isCurrent
-                  ? 'consultation-wizard__step--current'
-                  : 'consultation-wizard__step--upcoming';
+            const isComplete = step.state === 'complete';
+            const StepIcon = COORDINATION_STEP_ICONS[index] ?? FileText;
+            const stateClass = isComplete
+              ? 'patient-wizard-timeline__step--complete'
+              : isCurrent
+                ? 'patient-wizard-timeline__step--current'
+                : 'patient-wizard-timeline__step--upcoming';
 
             return (
               <li
                 key={stepDef.id}
-                className={`consultation-wizard-accordion__item consultation-wizard__step ${stateClass} ${
-                  isExpanded ? 'consultation-wizard-accordion__item--expanded' : ''
-                } ${!isAccessible ? 'consultation-wizard-accordion__item--locked' : ''}`}
+                className={`patient-wizard-timeline__step ${stateClass} ${
+                  isExpanded ? 'patient-wizard-timeline__step--expanded' : ''
+                } ${!isAccessible ? 'patient-wizard-timeline__step--locked' : ''}`}
               >
-                <div className='consultation-wizard-accordion__header'>
+                <div className='patient-wizard-timeline__rail' aria-hidden>
+                  <span className='patient-wizard-timeline__marker'>{stepDef.id}</span>
+                  {!isLast ? <span className='patient-wizard-timeline__line' /> : null}
+                </div>
+
+                <article className='patient-wizard-card'>
                   {isAccessible ? (
                     <button
                       type='button'
-                      className='consultation-wizard-accordion__trigger'
+                      className='patient-wizard-card__header'
                       onClick={() => onToggle(index)}
                       aria-expanded={isExpanded}
-                      aria-controls={`coordination-step-panel-${index}`}
-                      id={`coordination-step-header-${index}`}
+                      aria-controls={`${panelIdPrefix}-panel-${index}`}
+                      id={`${panelIdPrefix}-header-${index}`}
                     >
-                      <span className='consultation-wizard__circle'>{stepDef.id}</span>
-                      <span className='consultation-wizard__labels'>
-                        <span className='consultation-wizard__title'>{stepDef.title}</span>
-                        <span className='consultation-wizard__subtitle'>{stepDef.subtitle}</span>
+                      <span className='patient-wizard-card__icon' aria-hidden>
+                        {isComplete && index === 0 ? (
+                          <Check size={20} strokeWidth={2.5} />
+                        ) : (
+                          <StepIcon size={20} strokeWidth={2} />
+                        )}
                       </span>
-                      <ChevronDown size={18} className='consultation-wizard-accordion__chevron' aria-hidden />
+                      <span className='patient-wizard-card__labels'>
+                        <span className='patient-wizard-card__title-row'>
+                          <span className='patient-wizard-card__title'>{stepDef.title}</span>
+                          {isCurrent ? (
+                            <span className='patient-wizard-card__badge'>In progress</span>
+                          ) : null}
+                        </span>
+                        <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
+                      </span>
+                      <ChevronDown size={18} className='patient-wizard-card__chevron' aria-hidden />
                     </button>
                   ) : (
                     <div
-                      className='consultation-wizard-accordion__trigger consultation-wizard-accordion__trigger--locked'
+                      className='patient-wizard-card__header patient-wizard-card__header--locked'
                       aria-disabled='true'
                     >
-                      <span className='consultation-wizard__circle'>{stepDef.id}</span>
-                      <span className='consultation-wizard__labels'>
-                        <span className='consultation-wizard__title'>{stepDef.title}</span>
-                        <span className='consultation-wizard__subtitle'>{stepDef.subtitle}</span>
+                      <span className='patient-wizard-card__icon' aria-hidden>
+                        <StepIcon size={20} strokeWidth={2} />
                       </span>
-                      <Lock size={16} className='consultation-wizard-accordion__lock' aria-hidden />
+                      <span className='patient-wizard-card__labels'>
+                        <span className='patient-wizard-card__title'>{stepDef.title}</span>
+                        <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
+                      </span>
+                      <Lock size={16} className='patient-wizard-card__lock' aria-hidden />
                     </div>
                   )}
-                </div>
 
-                {isAccessible && isExpanded ? (
-                  <div
-                    id={`coordination-step-panel-${index}`}
-                    role='region'
-                    aria-labelledby={`coordination-step-header-${index}`}
-                    className='consultation-wizard-accordion__panel'
-                  >
-                    {renderPanel(index)}
-                  </div>
-                ) : null}
-
-                {!isLast ? (
-                  <span
-                    className={`consultation-wizard__connector ${
-                      step.state === 'complete' ? 'consultation-wizard__connector--complete' : ''
-                    }`}
-                    aria-hidden
-                  />
-                ) : null}
+                  {isAccessible && isExpanded ? (
+                    <div
+                      id={`${panelIdPrefix}-panel-${index}`}
+                      role='region'
+                      aria-labelledby={`${panelIdPrefix}-header-${index}`}
+                      className='patient-wizard-card__panel'
+                    >
+                      <div className='patient-wizard-card__panel-inner'>{renderPanel(index)}</div>
+                    </div>
+                  ) : null}
+                </article>
               </li>
             );
           })}

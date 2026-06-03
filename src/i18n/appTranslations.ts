@@ -301,7 +301,8 @@ export const NAV_IDS: Record<Role, string[]> = {
   admin: ['admin-dashboard', 'user-management', 'fraud-monitoring', 'admin-analytics', 'cms', 'audit', 'settings']
 };
 
-const SIDEBAR_HIDDEN_SCREENS = new Set(['doctor-consultation']);
+/** Shown via ScreenRouter but omitted from the slide-out menu (flow-only or doctor-only screens). */
+const SIDEBAR_HIDDEN_SCREENS = new Set(['doctor-consultation', 'doctor-list']);
 
 export function getNavItems(role: Role, language: Language) {
   const labels = TRANSLATIONS[language].nav[role];

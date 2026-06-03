@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Lock } from 'lucide-react';
+import {
+  Calendar,
+  CalendarPlus,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  CreditCard,
+  FileText,
+  Link2,
+  Lock,
+  ShieldCheck,
+  Users
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   canPatientNavigateToStep,
   areDoctorsSharedWithPatient,
@@ -9,6 +22,7 @@ import {
   getWizardSteps,
   hasConsultationSummary,
   hasPatientPaymentDue,
+  isAwaitingPseAvailabilityForSelfSelectedDoctor,
   isPatientPaymentLinkPending,
   isPatientAppointmentPhase,
   isPatientPaymentConfirmed,
@@ -49,6 +63,68 @@ type PatientConsultationWizardProps = {
   /** Bumped when the parent silently reloads request rows from the server. */
   liveTick?: number;
 };
+
+const PATIENT_STEP_ICONS: LucideIcon[] = [
+  ClipboardList,
+  FileText,
+  Users,
+  CreditCard,
+  Calendar,
+  FileText
+];
+
+function formatAppointmentDisplay(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const day = date.toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
+  const time = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+  return `${day} • ${time}`;
+}
+
+function downloadAppointmentIcs(input: {
+  scheduledAt: string;
+  title: string;
+  meetingLink?: string | null;
+}) {
+  const start = new Date(input.scheduledAt);
+  if (Number.isNaN(start.getTime())) return;
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const toIcsUtc = (value: Date) =>
+    value.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const escape = (text: string) => text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,');
+  const description = input.meetingLink
+    ? `Meeting link: ${input.meetingLink}`
+    : 'Elix Health consultation';
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Elix Health//Consultation//EN',
+    'BEGIN:VEVENT',
+    `DTSTART:${toIcsUtc(start)}`,
+    `DTEND:${toIcsUtc(end)}`,
+    `SUMMARY:${escape(input.title)}`,
+    `DESCRIPTION:${escape(description)}`,
+    input.meetingLink ? `URL:${input.meetingLink}` : '',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ]
+    .filter(Boolean)
+    .join('\r\n');
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'consultation.ics';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function PatientConsultationWizard({
   request,
@@ -229,12 +305,16 @@ export default function PatientConsultationWizard({
     onUpdated();
   };
 
+  const awaitingSelfSelectAvailability = isAwaitingPseAvailabilityForSelfSelectedDoctor(
+    request,
+    recommendations.length
+  );
+
   const waitingForDoctorList =
     !awaitingDoctorChoice &&
     !recommendations.length &&
-    (request.consultation_stage === 'recommended' ||
-      areDoctorsSharedWithPatient(request, recommendations.length) ||
-      canPatientNavigateToStep(2, progressCtx));
+    !awaitingSelfSelectAvailability &&
+    request.consultation_stage === 'recommended';
 
   const renderPaymentRetain = () =>
     hasRetainedPaymentDetails(request) ? (
@@ -262,43 +342,64 @@ export default function PatientConsultationWizard({
         );
       case 1:
         return (
-          <div className='doctor-response-block patient-view'>
-          
+          <div className='doctor-response-block patient-view patient-docs-verification'>
             {documentsVerified ? (
-              <>
+              <div className='patient-docs-verification__box'>
                 {request.records_verified_at ? (
                   <span className='patient-docs-verified-badge'>Verified</span>
                 ) : null}
-                <p className='muted'>
+                <p className='patient-docs-verification__text muted'>
                   {request.records_verified_at
                     ? `Your documents were verified on ${new Date(request.records_verified_at).toLocaleString()}.`
                     : 'Your documents have been verified.'}{' '}
                   {doctorsShared
                     ? 'Choose from the doctors recommended for you below.'
-                    : 'Our team will share doctor recommendations next.'}
+                    : awaitingSelfSelectAvailability
+                      ? 'Our team is confirming availability with your selected doctor.'
+                      : 'Our team will share doctor recommendations next.'}
                 </p>
-                {!doctorsShared && suggestedStep > 1 ? (
-                  <button type='button' className='primary-btn' onClick={() => goToStep(suggestedStep)}>
-                    Continue →
-                  </button>
+                {request.records.length > 0 || (!doctorsShared && suggestedStep > 1) ? (
+                  <div className='patient-docs-verification__actions'>
+                    {!doctorsShared && suggestedStep > 1 ? (
+                      <button
+                        type='button'
+                        className='primary-btn patient-docs-verification__btn'
+                        onClick={() => goToStep(suggestedStep)}
+                      >
+                        Continue →
+                      </button>
+                    ) : null}
+                    {request.records.length > 0 ? (
+                      <button
+                        type='button'
+                        className='secondary-btn patient-docs-verification__btn patient-view-documents-btn'
+                        onClick={() => setDocumentsModalOpen(true)}
+                      >
+                        View documents ({request.records.length})
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <p className='muted doctor-awaiting-response'>
+                  Our team is reviewing your uploaded documents ({request.records.length} file
+                  {request.records.length === 1 ? '' : 's'}).
+                </p>
+                {request.records.length > 0 ? (
+                  <div className='patient-docs-verification__actions'>
+                    <button
+                      type='button'
+                      className='secondary-btn patient-docs-verification__btn patient-view-documents-btn'
+                      onClick={() => setDocumentsModalOpen(true)}
+                    >
+                      View documents ({request.records.length})
+                    </button>
+                  </div>
                 ) : null}
               </>
-            ) : (
-              <p className='muted doctor-awaiting-response'>
-                Our team is reviewing your uploaded documents ({request.records.length} file
-                {request.records.length === 1 ? '' : 's'}).
-              </p>
             )}
-
-{request.records.length > 0 ? (
-              <button
-                type='button'
-                className='secondary-btn patient-view-documents-btn'
-                onClick={() => setDocumentsModalOpen(true)}
-              >
-                View documents ({request.records.length})
-              </button>
-            ) : null}
           </div>
         );
       case 2: {
@@ -307,12 +408,22 @@ export default function PatientConsultationWizard({
           awaitingDoctorChoice || request.consultation_stage === 'doctor_selected';
         const hasChosenDoctor =
           hasRetainedDoctorSelection(request) || Boolean(pickingDoctorId);
+        const showSelectedDoctorSummary =
+          (hasChosenDoctor || submittedAvailability || awaitingSelfSelectAvailability) &&
+          (!waitingForDoctorList || awaitingSelfSelectAvailability);
 
         return (
           <div className='doctor-response-block patient-view'>
-            {(hasChosenDoctor || submittedAvailability) && !waitingForDoctorList ? (
+            {showSelectedDoctorSummary ? (
               <div className='patient-consultation-retain-step patient-consultation-retain-step--doctors'>
                 <PatientConsultationRetainCard request={request} variant='doctor' />
+                {awaitingSelfSelectAvailability ? (
+                  <p className='muted doctor-awaiting-response' style={{ marginTop: '0.85rem' }}>
+                    Our patient service team is confirming availability with{' '}
+                    <strong>{request.doctor_name ?? 'your selected doctor'}</strong>. If they are
+                    unavailable, we will share alternative specialists here for you to choose from.
+                  </p>
+                ) : null}
               </div>
             ) : null}
             {showPicker ? (
@@ -411,7 +522,7 @@ export default function PatientConsultationWizard({
               </>
             ) : waitingForDoctorList ? (
               <p className='muted doctor-awaiting-response'>Loading recommended doctors…</p>
-            ) : hasChosenDoctor ? null : (
+            ) : awaitingSelfSelectAvailability ? null : hasChosenDoctor ? null : (
               <p className='muted'>Doctor recommendations will appear here once shared by our team.</p>
             )}
 
@@ -525,25 +636,65 @@ export default function PatientConsultationWizard({
       case 4:
         return (
           <div className='doctor-response-block patient-view patient-appointment-step'>
-            <p className='muted patient-appointment-step__intro'>
-              {onAppointmentStep && request.scheduled_at && request.meeting_link
-                ? 'Join your consultation here. You will stay on this step until your visit is finished.'
-                : 'Our PSE team will share your appointment link shortly. Please wait while we connect you with the doctor.'}
-            </p>
+            {onAppointmentStep && request.scheduled_at && request.meeting_link ? (
+              <div className='patient-appointment-detail-card'>
+                {request.scheduled_at ? (
+                  <div className='patient-appointment-detail-card__row'>
+                    <span className='patient-appointment-detail-card__icon' aria-hidden>
+                      <Calendar size={18} />
+                    </span>
+                    <div className='patient-appointment-detail-card__content'>
+                      <span className='patient-appointment-detail-card__label'>Appointment date</span>
+                      <p className='patient-appointment-detail-card__value'>
+                        {formatAppointmentDisplay(request.scheduled_at)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
 
-            {request.scheduled_at ? (
-              <div className='patient-appointment-step__block'>
-                <span className='patient-appointment-step__label'>Appointment time</span>
-                <p className='patient-appointment-step__value'>
-                  {new Date(request.scheduled_at).toLocaleString()}
-                </p>
-              </div>
-            ) : null}
+                {request.meeting_link ? (
+                  <div className='patient-appointment-detail-card__row'>
+                    <span className='patient-appointment-detail-card__icon' aria-hidden>
+                      <Link2 size={18} />
+                    </span>
+                    <div className='patient-appointment-detail-card__content'>
+                      <span className='patient-appointment-detail-card__label'>Meeting link</span>
+                      {request.payment_status === 'paid' ? (
+                        <a
+                          href={request.meeting_link}
+                          target='_blank'
+                          rel='noreferrer'
+                          className='patient-appointment-detail-card__link'
+                        >
+                          {request.meeting_link}
+                        </a>
+                      ) : (
+                        <p className='muted patient-appointment-detail-card__pending'>
+                          Meeting link activates after payment is confirmed.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
 
-            {request.meeting_link ? (
-              <div className='patient-appointment-step__block'>
-                <span className='patient-appointment-step__label'>Video consultation</span>
-                {request.payment_status === 'paid' ? (
+                {request.scheduled_at ? (
+                  <button
+                    type='button'
+                    className='patient-appointment-detail-card__calendar-btn'
+                    onClick={() =>
+                      downloadAppointmentIcs({
+                        scheduledAt: request.scheduled_at!,
+                        title: `Consultation with ${request.doctor_name ?? 'your doctor'}`,
+                        meetingLink: request.meeting_link
+                      })
+                    }
+                  >
+                    <CalendarPlus size={16} aria-hidden />
+                    Add to calendar
+                  </button>
+                ) : null}
+
+                {request.payment_status === 'paid' && request.meeting_link ? (
                   <a
                     href={request.meeting_link}
                     target='_blank'
@@ -552,13 +703,31 @@ export default function PatientConsultationWizard({
                   >
                     Join meeting
                   </a>
-                ) : (
-                  <p className='muted patient-appointment-step__value'>
-                    Meeting link activates after payment is confirmed.
-                  </p>
-                )}
+                ) : null}
               </div>
-            ) : null}
+            ) : (
+              <>
+                <p className='muted patient-appointment-step__intro'>
+                  Our PSE team will share your appointment link shortly. Please wait while we connect you
+                  with the doctor.
+                </p>
+                {request.scheduled_at ? (
+                  <div className='patient-appointment-detail-card'>
+                    <div className='patient-appointment-detail-card__row'>
+                      <span className='patient-appointment-detail-card__icon' aria-hidden>
+                        <Calendar size={18} />
+                      </span>
+                      <div className='patient-appointment-detail-card__content'>
+                        <span className='patient-appointment-detail-card__label'>Appointment date</span>
+                        <p className='patient-appointment-detail-card__value'>
+                          {formatAppointmentDisplay(request.scheduled_at)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
 
             {request.meeting_link?.trim() && !hasConsultationSummary(summary) ? (
               <p className='muted patient-appointment-step__footer'>
@@ -584,85 +753,105 @@ export default function PatientConsultationWizard({
   };
 
   return (
-    <div className='patient-consultation-wizard patient-consultation-wizard--accordion'>
-      <h4 className='patient-consultation-wizard__heading'>Your consultation progress</h4>
-      <nav className='consultation-wizard-accordion' aria-label='Consultation progress'>
-        <ol className='consultation-wizard-accordion__track'>
+    <div className='patient-consultation-wizard patient-consultation-wizard--accordion patient-consultation-wizard--modern'>
+      <header className='patient-consultation-wizard__hero'>
+        <div className='patient-consultation-wizard__hero-text'>
+          <h4 className='patient-consultation-wizard__heading'>Your consultation progress</h4>
+          <p className='patient-consultation-wizard__subheading'>Track your request in real-time.</p>
+        </div>
+        <div className='patient-consultation-wizard__hero-art' aria-hidden>
+          <span className='patient-consultation-wizard__hero-clipboard'>
+            <ClipboardList size={34} strokeWidth={1.5} />
+          </span>
+          <span className='patient-consultation-wizard__hero-shield'>
+            <ShieldCheck size={18} strokeWidth={2} />
+          </span>
+        </div>
+      </header>
+
+      <nav className='patient-wizard-timeline' aria-label='Consultation progress'>
+        <ol className='patient-wizard-timeline__track'>
           {PATIENT_WIZARD_STEPS.map((stepDef, index) => {
             const step = wizardSteps[index];
             const isLast = index === PATIENT_WIZARD_STEPS.length - 1;
             const isAccessible = canPatientNavigateToStep(index, progressCtx);
             const isExpanded = expandedStep === index;
             const isCurrent = index === suggestedStep;
-            const stateClass =
-              step.state === 'complete'
-                ? 'consultation-wizard__step--complete'
-                : isCurrent
-                  ? 'consultation-wizard__step--current'
-                  : 'consultation-wizard__step--upcoming';
+            const isComplete = step.state === 'complete';
+            const StepIcon = PATIENT_STEP_ICONS[index] ?? FileText;
+            const stateClass = isComplete
+              ? 'patient-wizard-timeline__step--complete'
+              : isCurrent
+                ? 'patient-wizard-timeline__step--current'
+                : 'patient-wizard-timeline__step--upcoming';
 
             return (
               <li
                 key={stepDef.id}
-                className={`consultation-wizard-accordion__item consultation-wizard__step ${stateClass} ${
-                  isExpanded ? 'consultation-wizard-accordion__item--expanded' : ''
-                } ${!isAccessible ? 'consultation-wizard-accordion__item--locked' : ''}`}
+                className={`patient-wizard-timeline__step ${stateClass} ${
+                  isExpanded ? 'patient-wizard-timeline__step--expanded' : ''
+                } ${!isAccessible ? 'patient-wizard-timeline__step--locked' : ''}`}
               >
-                <div className='consultation-wizard-accordion__header'>
+                <div className='patient-wizard-timeline__rail' aria-hidden>
+                  <span className='patient-wizard-timeline__marker'>{stepDef.id}</span>
+                  {!isLast ? <span className='patient-wizard-timeline__line' /> : null}
+                </div>
+
+                <article className='patient-wizard-card'>
                   {isAccessible ? (
                     <button
                       type='button'
-                      className='consultation-wizard-accordion__trigger'
+                      className='patient-wizard-card__header'
                       onClick={() => toggleStep(index)}
                       aria-expanded={isExpanded}
                       aria-controls={`consultation-step-panel-${index}`}
                       id={`consultation-step-header-${index}`}
                     >
-                      <span className='consultation-wizard__circle'>{stepDef.id}</span>
-                      <span className='consultation-wizard__labels'>
-                        <span className='consultation-wizard__title'>{stepDef.title}</span>
-                        <span className='consultation-wizard__subtitle'>{stepDef.subtitle}</span>
+                      <span className='patient-wizard-card__icon' aria-hidden>
+                        {isComplete && index === 0 ? (
+                          <Check size={20} strokeWidth={2.5} />
+                        ) : (
+                          <StepIcon size={20} strokeWidth={2} />
+                        )}
                       </span>
-                      <ChevronDown
-                        size={18}
-                        className='consultation-wizard-accordion__chevron'
-                        aria-hidden
-                      />
+                      <span className='patient-wizard-card__labels'>
+                        <span className='patient-wizard-card__title-row'>
+                          <span className='patient-wizard-card__title'>{stepDef.title}</span>
+                          {isCurrent ? (
+                            <span className='patient-wizard-card__badge'>In progress</span>
+                          ) : null}
+                        </span>
+                        <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
+                      </span>
+                      <ChevronDown size={18} className='patient-wizard-card__chevron' aria-hidden />
                     </button>
                   ) : (
                     <div
-                      className='consultation-wizard-accordion__trigger consultation-wizard-accordion__trigger--locked'
+                      className='patient-wizard-card__header patient-wizard-card__header--locked'
                       aria-disabled='true'
                     >
-                      <span className='consultation-wizard__circle'>{stepDef.id}</span>
-                      <span className='consultation-wizard__labels'>
-                        <span className='consultation-wizard__title'>{stepDef.title}</span>
-                        <span className='consultation-wizard__subtitle'>{stepDef.subtitle}</span>
+                      <span className='patient-wizard-card__icon' aria-hidden>
+                        <StepIcon size={20} strokeWidth={2} />
                       </span>
-                      <Lock size={16} className='consultation-wizard-accordion__lock' aria-hidden />
+                      <span className='patient-wizard-card__labels'>
+                        <span className='patient-wizard-card__title'>{stepDef.title}</span>
+                        <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
+                      </span>
+                      <Lock size={16} className='patient-wizard-card__lock' aria-hidden />
                     </div>
                   )}
-                </div>
 
-                {isAccessible && isExpanded ? (
-                  <div
-                    id={`consultation-step-panel-${index}`}
-                    role='region'
-                    aria-labelledby={`consultation-step-header-${index}`}
-                    className='consultation-wizard-accordion__panel'
-                  >
-                    {renderStepContent(index)}
-                  </div>
-                ) : null}
-
-                {!isLast ? (
-                  <span
-                    className={`consultation-wizard__connector ${
-                      step.state === 'complete' ? 'consultation-wizard__connector--complete' : ''
-                    }`}
-                    aria-hidden
-                  />
-                ) : null}
+                  {isAccessible && isExpanded ? (
+                    <div
+                      id={`consultation-step-panel-${index}`}
+                      role='region'
+                      aria-labelledby={`consultation-step-header-${index}`}
+                      className='patient-wizard-card__panel'
+                    >
+                      <div className='patient-wizard-card__panel-inner'>{renderStepContent(index)}</div>
+                    </div>
+                  ) : null}
+                </article>
               </li>
             );
           })}
