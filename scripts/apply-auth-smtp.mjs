@@ -60,6 +60,7 @@ const uriAllowList =
 
 const confirmationSubject = process.env.SMTP_CONFIRMATION_SUBJECT?.trim() || 'Your Elix verification code';
 const confirmationContent = readFileSync(join(root, templateFile), 'utf8');
+const mailerOtpLength = Number.parseInt(process.env.MAILER_OTP_LENGTH?.trim() || '6', 10);
 
 function missingCredentialsMessage() {
   return `
@@ -124,7 +125,8 @@ async function applyAuthConfig() {
     site_url: siteUrl.replace(/\/$/, ''),
     uri_allow_list: uriAllowList,
     mailer_subjects_confirmation: confirmationSubject,
-    mailer_templates_confirmation_content: confirmationContent
+    mailer_templates_confirmation_content: confirmationContent,
+    mailer_otp_length: Number.isFinite(mailerOtpLength) && mailerOtpLength >= 6 && mailerOtpLength <= 10 ? mailerOtpLength : 6
   };
 
   return managementFetch('/config/auth', {
@@ -161,6 +163,7 @@ try {
   console.log(`  Site URL: ${after.site_url}`);
   console.log(`  Redirect allow list: ${after.uri_allow_list}`);
   console.log(`  Confirmation template includes OTP: ${templateHasToken(after) ? 'yes' : 'NO — check template'}`);
+  console.log(`  OTP length: ${after.mailer_otp_length ?? '(default)'}`);
 
   if (!smtpConfigured(after)) {
     console.error('SMTP may not be configured correctly. Check Supabase Dashboard → Authentication → Email.');

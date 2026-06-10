@@ -33,6 +33,12 @@ Body (must include `{{ .Token }}`):
 
 Reference file: [`templates/confirmation-signup-email.html`](./templates/confirmation-signup-email.html)
 
+## 2b. OTP length (6 digits)
+
+Dashboard → **Authentication** → **Providers** → **Email** → set **Email OTP length** to **6**.
+
+Or run `npm run db:apply-auth-smtp` (sets `mailer_otp_length: 6` automatically). Optional env override: `MAILER_OTP_LENGTH=6`.
+
 ## 3. URL configuration
 
 Dashboard → **Authentication** → **URL Configuration**

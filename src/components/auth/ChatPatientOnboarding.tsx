@@ -398,7 +398,7 @@ export default function ChatPatientOnboarding({
     const code = raw.replace(/\D/g, '');
     setLocalError(null);
 
-    if (code.length < 6) {
+    if (code.length !== 6) {
       setLocalError('Enter the 6-digit code from your email.');
       await pushBot('Please enter all 6 digits from the verification email.');
       return;
@@ -584,7 +584,7 @@ export default function ChatPatientOnboarding({
                 placeholder={inputPlaceholder}
                 inputMode={step === 'verifyEmail' ? 'numeric' : undefined}
                 autoComplete={step === 'verifyEmail' ? 'one-time-code' : undefined}
-                maxLength={step === 'verifyEmail' ? 8 : undefined}
+                maxLength={step === 'verifyEmail' ? 6 : undefined}
                 disabled={!configured || authBusy || typing}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
