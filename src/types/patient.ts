@@ -10,6 +10,9 @@ export type Patient = {
   blood_group: string | null;
   country: string | null;
   city: string | null;
+  address: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
   allergies: string | null;
   current_medications: string | null;
   insurance_provider: string | null;
@@ -17,6 +20,7 @@ export type Patient = {
   emergency_contact_phone: string | null;
   preferred_language: string;
   avatar_url: string | null;
+  profile_completed_at: string | null;
   login_disabled?: boolean;
   created_at: string;
   updated_at: string;
@@ -33,4 +37,14 @@ export type PatientUpsertInput = {
 export type PatientProfileUpdateInput = {
   full_name: string;
   phone?: string | null;
+};
+
+export type PatientOnboardingInput = {
+  phone: string;
+  gender: string;
+  date_of_birth: string;
+  address: string;
+  blood_group: string;
+  height_cm?: number | null;
+  weight_kg?: number | null;
 };

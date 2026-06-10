@@ -37,6 +37,7 @@ type AppShellProps = {
   onLanguageChange: (language: Language) => void;
   onThemeToggle: () => void;
   onSignOut?: () => void;
+  onRequestProfileSetup?: () => void;
 };
 
 export default function AppShell({
@@ -60,7 +61,8 @@ export default function AppShell({
   onLanguageModalClose,
   onLanguageChange,
   onThemeToggle,
-  onSignOut
+  onSignOut,
+  onRequestProfileSetup
 }: AppShellProps) {
   const navItems = getNavItems(role, language);
   const activeNavItem = navItems.find((item) => item.id === activeScreen);
@@ -164,6 +166,7 @@ export default function AppShell({
               dbConnected={dbConnected}
               onSignOut={onSignOut}
               onNavigate={onNavigate}
+              onRequestProfileSetup={onRequestProfileSetup}
             />
           </section>
         </div>

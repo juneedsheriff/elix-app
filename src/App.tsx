@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from './layout/AppShell';
 import AuthPage, { type LoginMode } from './pages/auth/AuthPage';
-import PatientSignupPage, { type PatientSignupPayload } from './pages/auth/PatientSignupPage';
+import ChatPatientOnboarding from './components/auth/ChatPatientOnboarding';
+import { type PatientSignupPayload } from './pages/auth/PatientSignupPage';
+import { completePatientOnboarding } from './lib/patients';
+import { isPatientProfileComplete } from './lib/patientProfileCompleteness';
 import OnboardingPage from './pages/auth/OnboardingPage';
 import SplashPage from './pages/auth/SplashPage';
 import { getNavItems, TRANSLATIONS, type Language, type Role as AppRole } from './i18n/appTranslations';
@@ -25,7 +28,7 @@ import { supabase } from './lib/supabase';
 
 type Role = AppRole;
 type Theme = 'light' | 'dark';
-type Stage = 'splash' | 'onboarding' | 'auth' | 'app';
+type Stage = 'splash' | 'onboarding' | 'auth' | 'profile-setup' | 'app';
 type AuthView = 'signin' | 'signup';
 
 const DEFAULT_PASSWORD_HINT = 'Elix@123';
@@ -48,7 +51,8 @@ function App() {
     signOut,
     requestPasswordReset,
     updatePassword,
-    resendSignupConfirmation
+    resendSignupConfirmation,
+    refreshPatientProfile
   } = useSupabase();
 
   const [theme, setTheme] = useState<Theme>('light');
@@ -150,10 +154,19 @@ function App() {
   }, [stage, configured, session]);
 
   useEffect(() => {
-    if (!authLoading && session && (stage === 'auth' || stage === 'onboarding')) {
+    if (authLoading || !session || isDoctor) return;
+    if (stage !== 'auth' && stage !== 'onboarding') return;
+
+    setRole('patient');
+    setLoginMode('patient');
+    if (patientProfile && !isPatientProfileComplete(patientProfile)) {
+      setStage('profile-setup');
+      return;
+    }
+    if (patientProfile) {
       setStage('app');
     }
-  }, [authLoading, session, stage]);
+  }, [authLoading, session, isDoctor, patientProfile, stage]);
 
   useEffect(() => {
     if (isDoctor && doctorProfile) {
@@ -268,61 +281,16 @@ function App() {
     const fromUrl = parseAppScreenPath(location.pathname);
     const screen = resolveScreenForRole(nextRole, saved ?? fromUrl);
     setActiveScreen(screen);
-    setStage('app');
-    navigate(appScreenPath(screen), { replace: true });
-    setAuthError(null);
-  };
 
-  const handlePatientSignup = async (payload: PatientSignupPayload) => {
-    setAuthError(null);
-    setAuthSuccess(null);
-    setAuthBusy(true);
-
-    const { error, patient, needsEmailConfirmation, profileSaved } = await signUp(
-      payload.email,
-      payload.password,
-      {
-        full_name: payload.fullName,
-        email: payload.email,
-        phone: payload.phone || null,
-        country: payload.country || null,
-        preferred_language: language
-      }
-    );
-
-    setAuthBusy(false);
-
-    if (error) {
-      setAuthError(error.message);
-      return;
-    }
-
-    if (patient && profileSaved) {
-      setRole('patient');
-      setLoginMode('patient');
-      const screen = resolveScreenForRole('patient', parseAppScreenPath(location.pathname));
-      setActiveScreen(screen);
-      setStage('app');
-      navigate(appScreenPath(screen), { replace: true });
-      setAuthSuccess(null);
+    if (nextRole === 'patient' && patient && !isPatientProfileComplete(patient)) {
+      setStage('profile-setup');
       setAuthError(null);
       return;
     }
 
-    if (needsEmailConfirmation) {
-      setAuthSuccess(
-        `Account created for ${payload.email}. Confirm your email, then sign in — your profile will be saved to the patients table on first login.`
-      );
-      setAuthView('signin');
-      setEmail(payload.email);
-      setPassword('');
-      return;
-    }
-
-    setAuthSuccess('Account created. Sign in with your email and password.');
-    setAuthView('signin');
-    setEmail(payload.email);
-    setPassword('');
+    setStage('app');
+    navigate(appScreenPath(screen), { replace: true });
+    setAuthError(null);
   };
 
   const handleForgotPassword = async () => {
@@ -396,6 +364,68 @@ function App() {
     navigate('/auth', { replace: true });
   };
 
+  const handleChatSignUp = async (payload: PatientSignupPayload) => {
+    setAuthError(null);
+    setAuthSuccess(null);
+    setAuthBusy(true);
+
+    const { error, needsEmailConfirmation, profileSaved } = await signUp(
+      payload.email,
+      payload.password,
+      {
+        full_name: payload.fullName,
+        email: payload.email,
+        phone: payload.phone || null,
+        country: payload.country || null,
+        preferred_language: language
+      }
+    );
+
+    setAuthBusy(false);
+
+    if (error) {
+      return { error: error.message, needsEmailConfirmation: false, profileSaved: false };
+    }
+
+    if (profileSaved) {
+      setRole('patient');
+      setLoginMode('patient');
+    }
+
+    return { error: null, needsEmailConfirmation, profileSaved };
+  };
+
+  const handleCompleteProfile = async (input: {
+    phone: string;
+    gender: string;
+    date_of_birth: string;
+    address: string;
+    blood_group: string;
+    height_cm?: number | null;
+    weight_kg?: number | null;
+  }) => {
+    if (!user?.id) return { error: 'Sign in to continue.' };
+
+    setAuthBusy(true);
+    const { error } = await completePatientOnboarding(user.id, input);
+    setAuthBusy(false);
+
+    if (error) return { error: error.message };
+    await refreshPatientProfile();
+    return { error: null };
+  };
+
+  const finishProfileSetup = () => {
+    const screen = resolveScreenForRole('patient', parseAppScreenPath(location.pathname) ?? 'patient-dashboard');
+    setActiveScreen(screen);
+    setStage('app');
+    navigate(appScreenPath(screen), { replace: true });
+  };
+
+  const openProfileSetup = () => {
+    setStage('profile-setup');
+  };
+
   return (
     <main className='app'>
       {stage === 'splash' ? <SplashPage welcome={copy.welcome} tagline={copy.tagline} /> : null}
@@ -413,18 +443,48 @@ function App() {
       ) : null}
 
       {stage === 'auth' && authView === 'signup' && !passwordRecovery ? (
-        <PatientSignupPage
+        <ChatPatientOnboarding
+          mode='signup'
           configured={configured}
           authBusy={authBusy}
-          authError={authError}
-          authSuccess={authSuccess}
-          copy={copy}
-          onSubmit={(payload) => void handlePatientSignup(payload)}
+          session={session}
+          patientProfile={patientProfile}
+          onSignUp={handleChatSignUp}
+          onCompleteProfile={handleCompleteProfile}
+          onResendConfirmation={async (emailAddress) => {
+            const { error } = await resendSignupConfirmation(emailAddress);
+            return { error: error?.message ?? null };
+          }}
           onBack={() => {
             setAuthView('signin');
             setAuthError(null);
             setAuthSuccess(null);
           }}
+          onFinished={finishProfileSetup}
+        />
+      ) : null}
+
+      {stage === 'profile-setup' ? (
+        <ChatPatientOnboarding
+          mode='profile-only'
+          configured={configured}
+          authBusy={authBusy}
+          session={session}
+          patientProfile={patientProfile}
+          onSignUp={handleChatSignUp}
+          onCompleteProfile={handleCompleteProfile}
+          onResendConfirmation={async (emailAddress) => {
+            const { error } = await resendSignupConfirmation(emailAddress);
+            return { error: error?.message ?? null };
+          }}
+          onBack={() => {
+            if (session) {
+              finishProfileSetup();
+              return;
+            }
+            setStage('auth');
+          }}
+          onFinished={finishProfileSetup}
         />
       ) : null}
 
@@ -491,6 +551,7 @@ function App() {
           onLanguageChange={setLanguage}
           onThemeToggle={() => setTheme(theme === 'light' ? 'dark' : 'light')}
           onSignOut={session ? handleSignOut : undefined}
+          onRequestProfileSetup={openProfileSetup}
         />
       ) : null}
     </main>

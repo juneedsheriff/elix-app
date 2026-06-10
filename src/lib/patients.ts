@@ -1,6 +1,10 @@
 import type { User } from '@supabase/supabase-js';
-import type { Patient, PatientProfileUpdateInput } from '../types/patient';
+import type { Patient, PatientOnboardingInput, PatientProfileUpdateInput } from '../types/patient';
+import { isPatientProfileComplete } from './patientProfileCompleteness';
 import { supabase } from './supabase';
+
+const patientColumnsExtended =
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, created_at, updated_at';
 
 const patientColumnsWithElix =
   'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
@@ -14,12 +18,35 @@ function withFallbackElixId(patient: Patient | null): Patient | null {
   return { ...patient, elix_id: `elix-${suffix.padEnd(6, '0').slice(0, 6)}` };
 }
 
+function normalizePatientRow(patient: Patient | null): Patient | null {
+  if (!patient) return null;
+  return {
+    ...patient,
+    address: patient.address ?? null,
+    height_cm: patient.height_cm ?? null,
+    weight_kg: patient.weight_kg ?? null,
+    profile_completed_at: patient.profile_completed_at ?? null
+  };
+}
+
 async function selectPatient(
   build: (columns: string) => ReturnType<typeof supabase.from<'patients'>>
 ) {
+  const extended = await build(patientColumnsExtended).maybeSingle();
+  if (!extended.error) {
+    return { data: withFallbackElixId(normalizePatientRow(extended.data as Patient | null)), error: null };
+  }
+
+  const missingColumn = /address|profile_completed_at|height_cm|weight_kg|elix_id|column/.test(
+    extended.error.message
+  );
+  if (!missingColumn) {
+    return { data: null, error: extended.error };
+  }
+
   const withElix = await build(patientColumnsWithElix).maybeSingle();
   if (!withElix.error) {
-    return { data: withFallbackElixId(withElix.data as Patient | null), error: null };
+    return { data: withFallbackElixId(normalizePatientRow(withElix.data as Patient | null)), error: null };
   }
   if (!withElix.error.message.includes('elix_id')) {
     return { data: null, error: withElix.error };
@@ -27,7 +54,7 @@ async function selectPatient(
 
   const legacy = await build(patientColumnsLegacy).maybeSingle();
   if (legacy.error) return { data: null, error: legacy.error };
-  return { data: withFallbackElixId(legacy.data as Patient | null), error: null };
+  return { data: withFallbackElixId(normalizePatientRow(legacy.data as Patient | null)), error: null };
 }
 
 export async function fetchPatientByAuthUserId(authUserId: string) {
@@ -154,4 +181,85 @@ export async function updatePatientProfileForUser(
 
   if (error) return { data: null, error };
   return { data: withFallbackElixId(data), error: null };
+}
+
+/** Save post-verification onboarding answers from the chat wizard. */
+export async function completePatientOnboarding(authUserId: string, input: PatientOnboardingInput) {
+  const phone = input.phone.trim();
+  const gender = input.gender.trim();
+  const date_of_birth = input.date_of_birth.trim();
+  const address = input.address.trim();
+  const blood_group = input.blood_group.trim();
+
+  if (!phone) return { data: null, error: { message: 'Enter your mobile number.' } };
+  if (!gender) return { data: null, error: { message: 'Select your gender.' } };
+  if (!date_of_birth) return { data: null, error: { message: 'Enter your date of birth.' } };
+  if (!address) return { data: null, error: { message: 'Enter your address.' } };
+  if (!blood_group) return { data: null, error: { message: 'Select your blood group.' } };
+
+  const payload = {
+    phone,
+    gender,
+    date_of_birth,
+    address,
+    city: address,
+    blood_group,
+    height_cm: input.height_cm ?? null,
+    weight_kg: input.weight_kg ?? null,
+    profile_completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  let { data, error } = await supabase
+    .from('patients')
+    .update(payload)
+    .eq('auth_user_id', authUserId)
+    .select(patientColumnsExtended)
+    .single<Patient>();
+
+  if (error?.message.includes('address') || error?.message.includes('profile_completed_at')) {
+    const fallback = await supabase
+      .from('patients')
+      .update({
+        phone,
+        gender,
+        date_of_birth,
+        city: address,
+        blood_group,
+        updated_at: new Date().toISOString()
+      })
+      .eq('auth_user_id', authUserId)
+      .select(patientColumnsWithElix)
+      .single<Patient>();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error?.message.includes('elix_id')) {
+    const legacy = await supabase
+      .from('patients')
+      .update({
+        phone,
+        gender,
+        date_of_birth,
+        city: address,
+        blood_group,
+        updated_at: new Date().toISOString()
+      })
+      .eq('auth_user_id', authUserId)
+      .select(patientColumnsLegacy)
+      .single<Patient>();
+    data = legacy.data;
+    error = legacy.error;
+  }
+
+  if (error) return { data: null, error };
+  const patient = withFallbackElixId(normalizePatientRow(data));
+  if (patient && !isPatientProfileComplete(patient)) {
+    return {
+      data: patient,
+      error: { message: 'Profile saved but some required fields are still missing.' }
+    };
+  }
+  return { data: patient, error: null };
 }

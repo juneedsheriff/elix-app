@@ -19,6 +19,7 @@ import PatientRequestListCard from '../../components/OpinionRequests/PatientRequ
 import '../../components/OpinionRequests/patient-my-requests.css';
 import SecondOpinionChoiceModal from '../../components/OpinionRequests/SecondOpinionChoiceModal';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
+import { isPatientProfileComplete, patientProfileMissingFields } from '../../lib/patientProfileCompleteness';
 import { splitPatientFullName } from '../../lib/patients';
 import {
   fetchPatientOpinionRequests,
@@ -71,7 +72,8 @@ export default function PatientDashboardPage({
   userId,
   dbConnected,
   patientProfile,
-  onNavigate
+  onNavigate,
+  onRequestProfileSetup
 }: PatientDashboardPageProps) {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
@@ -165,6 +167,8 @@ export default function PatientDashboardPage({
   );
 
   const greetingName = patientGreetingName(patientProfile?.full_name);
+  const profileIncomplete = Boolean(patientProfile && !isPatientProfileComplete(patientProfile));
+  const missingProfileFields = patientProfileMissingFields(patientProfile);
 
   const metrics = [
     {
@@ -221,6 +225,20 @@ export default function PatientDashboardPage({
           goToScreen('my-requests', 'flow=recommendations');
         }}
       />
+
+      {profileIncomplete ? (
+        <div className='pd-profile-incomplete' role='status'>
+          <div>
+            <strong>Profile incomplete</strong>
+            <p>
+              Add {missingProfileFields.join(', ')} so specialists have your full health context.
+            </p>
+          </div>
+          <button type='button' className='primary-btn' onClick={onRequestProfileSetup}>
+            Complete profile
+          </button>
+        </div>
+      ) : null}
 
       <div className='pd-dashboard__shell'>
         <header className='pd-hero'>

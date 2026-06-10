@@ -9,4 +9,5 @@ export type ScreenPageProps = {
   dbConnected: boolean;
   onSignOut?: () => void;
   onNavigate?: (screenId: string) => void;
+  onRequestProfileSetup?: () => void;
 };

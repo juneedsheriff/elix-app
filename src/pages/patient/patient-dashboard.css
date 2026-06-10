@@ -10,6 +10,39 @@
   gap: 0;
 }
 
+.pd-profile-incomplete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--border));
+  background: color-mix(in srgb, #f59e0b 10%, var(--surface));
+}
+
+.pd-profile-incomplete strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.pd-profile-incomplete p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.pd-profile-incomplete .primary-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .pd-dashboard__shell {
   display: flex;
   flex-direction: column;
