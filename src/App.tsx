@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from './layout/AppShell';
 import AuthPage, { type LoginMode } from './pages/auth/AuthPage';
 import ChatPatientOnboarding from './components/auth/ChatPatientOnboarding';
-import { type PatientSignupPayload } from './pages/auth/PatientSignupPage';
 import { completePatientOnboarding } from './lib/patients';
 import { isPatientProfileComplete } from './lib/patientProfileCompleteness';
 import OnboardingPage from './pages/auth/OnboardingPage';
@@ -47,12 +46,13 @@ function App() {
     patientProfile,
     isDoctor,
     signIn,
-    signUp,
     signOut,
     requestPasswordReset,
     updatePassword,
     resendSignupConfirmation,
-    verifySignupOtp,
+    sendSignupEmailOtp,
+    verifyEmailOtp,
+    completeSignupWithPassword,
     refreshPatientProfile
   } = useSupabase();
 
@@ -157,6 +157,7 @@ function App() {
   useEffect(() => {
     if (authLoading || !session || isDoctor) return;
     if (stage !== 'auth' && stage !== 'onboarding') return;
+    if (stage === 'auth' && authView === 'signup') return;
 
     setRole('patient');
     setLoginMode('patient');
@@ -167,7 +168,7 @@ function App() {
     if (patientProfile) {
       setStage('app');
     }
-  }, [authLoading, session, isDoctor, patientProfile, stage]);
+  }, [authLoading, session, isDoctor, patientProfile, stage, authView]);
 
   useEffect(() => {
     if (isDoctor && doctorProfile) {
@@ -365,35 +366,38 @@ function App() {
     navigate('/auth', { replace: true });
   };
 
-  const handleChatSignUp = async (payload: PatientSignupPayload) => {
-    setAuthError(null);
-    setAuthSuccess(null);
+  const handleSendEmailOtp = async (emailAddress: string, fullName: string) => {
     setAuthBusy(true);
-
-    const { error, needsEmailConfirmation, profileSaved } = await signUp(
-      payload.email,
-      payload.password,
-      {
-        full_name: payload.fullName,
-        email: payload.email,
-        phone: payload.phone || null,
-        country: payload.country || null,
-        preferred_language: language
-      }
-    );
-
+    const { error } = await sendSignupEmailOtp(emailAddress, fullName);
     setAuthBusy(false);
+    return { error: error?.message ?? null };
+  };
 
-    if (error) {
-      return { error: error.message, needsEmailConfirmation: false, profileSaved: false };
-    }
+  const handleVerifyEmailCode = async (emailAddress: string, code: string, fullName: string) => {
+    setAuthBusy(true);
+    const { error } = await verifyEmailOtp(emailAddress, code, {
+      full_name: fullName,
+      email: emailAddress,
+      preferred_language: language
+    });
+    setAuthBusy(false);
+    if (error) return { error: error.message };
+    setRole('patient');
+    setLoginMode('patient');
+    return { error: null };
+  };
 
-    if (profileSaved) {
-      setRole('patient');
-      setLoginMode('patient');
-    }
-
-    return { error: null, needsEmailConfirmation, profileSaved };
+  const handleSetSignupPassword = async (password: string, fullName: string, emailAddress: string) => {
+    setAuthBusy(true);
+    const { error } = await completeSignupWithPassword(password, {
+      full_name: fullName,
+      email: emailAddress,
+      preferred_language: language
+    });
+    setAuthBusy(false);
+    if (error) return { error: error.message };
+    await refreshPatientProfile();
+    return { error: null };
   };
 
   const handleCompleteProfile = async (input: {
@@ -412,23 +416,6 @@ function App() {
     setAuthBusy(false);
 
     if (error) return { error: error.message };
-    await refreshPatientProfile();
-    return { error: null };
-  };
-
-  const handleVerifyEmailCode = async (emailAddress: string, code: string, fullName: string) => {
-    setAuthBusy(true);
-    const { error } = await verifySignupOtp(emailAddress, code, {
-      full_name: fullName,
-      email: emailAddress,
-      preferred_language: language
-    });
-    setAuthBusy(false);
-
-    if (error) return { error: error.message };
-
-    setRole('patient');
-    setLoginMode('patient');
     await refreshPatientProfile();
     return { error: null };
   };
@@ -467,12 +454,10 @@ function App() {
           authBusy={authBusy}
           session={session}
           patientProfile={patientProfile}
-          onSignUp={handleChatSignUp}
+          onSendEmailOtp={handleSendEmailOtp}
+          onSetPassword={handleSetSignupPassword}
           onCompleteProfile={handleCompleteProfile}
-          onResendConfirmation={async (emailAddress) => {
-            const { error } = await resendSignupConfirmation(emailAddress);
-            return { error: error?.message ?? null };
-          }}
+          onResendEmailOtp={handleSendEmailOtp}
           onVerifyEmailCode={handleVerifyEmailCode}
           onBack={() => {
             setAuthView('signin');
@@ -490,12 +475,10 @@ function App() {
           authBusy={authBusy}
           session={session}
           patientProfile={patientProfile}
-          onSignUp={handleChatSignUp}
+          onSendEmailOtp={handleSendEmailOtp}
+          onSetPassword={handleSetSignupPassword}
           onCompleteProfile={handleCompleteProfile}
-          onResendConfirmation={async (emailAddress) => {
-            const { error } = await resendSignupConfirmation(emailAddress);
-            return { error: error?.message ?? null };
-          }}
+          onResendEmailOtp={handleSendEmailOtp}
           onVerifyEmailCode={handleVerifyEmailCode}
           onBack={() => {
             if (session) {

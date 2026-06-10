@@ -46,6 +46,16 @@ type SupabaseContextValue = {
   requestPasswordReset: (email: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
   resendSignupConfirmation: (email: string) => Promise<{ error: AuthError | null }>;
+  sendSignupEmailOtp: (email: string, fullName: string) => Promise<{ error: AuthError | null }>;
+  verifyEmailOtp: (
+    email: string,
+    token: string,
+    profile?: Partial<PatientUpsertInput>
+  ) => Promise<{ error: AuthError | null }>;
+  completeSignupWithPassword: (
+    password: string,
+    profile: Partial<PatientUpsertInput>
+  ) => Promise<{ error: AuthError | null; patient: Patient | null }>;
   verifySignupOtp: (
     email: string,
     token: string,
@@ -315,15 +325,33 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
-  const verifySignupOtp = useCallback(async (
+  const sendSignupEmailOtp = useCallback(async (email: string, fullName: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+    }
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        shouldCreateUser: true,
+        data: {
+          role: 'patient',
+          full_name: fullName.trim()
+        }
+      }
+    });
+
+    return { error };
+  }, []);
+
+  const verifyEmailOtp = useCallback(async (
     email: string,
     token: string,
     profile?: Partial<PatientUpsertInput>
   ) => {
     if (!isSupabaseConfigured) {
       return {
-        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
-        patient: null
+        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError
       };
     }
 
@@ -333,32 +361,108 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     let { data, error } = await supabase.auth.verifyOtp({
       email: trimmedEmail,
       token: trimmedToken,
-      type: 'signup'
+      type: 'email'
     });
 
     if (error) {
       const fallback = await supabase.auth.verifyOtp({
         email: trimmedEmail,
         token: trimmedToken,
-        type: 'email'
+        type: 'signup'
       });
       data = fallback.data;
       error = fallback.error;
     }
+
+    if (error) return { error };
+
+    const user = data.user;
+    if (!user) {
+      return {
+        error: {
+          message: 'Verification failed. Check the code and try again.',
+          name: 'AuthError',
+          status: 400
+        } as AuthError
+      };
+    }
+
+    if (data.session) setSession(data.session);
+
+    if (profile?.full_name) {
+      await supabase.auth.updateUser({
+        data: {
+          role: 'patient',
+          full_name: profile.full_name
+        }
+      });
+    }
+
+    return { error: null };
+  }, []);
+
+  const completeSignupWithPassword = useCallback(async (
+    password: string,
+    profile: Partial<PatientUpsertInput>
+  ) => {
+    if (!isSupabaseConfigured) {
+      return {
+        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
+        patient: null
+      };
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      password,
+      data: {
+        role: 'patient',
+        full_name: profile.full_name ?? profile.email?.split('@')[0] ?? 'Patient'
+      }
+    });
 
     if (error) return { error, patient: null };
 
     const user = data.user;
     if (!user) {
       return {
-        error: { message: 'Verification failed. Check the code and try again.', name: 'AuthError', status: 400 } as AuthError,
+        error: { message: 'Could not save password.', name: 'AuthError', status: 500 } as AuthError,
         patient: null
       };
     }
 
-    if (data.session) setSession(data.session);
+    const ensured = await ensurePatientProfile(user, profile);
+    if (ensured.error) {
+      return {
+        error: {
+          message: `Password saved but patient profile failed: ${ensured.error.message}`,
+          name: 'AuthError',
+          status: 500
+        } as AuthError,
+        patient: null
+      };
+    }
 
-    const ensured = await ensurePatientProfile(user, { email: trimmedEmail, ...profile });
+    if (ensured.data) setPatientProfile(ensured.data);
+    return { error: null, patient: ensured.data };
+  }, []);
+
+  const verifySignupOtp = useCallback(async (
+    email: string,
+    token: string,
+    profile?: Partial<PatientUpsertInput>
+  ) => {
+    const verified = await verifyEmailOtp(email, token, profile);
+    if (verified.error) return { error: verified.error, patient: null };
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        error: { message: 'Verification failed.', name: 'AuthError', status: 400 } as AuthError,
+        patient: null
+      };
+    }
+
+    const ensured = await ensurePatientProfile(user, { email: email.trim(), ...profile });
     if (ensured.error) {
       return {
         error: {
@@ -372,7 +476,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
     if (ensured.data) setPatientProfile(ensured.data);
     return { error: null, patient: ensured.data };
-  }, []);
+  }, [verifyEmailOtp]);
 
   const appRole: AppRole = doctorProfile ? 'doctor' : patientProfile || session ? 'patient' : null;
 
@@ -393,6 +497,9 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       updatePassword,
       resendSignupConfirmation,
+      sendSignupEmailOtp,
+      verifyEmailOtp,
+      completeSignupWithPassword,
       verifySignupOtp,
       refreshDoctorProfile,
       refreshPatientProfile,
@@ -410,6 +517,9 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       updatePassword,
       resendSignupConfirmation,
+      sendSignupEmailOtp,
+      verifyEmailOtp,
+      completeSignupWithPassword,
       verifySignupOtp,
       refreshDoctorProfile,
       refreshPatientProfile,

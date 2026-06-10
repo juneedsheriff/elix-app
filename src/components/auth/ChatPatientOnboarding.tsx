@@ -3,7 +3,6 @@ import type { Session } from '@supabase/supabase-js';
 import { Bot, Send } from 'lucide-react';
 import { ageFromDateOfBirth } from '../../lib/patientProfileCompleteness';
 import type { Patient } from '../../types/patient';
-import type { PatientSignupPayload } from '../../pages/auth/PatientSignupPage';
 import './chat-signup.css';
 
 type ChatMessage = {
@@ -14,7 +13,7 @@ type ChatMessage = {
 
 type ProfileStep = 'phone' | 'gender' | 'dob' | 'address' | 'height' | 'weight' | 'bloodGroup';
 
-type AuthStep = 'intro' | 'name' | 'email' | 'password' | 'verifyEmail';
+type AuthStep = 'intro' | 'name' | 'email' | 'verifyEmail' | 'password';
 
 type Step = AuthStep | ProfileStep | 'done';
 
@@ -24,11 +23,10 @@ type ChatPatientOnboardingProps = {
   authBusy: boolean;
   session: Session | null;
   patientProfile: Patient | null;
-  onSignUp: (payload: PatientSignupPayload) => Promise<{
-    needsEmailConfirmation: boolean;
-    profileSaved: boolean;
-    error: string | null;
-  }>;
+  onSendEmailOtp: (email: string, fullName: string) => Promise<{ error: string | null }>;
+  onVerifyEmailCode: (email: string, code: string, fullName: string) => Promise<{ error: string | null }>;
+  onSetPassword: (password: string, fullName: string, email: string) => Promise<{ error: string | null }>;
+  onResendEmailOtp: (email: string, fullName: string) => Promise<{ error: string | null }>;
   onCompleteProfile: (input: {
     phone: string;
     gender: string;
@@ -38,8 +36,6 @@ type ChatPatientOnboardingProps = {
     height_cm?: number | null;
     weight_kg?: number | null;
   }) => Promise<{ error: string | null }>;
-  onResendConfirmation: (email: string) => Promise<{ error: string | null }>;
-  onVerifyEmailCode: (email: string, code: string, fullName: string) => Promise<{ error: string | null }>;
   onBack: () => void;
   onFinished: () => void;
 };
@@ -70,12 +66,12 @@ function botPrompt(step: Step, name?: string): string {
       return "Let's start — what's your full name?";
     case 'email':
       return name ? `Nice to meet you, ${name.split(' ')[0]}! What email should we use for your account?` : 'What email should we use for your account?';
-    case 'password':
-      return 'Choose a secure password (at least 8 characters).';
     case 'verifyEmail':
       return "I've sent a 6-digit verification code to your email. Enter the code here to continue.";
+    case 'password':
+      return 'Email verified! Choose a secure password (at least 8 characters).';
     case 'phone':
-      return 'Great! Your email is verified. What is your mobile number?';
+      return 'Great! What is your mobile number?';
     case 'gender':
       return 'How do you identify? Pick one option below.';
     case 'dob':
@@ -99,19 +95,17 @@ export default function ChatPatientOnboarding({
   mode,
   configured,
   authBusy,
-  session,
   patientProfile,
-  onSignUp,
-  onCompleteProfile,
-  onResendConfirmation,
+  onSendEmailOtp,
   onVerifyEmailCode,
+  onSetPassword,
+  onResendEmailOtp,
+  onCompleteProfile,
   onBack,
   onFinished
 }: ChatPatientOnboardingProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const bootstrappedRef = useRef(false);
-  const pendingProfileStartRef = useRef(false);
-  const verifiedHandledRef = useRef(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [step, setStep] = useState<Step>(mode === 'profile-only' ? 'phone' : 'intro');
@@ -122,7 +116,6 @@ export default function ChatPatientOnboarding({
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [profileDraft, setProfileDraft] = useState({
     phone: '',
     gender: '',
@@ -189,32 +182,9 @@ export default function ChatPatientOnboarding({
   const startProfileQuestions = useCallback(async () => {
     const resume = firstProfileStep(patientProfile);
     setStep(resume);
-    await pushBot('Email verified successfully!');
+    await pushBot('Password saved! Now a few health profile questions.');
     await pushBot(botPrompt(resume));
   }, [patientProfile, pushBot]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    if (step === 'verifyEmail') {
-      if (verifiedHandledRef.current) return;
-      verifiedHandledRef.current = true;
-      void startProfileQuestions();
-      return;
-    }
-
-    if (!pendingProfileStartRef.current) return;
-    pendingProfileStartRef.current = false;
-
-    const begin = async () => {
-      const resume = firstProfileStep(patientProfile);
-      setStep(resume);
-      await pushBot('Account created! Now a few health profile questions.');
-      await pushBot(botPrompt(resume));
-    };
-
-    void begin();
-  }, [session, step, patientProfile, startProfileQuestions, pushBot]);
 
   const inputType = useMemo(() => {
     if (step === 'verifyEmail') return 'text';
@@ -232,10 +202,10 @@ export default function ChatPatientOnboarding({
         return 'Your full name';
       case 'email':
         return 'you@email.com';
-      case 'password':
-        return 'Password (min. 8 characters)';
       case 'verifyEmail':
         return '6-digit verification code';
+      case 'password':
+        return 'Password (min. 8 characters)';
       case 'phone':
         return '+1 555 000 0000';
       case 'dob':
@@ -370,8 +340,19 @@ export default function ChatPatientOnboarding({
       }
       pushUser(value);
       setEmail(value);
-      setStep('password');
-      await pushBot(botPrompt('password'));
+
+      setTyping(true);
+      const { error } = await onSendEmailOtp(value, fullName);
+      setTyping(false);
+
+      if (error) {
+        setLocalError(error);
+        await pushBot(`I couldn't send the verification code: ${error}`);
+        return;
+      }
+
+      setStep('verifyEmail');
+      await pushBot(botPrompt('verifyEmail'));
       return;
     }
 
@@ -382,36 +363,18 @@ export default function ChatPatientOnboarding({
         return;
       }
       pushUser('••••••••');
-      setPassword(value);
 
-      const result = await onSignUp({
-        fullName,
-        email,
-        password: value,
-        phone: '',
-        country: ''
-      });
+      setTyping(true);
+      const { error } = await onSetPassword(value, fullName, email);
+      setTyping(false);
 
-      if (result.error) {
-        setLocalError(result.error);
-        await pushBot(`I couldn't create your account: ${result.error}`);
+      if (error) {
+        setLocalError(error);
+        await pushBot(`I couldn't save your password: ${error}`);
         return;
       }
 
-      if (result.needsEmailConfirmation) {
-        setStep('verifyEmail');
-        await pushBot(botPrompt('verifyEmail'));
-        return;
-      }
-
-      pendingProfileStartRef.current = true;
-      if (session) {
-        pendingProfileStartRef.current = false;
-        const resume = firstProfileStep(patientProfile);
-        setStep(resume);
-        await pushBot('Account created! Now a few health profile questions.');
-        await pushBot(botPrompt(resume));
-      }
+      await startProfileQuestions();
     }
   };
 
@@ -436,8 +399,9 @@ export default function ChatPatientOnboarding({
       return;
     }
 
-    verifiedHandledRef.current = true;
-    await startProfileQuestions();
+    setStep('password');
+    await pushBot('Email verified successfully!');
+    await pushBot(botPrompt('password'));
   };
 
   const handleSubmit = async () => {
@@ -483,9 +447,9 @@ export default function ChatPatientOnboarding({
   };
 
   const handleResend = async () => {
-    if (!email.trim()) return;
+    if (!email.trim() || !fullName.trim()) return;
     setResendBusy(true);
-    const { error } = await onResendConfirmation(email.trim());
+    const { error } = await onResendEmailOtp(email.trim(), fullName);
     setResendBusy(false);
     if (error) {
       setLocalError(error);
