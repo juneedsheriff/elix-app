@@ -46,6 +46,11 @@ type SupabaseContextValue = {
   requestPasswordReset: (email: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
   resendSignupConfirmation: (email: string) => Promise<{ error: AuthError | null }>;
+  verifySignupOtp: (
+    email: string,
+    token: string,
+    profile?: Partial<PatientUpsertInput>
+  ) => Promise<{ error: AuthError | null; patient: Patient | null }>;
   refreshDoctorProfile: () => Promise<Doctor | null>;
   refreshPatientProfile: () => Promise<Patient | null>;
   ensurePatientProfile: (profile?: Partial<PatientUpsertInput>) => Promise<Patient | null>;
@@ -310,6 +315,65 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
+  const verifySignupOtp = useCallback(async (
+    email: string,
+    token: string,
+    profile?: Partial<PatientUpsertInput>
+  ) => {
+    if (!isSupabaseConfigured) {
+      return {
+        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
+        patient: null
+      };
+    }
+
+    const trimmedEmail = email.trim();
+    const trimmedToken = token.trim();
+
+    let { data, error } = await supabase.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedToken,
+      type: 'signup'
+    });
+
+    if (error) {
+      const fallback = await supabase.auth.verifyOtp({
+        email: trimmedEmail,
+        token: trimmedToken,
+        type: 'email'
+      });
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) return { error, patient: null };
+
+    const user = data.user;
+    if (!user) {
+      return {
+        error: { message: 'Verification failed. Check the code and try again.', name: 'AuthError', status: 400 } as AuthError,
+        patient: null
+      };
+    }
+
+    if (data.session) setSession(data.session);
+
+    const ensured = await ensurePatientProfile(user, { email: trimmedEmail, ...profile });
+    if (ensured.error) {
+      return {
+        error: {
+          message: `Email verified but patient profile failed: ${ensured.error.message}`,
+          name: 'AuthError',
+          status: 500
+        } as AuthError,
+        patient: null
+      };
+    }
+
+    if (ensured.data) setPatientProfile(ensured.data);
+    return { error: null, patient: ensured.data };
+  }, []);
+
   const appRole: AppRole = doctorProfile ? 'doctor' : patientProfile || session ? 'patient' : null;
 
   const value = useMemo<SupabaseContextValue>(
@@ -329,6 +393,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       updatePassword,
       resendSignupConfirmation,
+      verifySignupOtp,
       refreshDoctorProfile,
       refreshPatientProfile,
       ensurePatientProfile: ensurePatientProfileForSession
@@ -345,6 +410,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       updatePassword,
       resendSignupConfirmation,
+      verifySignupOtp,
       refreshDoctorProfile,
       refreshPatientProfile,
       ensurePatientProfileForSession

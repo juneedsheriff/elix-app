@@ -39,6 +39,7 @@ type ChatPatientOnboardingProps = {
     weight_kg?: number | null;
   }) => Promise<{ error: string | null }>;
   onResendConfirmation: (email: string) => Promise<{ error: string | null }>;
+  onVerifyEmailCode: (email: string, code: string, fullName: string) => Promise<{ error: string | null }>;
   onBack: () => void;
   onFinished: () => void;
 };
@@ -72,7 +73,7 @@ function botPrompt(step: Step, name?: string): string {
     case 'password':
       return 'Choose a secure password (at least 8 characters).';
     case 'verifyEmail':
-      return "I've sent a verification link to your email. Open it, then return here — I'll continue automatically.";
+      return "I've sent a 6-digit verification code to your email. Enter the code here to continue.";
     case 'phone':
       return 'Great! Your email is verified. What is your mobile number?';
     case 'gender':
@@ -103,6 +104,7 @@ export default function ChatPatientOnboarding({
   onSignUp,
   onCompleteProfile,
   onResendConfirmation,
+  onVerifyEmailCode,
   onBack,
   onFinished
 }: ChatPatientOnboardingProps) {
@@ -215,6 +217,7 @@ export default function ChatPatientOnboarding({
   }, [session, step, patientProfile, startProfileQuestions, pushBot]);
 
   const inputType = useMemo(() => {
+    if (step === 'verifyEmail') return 'text';
     if (step === 'email') return 'email';
     if (step === 'password') return 'password';
     if (step === 'phone') return 'tel';
@@ -231,6 +234,8 @@ export default function ChatPatientOnboarding({
         return 'you@email.com';
       case 'password':
         return 'Password (min. 8 characters)';
+      case 'verifyEmail':
+        return '6-digit verification code';
       case 'phone':
         return '+1 555 000 0000';
       case 'dob':
@@ -410,10 +415,40 @@ export default function ChatPatientOnboarding({
     }
   };
 
+  const handleVerifyCode = async (raw: string) => {
+    const code = raw.replace(/\D/g, '');
+    setLocalError(null);
+
+    if (code.length < 6) {
+      setLocalError('Enter the 6-digit code from your email.');
+      await pushBot('Please enter all 6 digits from the verification email.');
+      return;
+    }
+
+    pushUser(code);
+    setTyping(true);
+    const { error } = await onVerifyEmailCode(email, code, fullName);
+    setTyping(false);
+
+    if (error) {
+      setLocalError(error);
+      await pushBot('That code is invalid or expired. Try again or tap Resend code for a new one.');
+      return;
+    }
+
+    verifiedHandledRef.current = true;
+    await startProfileQuestions();
+  };
+
   const handleSubmit = async () => {
     if (!input.trim() || authBusy || typing) return;
     const value = input;
     setInput('');
+
+    if (step === 'verifyEmail') {
+      await handleVerifyCode(value);
+      return;
+    }
 
     if (step === 'phone' || step === 'dob' || step === 'address' || step === 'height' || step === 'weight') {
       await handleProfileAnswer(value);
@@ -456,7 +491,7 @@ export default function ChatPatientOnboarding({
       setLocalError(error);
       return;
     }
-    await pushBot('Verification email sent again. Check your inbox.');
+    await pushBot('A new verification code was sent. Check your inbox and enter it above.');
   };
 
   return (
@@ -524,12 +559,9 @@ export default function ChatPatientOnboarding({
                 type='button'
                 className='secondary-btn'
                 onClick={() => void handleResend()}
-                disabled={resendBusy || !configured}
+                disabled={resendBusy || !configured || authBusy}
               >
-                {resendBusy ? 'Sending…' : 'Resend email'}
-              </button>
-              <button type='button' className='primary-btn' onClick={onBack}>
-                Back to sign in
+                {resendBusy ? 'Sending…' : 'Resend code'}
               </button>
             </div>
           ) : null}
@@ -570,6 +602,9 @@ export default function ChatPatientOnboarding({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={inputPlaceholder}
+                inputMode={step === 'verifyEmail' ? 'numeric' : undefined}
+                autoComplete={step === 'verifyEmail' ? 'one-time-code' : undefined}
+                maxLength={step === 'verifyEmail' ? 8 : undefined}
                 disabled={!configured || authBusy || typing}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {

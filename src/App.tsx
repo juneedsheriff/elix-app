@@ -52,6 +52,7 @@ function App() {
     requestPasswordReset,
     updatePassword,
     resendSignupConfirmation,
+    verifySignupOtp,
     refreshPatientProfile
   } = useSupabase();
 
@@ -415,6 +416,23 @@ function App() {
     return { error: null };
   };
 
+  const handleVerifyEmailCode = async (emailAddress: string, code: string, fullName: string) => {
+    setAuthBusy(true);
+    const { error } = await verifySignupOtp(emailAddress, code, {
+      full_name: fullName,
+      email: emailAddress,
+      preferred_language: language
+    });
+    setAuthBusy(false);
+
+    if (error) return { error: error.message };
+
+    setRole('patient');
+    setLoginMode('patient');
+    await refreshPatientProfile();
+    return { error: null };
+  };
+
   const finishProfileSetup = () => {
     const screen = resolveScreenForRole('patient', parseAppScreenPath(location.pathname) ?? 'patient-dashboard');
     setActiveScreen(screen);
@@ -455,6 +473,7 @@ function App() {
             const { error } = await resendSignupConfirmation(emailAddress);
             return { error: error?.message ?? null };
           }}
+          onVerifyEmailCode={handleVerifyEmailCode}
           onBack={() => {
             setAuthView('signin');
             setAuthError(null);
@@ -477,6 +496,7 @@ function App() {
             const { error } = await resendSignupConfirmation(emailAddress);
             return { error: error?.message ?? null };
           }}
+          onVerifyEmailCode={handleVerifyEmailCode}
           onBack={() => {
             if (session) {
               finishProfileSetup();
