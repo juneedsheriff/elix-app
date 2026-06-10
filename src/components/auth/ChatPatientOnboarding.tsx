@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { Bot, Send } from 'lucide-react';
 import { ageFromDateOfBirth } from '../../lib/patientProfileCompleteness';
+import { isExistingUserEmailMessage } from '../../lib/authEmailOtp';
 import type { Patient } from '../../types/patient';
 import './chat-signup.css';
 
@@ -350,7 +351,12 @@ export default function ChatPatientOnboarding({
 
       if (error) {
         setLocalError(error);
-        await pushBot(`I couldn't send the verification code: ${error}`);
+        setEmail('');
+        if (isExistingUserEmailMessage(error)) {
+          await pushBot(error);
+        } else {
+          await pushBot(`I couldn't send the verification code: ${error}`);
+        }
         return;
       }
 

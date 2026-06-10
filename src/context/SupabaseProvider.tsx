@@ -9,11 +9,18 @@ import {
 } from 'react';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import {
+  assertEmailAvailableForSignup,
   createTempSignupPassword,
+  duplicateSignupAuthError,
   formatAuthEmailError,
+  isConfirmationEmailSendError,
+  isDuplicateSignupResponse,
+  isAuthEmailRegistered,
   isExistingUserSignupError,
+  resolveSignupEmailError,
   type SendSignupEmailOtpResult
 } from '../lib/authEmailOtp';
+import { startEmaillessPatientSignup } from '../lib/patientSignupPreconfirm';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { fetchDoctorByAuthUserId, fetchDoctorByEmail, fetchDoctorById } from '../lib/doctors';
 import { ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
@@ -251,6 +258,17 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         profileSaved: false
       };
     }
+
+    const emailUnavailable = await assertEmailAvailableForSignup(email);
+    if (emailUnavailable) {
+      return {
+        error: emailUnavailable,
+        patient: null,
+        needsEmailConfirmation: false,
+        profileSaved: false
+      };
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -264,7 +282,24 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
+      if (isExistingUserSignupError(error)) {
+        return {
+          error: { ...error, message: formatAuthEmailError(error) } as AuthError,
+          patient: null,
+          needsEmailConfirmation: false,
+          profileSaved: false
+        };
+      }
       return { error, patient: null, needsEmailConfirmation: false, profileSaved: false };
+    }
+
+    if (isDuplicateSignupResponse(data)) {
+      return {
+        error: duplicateSignupAuthError(),
+        patient: null,
+        needsEmailConfirmation: false,
+        profileSaved: false
+      };
     }
 
     const needsEmailConfirmation = Boolean(data.user && !data.session);
@@ -340,6 +375,11 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     const trimmedEmail = email.trim();
     const redirectTo = getAuthRedirectUrl('/');
 
+    const emailUnavailable = await assertEmailAvailableForSignup(trimmedEmail);
+    if (emailUnavailable) {
+      return { error: emailUnavailable };
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email: trimmedEmail,
       password: createTempSignupPassword(),
@@ -353,27 +393,28 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
-      if (isExistingUserSignupError(error)) {
-        const otpResult = await supabase.auth.signInWithOtp({
-          email: trimmedEmail,
-          options: {
-            shouldCreateUser: false,
-            emailRedirectTo: redirectTo,
-            data: {
-              role: 'patient',
-              full_name: fullName.trim()
+      if (isConfirmationEmailSendError(error)) {
+        const registered = await isAuthEmailRegistered(trimmedEmail);
+        if (registered !== true) {
+          const fallback = await startEmaillessPatientSignup(trimmedEmail, fullName.trim());
+          if (fallback.bootstrapPassword) {
+            const signIn = await supabase.auth.signInWithPassword({
+              email: trimmedEmail,
+              password: fallback.bootstrapPassword
+            });
+            if (!signIn.error && signIn.data.session) {
+              setSession(signIn.data.session);
+              return { error: null, skipVerification: true };
             }
           }
-        });
-
-        if (otpResult.error) {
-          return { error: { ...otpResult.error, message: formatAuthEmailError(otpResult.error) } as AuthError };
         }
-
-        return { error: null };
       }
 
-      return { error: { ...error, message: formatAuthEmailError(error) } as AuthError };
+      return { error: await resolveSignupEmailError(trimmedEmail, error) };
+    }
+
+    if (isDuplicateSignupResponse(data)) {
+      return { error: duplicateSignupAuthError() };
     }
 
     if (data.session) {

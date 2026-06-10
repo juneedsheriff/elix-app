@@ -32,6 +32,7 @@
     "db:apply-recommendation-opinion-requests": "node scripts/apply-recommendation-opinion-requests.mjs",
     "db:apply-doctors-insert-admins": "node scripts/apply-doctors-insert-admins.mjs",
     "db:apply-admin-delete-requests": "node scripts/apply-admin-delete-requests.mjs",
+    "db:apply-auth-email-check": "node scripts/apply-auth-email-check.mjs",
     "db:setup-staff-roles": "node scripts/apply-staff-roles.mjs && node scripts/seed-admin.mjs && node scripts/seed-pse.mjs",
     "db:apply-doctor-visibility": "node scripts/apply-doctor-visibility.mjs",
     "db:seed-admin": "node scripts/seed-admin.mjs",

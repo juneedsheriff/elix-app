@@ -4,6 +4,7 @@ compatibility_date = "2024-11-01"
 
 [vars]
 SUPABASE_URL = "https://juwlzcxlekqttpdqqijv.supabase.co"
+ALLOW_EMAILLESS_PATIENT_SIGNUP = "true"
 # Local dev: copy .dev.vars.example → .dev.vars (secrets + ALLOWED_ORIGIN=http://localhost:3000)
 
 [dev]

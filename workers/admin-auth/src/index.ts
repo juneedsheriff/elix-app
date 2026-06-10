@@ -5,6 +5,7 @@ type Env = {
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   ALLOWED_ORIGIN?: string;
+  ALLOW_EMAILLESS_PATIENT_SIGNUP?: string;
 };
 
 type Role = 'doctor' | 'patient';
@@ -522,6 +523,65 @@ async function getAccountStatus(role: Role, profileId: string, env: Env) {
   };
 }
 
+type PatientPreconfirmBody = {
+  email: string;
+  fullName: string;
+};
+
+function createBootstrapPassword(): string {
+  return `Elix-${crypto.randomUUID()}9!Ab`;
+}
+
+async function preconfirmPatientSignup(body: PatientPreconfirmBody, env: Env) {
+  if (env.ALLOW_EMAILLESS_PATIENT_SIGNUP !== 'true') {
+    return { error: 'Email verification is required for signup.' };
+  }
+
+  const email = body.email?.trim().toLowerCase() ?? '';
+  const fullName = body.fullName?.trim() ?? '';
+
+  if (!fullName) return { error: 'Full name is required.' };
+  if (!email || !email.includes('@')) return { error: 'Enter a valid email address.' };
+
+  const admin = serviceClient(env);
+
+  const { data: registered, error: registeredError } = await admin.rpc('is_auth_email_registered', {
+    p_email: email
+  });
+  if (registeredError) {
+    const existingAuthUserId = await findUserByEmail(email, admin);
+    if (existingAuthUserId) {
+      return { error: 'This email is already registered. Please enter another email address.' };
+    }
+  } else if (registered === true) {
+    return { error: 'This email is already registered. Please enter another email address.' };
+  }
+
+  const bootstrapPassword = createBootstrapPassword();
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password: bootstrapPassword,
+    email_confirm: true,
+    user_metadata: {
+      role: 'patient',
+      full_name: fullName
+    }
+  });
+
+  if (error) {
+    if (error.message.toLowerCase().includes('already')) {
+      return { error: 'This email is already registered. Please enter another email address.' };
+    }
+    return { error: error.message };
+  }
+
+  if (!data.user?.id) {
+    return { error: 'Could not create account.' };
+  }
+
+  return { bootstrapPassword };
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const origin = request.headers.get('Origin');
@@ -539,6 +599,19 @@ export default {
 
     if ((pathname === '/' || pathname === '/health') && request.method === 'GET') {
       return json({ ok: true, service: 'elix-admin-auth' }, 200, origin, env);
+    }
+
+    if (request.method === 'POST' && pathname === '/patient-signup/preconfirm') {
+      let body: PatientPreconfirmBody;
+      try {
+        body = (await request.json()) as PatientPreconfirmBody;
+      } catch {
+        return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+      }
+
+      const result = await preconfirmPatientSignup(body, env);
+      if (result.error) return json({ error: result.error }, 400, origin, env);
+      return json({ ok: true, bootstrapPassword: result.bootstrapPassword }, 200, origin, env);
     }
 
     if (request.method === 'POST' && (pathname === '/staff' || pathname === '/staff/manage')) {

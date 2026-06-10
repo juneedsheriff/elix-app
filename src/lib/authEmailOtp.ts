@@ -1,4 +1,5 @@
 import type { AuthError } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
 export type SendSignupEmailOtpResult = {
   error: AuthError | null;
@@ -6,11 +7,75 @@ export type SendSignupEmailOtpResult = {
   skipVerification?: boolean;
 };
 
+export const EXISTING_USER_EMAIL_MESSAGE =
+  'This email is already registered. Please enter another email address.';
+
+export function existingUserEmailMessage(): string {
+  return EXISTING_USER_EMAIL_MESSAGE;
+}
+
 export function createTempSignupPassword(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `Elix-${crypto.randomUUID()}9!`;
   }
   return `Elix-${Date.now().toString(36)}-Temp9!`;
+}
+
+type SignUpResponse = {
+  user?: {
+    identities?: unknown[] | null;
+    email_confirmed_at?: string | null;
+  } | null;
+  session?: unknown | null;
+};
+
+/** Supabase may return success with an empty identities array when the email already exists. */
+export function isDuplicateSignupResponse(data: SignUpResponse | null): boolean {
+  const user = data?.user;
+  if (!user) return false;
+
+  const identities = user.identities;
+  if (Array.isArray(identities) && identities.length === 0) {
+    return true;
+  }
+
+  // Confirmed account surfaced again without a new session — treat as duplicate signup.
+  if (!data?.session && user.email_confirmed_at) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Server-side check (migration 032). Returns null when RPC is unavailable. */
+export async function isAuthEmailRegistered(email: string): Promise<boolean | null> {
+  const trimmed = email.trim();
+  if (!trimmed) return null;
+
+  const { data, error } = await supabase.rpc('is_auth_email_registered', { p_email: trimmed });
+  if (error) return null;
+  return Boolean(data);
+}
+
+export function isConfirmationEmailSendError(error: AuthError): boolean {
+  const lower = (error.message ?? '').toLowerCase();
+  return lower.includes('error sending confirmation');
+}
+
+export function isExistingUserSignupError(error: AuthError): boolean {
+  const lower = (error.message ?? '').toLowerCase();
+  return (
+    lower.includes('already registered') ||
+    lower.includes('already been registered') ||
+    lower.includes('user already exists') ||
+    lower.includes('email address is already') ||
+    lower.includes('already in use') ||
+    lower.includes('duplicate')
+  );
+}
+
+export function isExistingUserEmailMessage(message: string): boolean {
+  return message.trim() === EXISTING_USER_EMAIL_MESSAGE;
 }
 
 export function formatAuthEmailError(error: AuthError): string {
@@ -25,14 +90,43 @@ export function formatAuthEmailError(error: AuthError): string {
     return 'That email address is not accepted. Use a real inbox (Gmail, Outlook, Yahoo, etc.).';
   }
 
-  if (lower.includes('already registered') || lower.includes('already been registered')) {
-    return 'This email is already registered. Sign in instead, or use a different email.';
+  if (isExistingUserSignupError(error)) {
+    return existingUserEmailMessage();
+  }
+
+  if (isConfirmationEmailSendError(error)) {
+    return 'We could not send a verification email. If this address is already registered, use another email or sign in. Otherwise wait a few minutes and try again, or ask your administrator to configure Supabase email (Authentication → SMTP).';
   }
 
   return message;
 }
 
-export function isExistingUserSignupError(error: AuthError): boolean {
-  const lower = (error.message ?? '').toLowerCase();
-  return lower.includes('already registered') || lower.includes('already been registered');
+export async function resolveSignupEmailError(email: string, error: AuthError): Promise<AuthError> {
+  if (isConfirmationEmailSendError(error) || isExistingUserSignupError(error)) {
+    const registered = await isAuthEmailRegistered(email);
+    if (registered === true) {
+      return duplicateSignupAuthError();
+    }
+  }
+
+  return {
+    ...error,
+    message: formatAuthEmailError(error)
+  } as AuthError;
+}
+
+export function duplicateSignupAuthError(): AuthError {
+  return {
+    message: existingUserEmailMessage(),
+    name: 'AuthError',
+    status: 400
+  } as AuthError;
+}
+
+export async function assertEmailAvailableForSignup(email: string): Promise<AuthError | null> {
+  const registered = await isAuthEmailRegistered(email);
+  if (registered === true) {
+    return duplicateSignupAuthError();
+  }
+  return null;
 }
