@@ -8,6 +8,12 @@ import {
   type ReactNode
 } from 'react';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
+import {
+  createTempSignupPassword,
+  formatAuthEmailError,
+  isExistingUserSignupError,
+  type SendSignupEmailOtpResult
+} from '../lib/authEmailOtp';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { fetchDoctorByAuthUserId, fetchDoctorByEmail, fetchDoctorById } from '../lib/doctors';
 import { ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
@@ -46,7 +52,8 @@ type SupabaseContextValue = {
   requestPasswordReset: (email: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
   resendSignupConfirmation: (email: string) => Promise<{ error: AuthError | null }>;
-  sendSignupEmailOtp: (email: string, fullName: string) => Promise<{ error: AuthError | null }>;
+  sendSignupEmailOtp: (email: string, fullName: string) => Promise<SendSignupEmailOtpResult>;
+  resendSignupEmailOtp: (email: string) => Promise<{ error: AuthError | null }>;
   verifyEmailOtp: (
     email: string,
     token: string,
@@ -325,15 +332,19 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
-  const sendSignupEmailOtp = useCallback(async (email: string, fullName: string) => {
+  const sendSignupEmailOtp = useCallback(async (email: string, fullName: string): Promise<SendSignupEmailOtpResult> => {
     if (!isSupabaseConfigured) {
       return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
+    const trimmedEmail = email.trim();
+    const redirectTo = getAuthRedirectUrl('/');
+
+    const { data, error } = await supabase.auth.signUp({
+      email: trimmedEmail,
+      password: createTempSignupPassword(),
       options: {
-        shouldCreateUser: true,
+        emailRedirectTo: redirectTo,
         data: {
           role: 'patient',
           full_name: fullName.trim()
@@ -341,7 +352,67 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return { error };
+    if (error) {
+      if (isExistingUserSignupError(error)) {
+        const otpResult = await supabase.auth.signInWithOtp({
+          email: trimmedEmail,
+          options: {
+            shouldCreateUser: false,
+            emailRedirectTo: redirectTo,
+            data: {
+              role: 'patient',
+              full_name: fullName.trim()
+            }
+          }
+        });
+
+        if (otpResult.error) {
+          return { error: { ...otpResult.error, message: formatAuthEmailError(otpResult.error) } as AuthError };
+        }
+
+        return { error: null };
+      }
+
+      return { error: { ...error, message: formatAuthEmailError(error) } as AuthError };
+    }
+
+    if (data.session) {
+      setSession(data.session);
+      return { error: null, skipVerification: true };
+    }
+
+    return { error: null };
+  }, []);
+
+  const resendSignupEmailOtp = useCallback(async (email: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+    }
+
+    const trimmedEmail = email.trim();
+    const redirectTo = getAuthRedirectUrl('/');
+
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: trimmedEmail,
+      options: { emailRedirectTo: redirectTo }
+    });
+
+    if (!resendError) return { error: null };
+
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: redirectTo
+      }
+    });
+
+    if (otpError) {
+      return { error: { ...otpError, message: formatAuthEmailError(otpError) } as AuthError };
+    }
+
+    return { error: null };
   }, []);
 
   const verifyEmailOtp = useCallback(async (
@@ -361,14 +432,14 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     let { data, error } = await supabase.auth.verifyOtp({
       email: trimmedEmail,
       token: trimmedToken,
-      type: 'email'
+      type: 'signup'
     });
 
     if (error) {
       const fallback = await supabase.auth.verifyOtp({
         email: trimmedEmail,
         token: trimmedToken,
-        type: 'signup'
+        type: 'email'
       });
       data = fallback.data;
       error = fallback.error;
@@ -498,6 +569,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       updatePassword,
       resendSignupConfirmation,
       sendSignupEmailOtp,
+      resendSignupEmailOtp,
       verifyEmailOtp,
       completeSignupWithPassword,
       verifySignupOtp,
@@ -518,6 +590,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       updatePassword,
       resendSignupConfirmation,
       sendSignupEmailOtp,
+      resendSignupEmailOtp,
       verifyEmailOtp,
       completeSignupWithPassword,
       verifySignupOtp,

@@ -23,10 +23,13 @@ type ChatPatientOnboardingProps = {
   authBusy: boolean;
   session: Session | null;
   patientProfile: Patient | null;
-  onSendEmailOtp: (email: string, fullName: string) => Promise<{ error: string | null }>;
+  onSendEmailOtp: (
+    email: string,
+    fullName: string
+  ) => Promise<{ error: string | null; skipVerification?: boolean }>;
   onVerifyEmailCode: (email: string, code: string, fullName: string) => Promise<{ error: string | null }>;
   onSetPassword: (password: string, fullName: string, email: string) => Promise<{ error: string | null }>;
-  onResendEmailOtp: (email: string, fullName: string) => Promise<{ error: string | null }>;
+  onResendEmailOtp: (email: string) => Promise<{ error: string | null }>;
   onCompleteProfile: (input: {
     phone: string;
     gender: string;
@@ -67,7 +70,7 @@ function botPrompt(step: Step, name?: string): string {
     case 'email':
       return name ? `Nice to meet you, ${name.split(' ')[0]}! What email should we use for your account?` : 'What email should we use for your account?';
     case 'verifyEmail':
-      return "I've sent a 6-digit verification code to your email. Enter the code here to continue.";
+      return "I've sent a 6-digit verification code to your email. Check your inbox and spam folder, then enter the code here.";
     case 'password':
       return 'Email verified! Choose a secure password (at least 8 characters).';
     case 'phone':
@@ -342,12 +345,19 @@ export default function ChatPatientOnboarding({
       setEmail(value);
 
       setTyping(true);
-      const { error } = await onSendEmailOtp(value, fullName);
+      const { error, skipVerification } = await onSendEmailOtp(value, fullName);
       setTyping(false);
 
       if (error) {
         setLocalError(error);
         await pushBot(`I couldn't send the verification code: ${error}`);
+        return;
+      }
+
+      if (skipVerification) {
+        setStep('password');
+        await pushBot('Your email is ready — no code needed for this project.');
+        await pushBot(botPrompt('password'));
         return;
       }
 
@@ -449,7 +459,7 @@ export default function ChatPatientOnboarding({
   const handleResend = async () => {
     if (!email.trim() || !fullName.trim()) return;
     setResendBusy(true);
-    const { error } = await onResendEmailOtp(email.trim(), fullName);
+    const { error } = await onResendEmailOtp(email.trim());
     setResendBusy(false);
     if (error) {
       setLocalError(error);

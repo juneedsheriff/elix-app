@@ -51,6 +51,7 @@ function App() {
     updatePassword,
     resendSignupConfirmation,
     sendSignupEmailOtp,
+    resendSignupEmailOtp,
     verifyEmailOtp,
     completeSignupWithPassword,
     refreshPatientProfile
@@ -368,7 +369,14 @@ function App() {
 
   const handleSendEmailOtp = async (emailAddress: string, fullName: string) => {
     setAuthBusy(true);
-    const { error } = await sendSignupEmailOtp(emailAddress, fullName);
+    const { error, skipVerification } = await sendSignupEmailOtp(emailAddress, fullName);
+    setAuthBusy(false);
+    return { error: error?.message ?? null, skipVerification: Boolean(skipVerification) };
+  };
+
+  const handleResendEmailOtp = async (emailAddress: string) => {
+    setAuthBusy(true);
+    const { error } = await resendSignupEmailOtp(emailAddress);
     setAuthBusy(false);
     return { error: error?.message ?? null };
   };
@@ -457,7 +465,7 @@ function App() {
           onSendEmailOtp={handleSendEmailOtp}
           onSetPassword={handleSetSignupPassword}
           onCompleteProfile={handleCompleteProfile}
-          onResendEmailOtp={handleSendEmailOtp}
+          onResendEmailOtp={handleResendEmailOtp}
           onVerifyEmailCode={handleVerifyEmailCode}
           onBack={() => {
             setAuthView('signin');
@@ -478,7 +486,7 @@ function App() {
           onSendEmailOtp={handleSendEmailOtp}
           onSetPassword={handleSetSignupPassword}
           onCompleteProfile={handleCompleteProfile}
-          onResendEmailOtp={handleSendEmailOtp}
+          onResendEmailOtp={handleResendEmailOtp}
           onVerifyEmailCode={handleVerifyEmailCode}
           onBack={() => {
             if (session) {
