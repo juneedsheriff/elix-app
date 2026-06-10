@@ -1,5 +1,69 @@
 # Supabase setup
 
+## Patient signup email verification (Custom SMTP)
+
+Patient registration sends a **6-digit code** via Supabase Auth (`signUp` → `verifyOtp`). If signup shows `Error sending confirmation email`, the built-in Supabase mailer is failing — configure **Custom SMTP**.
+
+### Quick apply (recommended)
+
+1. Create a [Resend](https://resend.com) API key and verify your sending domain.
+2. Add to `.env.local` (server-only — no `VITE_` prefix):
+
+```env
+SUPABASE_ACCESS_TOKEN=sbp_...
+RESEND_API_KEY=re_...
+SMTP_ADMIN_EMAIL=noreply@yourdomain.com
+SMTP_SENDER_NAME=Elix Health
+SITE_URL=http://localhost:3000
+URI_ALLOW_LIST=http://localhost:3000/**,https://your-app.vercel.app/**
+```
+
+3. Apply SMTP + OTP email template:
+
+```bash
+npm run db:apply-auth-smtp
+npm run test:auth-signup-email
+```
+
+The script sets Resend SMTP (`smtp.resend.com`) and updates the **Confirm signup** template to include `{{ .Token }}` (see [`templates/confirmation-signup-email.html`](./templates/confirmation-signup-email.html)).
+
+### Manual dashboard setup
+
+[Supabase Dashboard](https://supabase.com/dashboard) → project → **Authentication → Email → SMTP Settings**:
+
+| Field | Resend value |
+|-------|----------------|
+| Enable Custom SMTP | On |
+| Host | `smtp.resend.com` |
+| Port | `465` (SSL) or `587` (STARTTLS) |
+| Username | `resend` |
+| Password | Resend API key (full-access or verified-domain key) |
+| Sender email | Address on your verified domain |
+| Sender name | `Elix Health` |
+
+**Authentication → Email Templates → Confirm signup** — body must include:
+
+```html
+<p>Your verification code is: <strong>{{ .Token }}</strong></p>
+```
+
+Without `{{ .Token }}`, users only get a magic link and the in-app code field will not work.
+
+Keep **Confirm email** enabled under **Authentication → Providers → Email**.
+
+If sends still fail, check **Logs → Auth** for the underlying SMTP error (auth failed, domain not verified, rate limit).
+
+### After SMTP works
+
+1. Confirm registration reaches the **Enter 6-digit code** step (not the password step immediately).
+2. Set `ALLOW_EMAILLESS_PATIENT_SIGNUP = "false"` in [`workers/admin-auth/wrangler.toml`](../workers/admin-auth/wrangler.toml) and run `npm run worker:admin-auth:deploy` so signup always requires email verification.
+
+### Emailless fallback (dev only)
+
+When SMTP is broken, the app can skip verification via the admin-auth worker (`ALLOW_EMAILLESS_PATIENT_SIGNUP=true`). Disable this once Custom SMTP is stable.
+
+---
+
 ## Email confirmation / password reset redirects
 
 If verification links open `localhost:3000` with `otp_expired` or `access_denied`, fix **Authentication → URL Configuration** in the Supabase Dashboard:

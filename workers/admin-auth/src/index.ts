@@ -25,7 +25,7 @@ function corsHeaders(origin: string | null, env: Env): HeadersInit {
 
   if (origin) {
     // Always echo localhost so Vite (http://localhost:3000) works while ALLOWED_ORIGIN is production.
-    if (isLocalDevOrigin(origin) || !allowed || allowed === '*' || origin === allowed) {
+    if (isLocalDevOrigin(origin) || isAllowedAppOrigin(origin, env) || !allowed || allowed === '*' || origin === allowed) {
       value = origin;
     }
   } else if (allowed && allowed !== '*') {
@@ -42,6 +42,15 @@ function corsHeaders(origin: string | null, env: Env): HeadersInit {
 
 function isLocalDevOrigin(origin: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
+
+function isAllowedAppOrigin(origin: string, env: Env): boolean {
+  const allowed = env.ALLOWED_ORIGIN?.trim();
+  if (!allowed || allowed === '*') return false;
+  if (origin === allowed) return true;
+  // Also allow the default Vercel production URL for the same deployment.
+  if (allowed.includes('elixmeditours.ca') && origin === 'https://elix-app.vercel.app') return true;
+  return false;
 }
 
 function json(body: unknown, status: number, origin: string | null, env: Env): Response {
@@ -544,6 +553,8 @@ async function preconfirmPatientSignup(body: PatientPreconfirmBody, env: Env) {
   if (!email || !email.includes('@')) return { error: 'Enter a valid email address.' };
 
   const admin = serviceClient(env);
+
+  await admin.rpc('cleanup_patient_signup_orphan', { p_email: email });
 
   const { data: registered, error: registeredError } = await admin.rpc('is_auth_email_registered', {
     p_email: email

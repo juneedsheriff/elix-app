@@ -1,6 +1,3 @@
--- Paste into Supabase SQL Editor if migration 033 is not applied yet.
--- Replaces migration 032: only fully registered emails block patient signup.
-
 -- Treat patient signup as complete only when a profile (or staff record) exists.
 -- Incomplete auth-only signups can be cleaned up so the user can try again.
 

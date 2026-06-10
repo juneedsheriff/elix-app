@@ -47,13 +47,23 @@ export function isDuplicateSignupResponse(data: SignUpResponse | null): boolean 
   return false;
 }
 
-/** Server-side check (migration 032). Returns null when RPC is unavailable. */
+/** Server-side check (migration 033). Returns null when RPC is unavailable. */
 export async function isAuthEmailRegistered(email: string): Promise<boolean | null> {
   const trimmed = email.trim();
   if (!trimmed) return null;
 
   const { data, error } = await supabase.rpc('is_auth_email_registered', { p_email: trimmed });
   if (error) return null;
+  return Boolean(data);
+}
+
+/** Removes auth-only patient signups that never created a patients row (migration 033). */
+export async function cleanupPatientSignupOrphan(email: string): Promise<boolean> {
+  const trimmed = email.trim();
+  if (!trimmed) return false;
+
+  const { data, error } = await supabase.rpc('cleanup_patient_signup_orphan', { p_email: trimmed });
+  if (error) return false;
   return Boolean(data);
 }
 
@@ -103,6 +113,7 @@ export function formatAuthEmailError(error: AuthError): string {
 
 export async function resolveSignupEmailError(email: string, error: AuthError): Promise<AuthError> {
   if (isConfirmationEmailSendError(error) || isExistingUserSignupError(error)) {
+    await cleanupPatientSignupOrphan(email);
     const registered = await isAuthEmailRegistered(email);
     if (registered === true) {
       return duplicateSignupAuthError();
@@ -124,6 +135,7 @@ export function duplicateSignupAuthError(): AuthError {
 }
 
 export async function assertEmailAvailableForSignup(email: string): Promise<AuthError | null> {
+  await cleanupPatientSignupOrphan(email);
   const registered = await isAuthEmailRegistered(email);
   if (registered === true) {
     return duplicateSignupAuthError();

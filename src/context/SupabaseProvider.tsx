@@ -10,6 +10,7 @@ import {
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import {
   assertEmailAvailableForSignup,
+  cleanupPatientSignupOrphan,
   createTempSignupPassword,
   duplicateSignupAuthError,
   formatAuthEmailError,
@@ -380,17 +381,27 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       return { error: emailUnavailable };
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email: trimmedEmail,
-      password: createTempSignupPassword(),
-      options: {
-        emailRedirectTo: redirectTo,
-        data: {
-          role: 'patient',
-          full_name: fullName.trim()
+    const attemptSignUp = () =>
+      supabase.auth.signUp({
+        email: trimmedEmail,
+        password: createTempSignupPassword(),
+        options: {
+          emailRedirectTo: redirectTo,
+          data: {
+            role: 'patient',
+            full_name: fullName.trim()
+          }
         }
+      });
+
+    let { data, error } = await attemptSignUp();
+
+    if (!error && isDuplicateSignupResponse(data)) {
+      const cleaned = await cleanupPatientSignupOrphan(trimmedEmail);
+      if (cleaned) {
+        ({ data, error } = await attemptSignUp());
       }
-    });
+    }
 
     if (error) {
       if (isConfirmationEmailSendError(error)) {
@@ -414,7 +425,10 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     }
 
     if (isDuplicateSignupResponse(data)) {
-      return { error: duplicateSignupAuthError() };
+      const registered = await isAuthEmailRegistered(trimmedEmail);
+      if (registered === true) {
+        return { error: duplicateSignupAuthError() };
+      }
     }
 
     if (data.session) {
