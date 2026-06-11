@@ -16,6 +16,8 @@ import {
   resolveScreenForRole,
   saveReturnScreen
 } from './lib/navigation/appRoutes';
+import { clearAuthSurface, getAuthSurface, setAuthSurface } from './lib/navigation/authSurface';
+import { ELIX_HEALTH_PATHS } from './pages/admin/elixHealthRoutes';
 import { useSupabase } from './context/SupabaseProvider';
 import {
   authHashErrorMessage,
@@ -147,13 +149,17 @@ function App() {
     if (stage !== 'splash') return;
     const timeout = window.setTimeout(() => {
       if (configured && session) {
+        if (isDoctor && getAuthSurface() === 'desktop') {
+          navigate(ELIX_HEALTH_PATHS.workspace, { replace: true });
+          return;
+        }
         setStage('app');
       } else {
         setStage('onboarding');
       }
     }, 1700);
     return () => window.clearTimeout(timeout);
-  }, [stage, configured, session]);
+  }, [stage, configured, session, isDoctor, navigate]);
 
   useEffect(() => {
     if (authLoading || !session || isDoctor) return;
@@ -172,18 +178,21 @@ function App() {
   }, [authLoading, session, isDoctor, patientProfile, stage, authView]);
 
   useEffect(() => {
-    if (isDoctor && doctorProfile) {
-      setRole('doctor');
-      const fromUrl = parseAppScreenPath(location.pathname);
-      const resolved = resolveScreenForRole('doctor', fromUrl ?? activeScreen);
-      if (resolved !== activeScreen) {
-        setActiveScreen(resolved);
-        if (stage === 'app') {
-          navigate(appScreenPath(resolved), { replace: true });
-        }
+    if (authLoading || !isDoctor || !doctorProfile) return;
+    if (getAuthSurface() === 'desktop') {
+      navigate(ELIX_HEALTH_PATHS.workspace, { replace: true });
+      return;
+    }
+    setRole('doctor');
+    const fromUrl = parseAppScreenPath(location.pathname);
+    const resolved = resolveScreenForRole('doctor', fromUrl ?? activeScreen);
+    if (resolved !== activeScreen) {
+      setActiveScreen(resolved);
+      if (stage === 'app') {
+        navigate(appScreenPath(resolved), { replace: true });
       }
     }
-  }, [isDoctor, doctorProfile, location.pathname, activeScreen, stage, navigate]);
+  }, [authLoading, isDoctor, doctorProfile, location.pathname, activeScreen, stage, navigate]);
 
   useEffect(() => {
     if (!configured) {
@@ -280,6 +289,9 @@ function App() {
     }
     const nextRole = doctor ? 'doctor' : 'patient';
     setRole(nextRole);
+    if (nextRole === 'doctor') {
+      setAuthSurface('mobile');
+    }
     const saved = consumeReturnScreen();
     const fromUrl = parseAppScreenPath(location.pathname);
     const screen = resolveScreenForRole(nextRole, saved ?? fromUrl);
@@ -362,6 +374,7 @@ function App() {
   };
 
   const handleSignOut = async () => {
+    clearAuthSurface();
     await signOut();
     setStage('auth');
     navigate('/auth', { replace: true });

@@ -19,10 +19,10 @@ export default function ElixHealthLogin({ configured, busy, error, onSignIn }: E
           <Shield size={32} aria-hidden />
           <div>
             <p className='elixhealth-eyebrow'>Elix Health</p>
-            <h1>Admin console</h1>
+            <h1>Desktop sign in</h1>
           </div>
         </div>
-        <p className='muted'>Sign in to manage doctors, patients, and staff.</p>
+        <p className='muted'>Staff and doctors sign in here for the desktop workspace.</p>
 
         {!configured ? (
           <p className='auth-error' role='alert'>
@@ -42,7 +42,7 @@ export default function ElixHealthLogin({ configured, busy, error, onSignIn }: E
             <input
               type='email'
               autoComplete='email'
-              placeholder='Admin email'
+              placeholder='Work email'
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required

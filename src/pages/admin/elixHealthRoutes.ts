@@ -8,8 +8,38 @@ export const ELIX_HEALTH_PATHS = {
   patients: '/elixhealth/patients',
   patient: '/elixhealth/patient',
   staff: '/elixhealth/staff',
-  requests: '/elixhealth/requests'
+  requests: '/elixhealth/requests',
+  workspace: '/elixhealth/workspace',
+  workspaceCases: '/elixhealth/workspace/cases',
+  workspaceConsultation: '/elixhealth/workspace/consultation',
+  workspaceAvailability: '/elixhealth/workspace/availability'
 } as const;
+
+export type ElixHealthDoctorNavId = 'dashboard' | 'cases' | 'availability';
+
+const DOCTOR_SCREEN_TO_PATH: Record<string, string> = {
+  'doctor-dashboard': ELIX_HEALTH_PATHS.workspace,
+  'case-review': ELIX_HEALTH_PATHS.workspaceCases,
+  'doctor-consultation': ELIX_HEALTH_PATHS.workspaceConsultation,
+  availability: ELIX_HEALTH_PATHS.workspaceAvailability
+};
+
+export function doctorWorkspacePath(screenId: string): string {
+  return DOCTOR_SCREEN_TO_PATH[screenId] ?? ELIX_HEALTH_PATHS.workspace;
+}
+
+export function doctorNavIdFromPathname(pathname: string): ElixHealthDoctorNavId {
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'cases';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'availability';
+  return 'dashboard';
+}
+
+export function doctorPageTitleFromPathname(pathname: string): string {
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceConsultation)) return 'Consultation';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'Cases';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Availability';
+  return 'Dashboard';
+}
 
 export function doctorEditUrl(id: string, tab?: 'clinic' | 'scheduler' | 'login') {
   const params = new URLSearchParams({ id });

@@ -164,12 +164,9 @@ export default function AuthPage({
         </div>
         {loginMode === 'doctor' ? (
           <p className='muted doctor-login-hint'>
-           </p>
-        ) : (
-          <p className='muted doctor-login-hint'>
-            
+            Mobile doctor app. For the desktop workspace, sign in at /elixhealth/login.
           </p>
-        )}
+        ) : null}
         <form
           className='auth-form'
           onSubmit={(event: FormEvent) => {
