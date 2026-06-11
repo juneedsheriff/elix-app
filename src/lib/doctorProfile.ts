@@ -2,9 +2,17 @@ import type {
   AdminDoctorUpdateInput,
   ConsultationHours,
   ConsultationHoursDay,
+  ConsultationTier,
   Doctor,
   TimeSettings
 } from '../types/doctor';
+import { normalizeConsultationCurrency } from './consultationCurrency';
+import {
+  defaultConsultationTiers,
+  normalizeConsultationTiersInput,
+  parseConsultationTiers,
+  primaryConsultationFeeFromTiers
+} from './consultationTiers';
 
 export const DOCTOR_PROFILE_COLUMNS = [
   'id',
@@ -34,6 +42,8 @@ export const DOCTOR_PROFILE_COLUMNS = [
   'scheduler_effect_from',
   'scheduler_time_interval',
   'consultation_fee',
+  'consultation_tiers',
+  'consultation_currency',
   'elix_patient_priority',
   'scheduler_color',
   'consultation_hours',
@@ -110,6 +120,8 @@ export function emptyAdminDoctorInput(): AdminDoctorUpdateInput {
     scheduler_effect_from: null,
     scheduler_time_interval: 30,
     consultation_fee: 0,
+    consultation_tiers: defaultConsultationTiers(),
+    consultation_currency: 'USD',
     elix_patient_priority: false,
     scheduler_color: '#09abc0',
     consultation_hours: defaultConsultationHours(),
@@ -184,6 +196,7 @@ export function normalizeDoctorProfile(row: Doctor): Doctor {
   const clinicCountry = row.clinic_country?.trim() || row.country?.trim() || '';
   const about = row.about_doctor ?? row.bio;
   const fee = row.consultation_fee ?? row.fee_usd;
+  const consultationTiers = parseConsultationTiers(row.consultation_tiers, Number(fee ?? 0));
 
   return {
     ...row,
@@ -214,8 +227,10 @@ export function normalizeDoctorProfile(row: Doctor): Doctor {
     scheduler_effect_from: row.scheduler_effect_from ?? null,
     scheduler_time_interval:
       row.scheduler_time_interval != null ? Number(row.scheduler_time_interval) : null,
-    consultation_fee: fee != null ? Number(fee) : null,
-    fee_usd: Number(fee ?? 0),
+    consultation_fee: fee != null ? Number(fee) : primaryConsultationFeeFromTiers(consultationTiers),
+    consultation_tiers: consultationTiers,
+    consultation_currency: normalizeConsultationCurrency(row.consultation_currency),
+    fee_usd: Number(fee ?? primaryConsultationFeeFromTiers(consultationTiers)),
     elix_patient_priority: Boolean(row.elix_patient_priority),
     login_disabled: Boolean(row.login_disabled),
     scheduler_color: row.scheduler_color?.trim() || '#09abc0',
@@ -259,6 +274,8 @@ export function doctorToAdminInput(doctor: Doctor): AdminDoctorUpdateInput {
     scheduler_effect_from: doctor.scheduler_effect_from,
     scheduler_time_interval: doctor.scheduler_time_interval,
     consultation_fee: doctor.consultation_fee ?? doctor.fee_usd ?? 0,
+    consultation_tiers: doctor.consultation_tiers ?? defaultConsultationTiers(doctor.consultation_fee ?? doctor.fee_usd ?? 0),
+    consultation_currency: normalizeConsultationCurrency(doctor.consultation_currency),
     elix_patient_priority: doctor.elix_patient_priority,
     scheduler_color: doctor.scheduler_color ?? '#09abc0',
     consultation_hours: doctor.consultation_hours,
@@ -280,7 +297,12 @@ export function adminInputToDbRow(input: AdminDoctorUpdateInput) {
   const clinic = input.clinic_name.trim();
   const country = input.clinic_country.trim();
   const about = input.about_doctor?.trim() || null;
-  const fee = Math.max(0, Math.round(input.consultation_fee));
+  const tiers = normalizeConsultationTiersInput(
+    input.consultation_tiers?.length
+      ? input.consultation_tiers
+      : defaultConsultationTiers(input.consultation_fee)
+  );
+  const fee = Math.max(0, Math.round(primaryConsultationFeeFromTiers(tiers) || input.consultation_fee));
 
   return {
     full_name: input.full_name.trim(),
@@ -314,6 +336,8 @@ export function adminInputToDbRow(input: AdminDoctorUpdateInput) {
     scheduler_time_interval:
       input.scheduler_time_interval != null ? Math.round(input.scheduler_time_interval) : null,
     consultation_fee: fee,
+    consultation_tiers: tiers,
+    consultation_currency: normalizeConsultationCurrency(input.consultation_currency),
     fee_usd: fee,
     elix_patient_priority: input.elix_patient_priority,
     scheduler_color: input.scheduler_color.trim() || '#09abc0',

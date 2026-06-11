@@ -13,9 +13,14 @@ import {
 } from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
 import {
+  formatConsultationFee,
+  normalizeConsultationCurrency
+} from '../../../lib/consultationCurrency';
+import {
   canPseSendPaymentLink,
   isScheduleConfirmed
 } from '../../../lib/consultationWizard';
+import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import PaymentProofReview from './PaymentProofReview';
 
@@ -83,6 +88,17 @@ export default function PsePaymentStepPanel({
           Patient submitted their doctor and preferred time. You may send the payment link now.
         </Alert>
       )}
+
+      {request.consultation_duration_minutes && request.consultation_fee_usd != null ? (
+        <Alert color='blue' radius='md' variant='light' title='Quoted consultation fee'>
+          {formatDurationMinutesLabel(request.consultation_duration_minutes)} ·{' '}
+          {formatConsultationFee(
+            request.consultation_fee_usd,
+            normalizeConsultationCurrency(request.consultation_currency)
+          )}{' '}
+          (pre-filled below; you can still adjust if needed).
+        </Alert>
+      ) : null}
 
       <Paper radius='md' p='lg' withBorder className='pse-payment-panel__form'>
         <Group justify='space-between' align='center' mb='md'>

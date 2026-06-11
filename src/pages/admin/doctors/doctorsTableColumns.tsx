@@ -169,7 +169,11 @@ export function useDoctorsTableColumns({ canEdit }: UseDoctorsTableColumnsOption
       {
         id: 'fee',
         header: 'Fee',
-        accessorFn: (row) => formatConsultationFeeUsd(row.consultation_fee ?? row.fee_usd),
+        accessorFn: (row) =>
+          formatConsultationFeeUsd(
+            row.consultation_fee ?? row.fee_usd,
+            row.consultation_currency ?? 'USD'
+          ),
         size: 110,
         minSize: 100,
         enableGlobalFilter: false,

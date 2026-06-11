@@ -3,8 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
+import ConsultationDurationSelect from '../ConsultationWorkflow/ConsultationDurationSelect';
+import { normalizeConsultationCurrency } from '../../lib/consultationCurrency';
+import { getOfferedConsultationTiers, STANDARD_CONSULTATION_DURATIONS } from '../../lib/consultationTiers';
 import { createOpinionRequest } from '../../lib/opinionRequests';
 import { fetchUserMedicalRecords } from '../../lib/records';
+import { truncateFileName } from '../../lib/truncateLabel';
 import type { Doctor } from '../../types/doctor';
 import type { MedicalRecord } from '../../types/medicalRecord';
 
@@ -23,6 +27,10 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
+  const consultationTiers = getOfferedConsultationTiers(doctor);
+  const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<number>(
+    consultationTiers[0]?.duration_minutes ?? STANDARD_CONSULTATION_DURATIONS[0]
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -118,7 +126,8 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
       message: trimmed,
       recordIds: [...selectedIds],
       patientId: user?.id ?? null,
-      patientName
+      patientName,
+      consultationDurationMinutes
     });
     setSubmitting(false);
 
@@ -204,7 +213,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
                   />
                   <FileText size={20} aria-hidden />
                   <span className='record-select-text'>
-                    <strong>{record.file_name}</strong>
+                    <strong title={record.file_name}>{truncateFileName(record.file_name)}</strong>
                     {record.summary ? <span className='muted'>{record.summary}</span> : null}
                   </span>
                 </label>
@@ -212,6 +221,16 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
             ))}
           </ul>
         </fieldset>
+
+        <ConsultationDurationSelect
+          tiers={consultationTiers}
+          value={consultationDurationMinutes}
+          onChange={setConsultationDurationMinutes}
+          disabled={submitting}
+          currency={normalizeConsultationCurrency(doctor.consultation_currency)}
+          label='Choose consultation duration'
+          hint={`Select how long you need with ${doctor.full_name}. The fee shown is what you will pay for that session.`}
+        />
 
         <label className='opinion-message-label'>
           Message to doctor

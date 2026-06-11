@@ -1480,3 +1480,71 @@
   background: rgba(0, 0, 0, 0.2);
   border-color: rgba(255, 255, 255, 0.08);
 }
+
+.consultation-duration-select {
+  border: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.consultation-duration-select legend {
+  font-weight: 600;
+  margin-bottom: 0.65rem;
+}
+
+.consultation-duration-select__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+}
+
+.consultation-duration-select__options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.consultation-duration-select__option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.consultation-tier-pricing__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.consultation-tier-pricing__selected {
+  margin: 0;
+}
+
+.patient-consultation-duration-note,
+.patient-doctor-choice__fee {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.doctor-pricing-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.doctor-pricing-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.doctor-pricing-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.doctor-pricing-field input {
+  width: 100%;
+}

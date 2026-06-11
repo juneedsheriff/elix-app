@@ -8,6 +8,8 @@ import type {
   OpinionRequestStatus,
   PaymentStatus
 } from '../types/opinionRequest';
+import { normalizeConsultationCurrency } from './consultationCurrency';
+import { doctorConsultationCurrency, getTierFeeUsd, parseConsultationTiers } from './consultationTiers';
 import { fetchDoctorByAuthUserId, fetchDoctorById } from './doctors';
 import { fetchPatientByAuthUserId } from './patients';
 import {
@@ -61,7 +63,10 @@ const workflowFieldsCore = `
   payment_amount,
   payment_currency,
   payment_reference,
-  payment_confirmed_at
+  payment_confirmed_at,
+  consultation_duration_minutes,
+  consultation_fee_usd,
+  consultation_currency
 `;
 
 const workflowFields = `
@@ -490,7 +495,10 @@ function isMissingWorkflowColumnsError(error: { message?: string } | null) {
     msg.includes('payment_link') ||
     msg.includes('payment_proof_') ||
     msg.includes('pse_scheduling_message') ||
-    msg.includes('schedule_confirmed_at')
+    msg.includes('schedule_confirmed_at') ||
+    msg.includes('consultation_duration_minutes') ||
+    msg.includes('consultation_fee_usd') ||
+    msg.includes('consultation_currency')
   );
 }
 
@@ -522,6 +530,9 @@ type RequestListRow = {
   payment_proof_submitted_at?: string | null;
   pse_scheduling_message?: string | null;
   schedule_confirmed_at?: string | null;
+  consultation_duration_minutes?: number | null;
+  consultation_fee_usd?: number | null;
+  consultation_currency?: string | null;
   records_verified_at?: string | null;
   doctor_response: string | null;
   responded_at: string | null;
@@ -543,6 +554,7 @@ export type CreateOpinionRequestInput = {
   patientId: string | null;
   patientName?: string | null;
   doctorName?: string | null;
+  consultationDurationMinutes?: number;
 };
 
 export type CreateRecommendationOpinionRequestInput = {
@@ -551,6 +563,7 @@ export type CreateRecommendationOpinionRequestInput = {
   patientId: string | null;
   patientName?: string | null;
   requestedSpecialty: string;
+  consultationDurationMinutes?: number;
 };
 
 /** Resolve doctors.id — never persist auth.users id in opinion_requests.doctor_id */
@@ -589,6 +602,18 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
   }
 
   const { patientName, doctorName } = await resolveNames(input, doctor);
+  const durationMinutes = input.consultationDurationMinutes ?? null;
+  const consultationFeeUsd =
+    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+
+  const pricingFields =
+    durationMinutes != null
+      ? {
+          consultation_duration_minutes: durationMinutes,
+          consultation_fee_usd: consultationFeeUsd,
+          consultation_currency: doctorConsultationCurrency(doctor)
+        }
+      : {};
 
   const baseInsert = {
     doctor_id: doctor.id,
@@ -597,7 +622,8 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
     patient_id: input.patientId,
     patient_name: patientName,
     status: 'submitted' as const,
-    doctor_selection_mode: 'self_select' as const
+    doctor_selection_mode: 'self_select' as const,
+    ...pricingFields
   };
 
   let requestError = null;
@@ -688,6 +714,10 @@ export async function createRecommendationOpinionRequest(input: CreateRecommenda
     return { data: null, error: { message: 'Select a specialty for your recommendation request.' } };
   }
 
+  const durationMinutes = input.consultationDurationMinutes ?? null;
+  const pricingFields =
+    durationMinutes != null ? { consultation_duration_minutes: durationMinutes } : {};
+
   const baseInsert = {
     doctor_id: null,
     doctor_name: null,
@@ -696,7 +726,8 @@ export async function createRecommendationOpinionRequest(input: CreateRecommenda
     patient_name: patientName,
     status: 'submitted' as const,
     doctor_selection_mode: 'needs_recommendation' as const,
-    requested_specialty: requestedSpecialty
+    requested_specialty: requestedSpecialty,
+    ...pricingFields
   };
 
   let requestError = null;
@@ -837,6 +868,12 @@ function mapRequestRow(
     payment_proof_submitted_at: row.payment_proof_submitted_at ?? null,
     pse_scheduling_message: row.pse_scheduling_message ?? null,
     schedule_confirmed_at: row.schedule_confirmed_at ?? null,
+    consultation_duration_minutes: row.consultation_duration_minutes ?? null,
+    consultation_fee_usd:
+      row.consultation_fee_usd === null || row.consultation_fee_usd === undefined
+        ? null
+        : Number(row.consultation_fee_usd),
+    consultation_currency: row.consultation_currency ?? null,
     records_verified_at: row.records_verified_at ?? null,
     records
   };
@@ -1606,7 +1643,11 @@ export async function fetchOpinionRequestRecommendations(requestId: string) {
       created_at,
       doctors (
         full_name,
-        specialty
+        specialty,
+        consultation_tiers,
+        consultation_fee,
+        fee_usd,
+        consultation_currency
       )
     `
     )
@@ -1614,8 +1655,15 @@ export async function fetchOpinionRequestRecommendations(requestId: string) {
     .order('rank', { ascending: true, nullsFirst: true })
     .returns<
       Array<
-        Omit<OpinionRequestRecommendation, 'doctor_name' | 'doctor_specialty'> & {
-          doctors: { full_name: string; specialty: string } | null;
+        Omit<OpinionRequestRecommendation, 'doctor_name' | 'doctor_specialty' | 'doctor_consultation_tiers'> & {
+          doctors: {
+            full_name: string;
+            specialty: string;
+            consultation_tiers: unknown;
+            consultation_fee: number | null;
+            fee_usd: number | null;
+            consultation_currency: string | null;
+          } | null;
         }
       >
     >();
@@ -1630,18 +1678,35 @@ export async function fetchOpinionRequestRecommendations(requestId: string) {
       note: row.note,
       created_at: row.created_at,
       doctor_name: row.doctors?.full_name ?? null,
-      doctor_specialty: row.doctors?.specialty ?? null
+      doctor_specialty: row.doctors?.specialty ?? null,
+      doctor_consultation_tiers: row.doctors
+        ? parseConsultationTiers(
+            row.doctors.consultation_tiers,
+            Number(row.doctors.consultation_fee ?? row.doctors.fee_usd ?? 0)
+          )
+        : null,
+      doctor_consultation_currency: row.doctors
+        ? normalizeConsultationCurrency(row.doctors.consultation_currency)
+        : null
     })),
     error: null
   };
 }
 
-export async function markRecommendationsShared(requestId: string) {
+export async function markRecommendationsShared(
+  requestId: string,
+  input?: { consultationDurationMinutes?: number }
+) {
+  const update: Record<string, unknown> = { consultation_stage: 'recommended' };
+  if (input?.consultationDurationMinutes != null) {
+    update.consultation_duration_minutes = input.consultationDurationMinutes;
+  }
+
   let { data, error } = await supabase
     .from('opinion_requests')
-    .update({ consultation_stage: 'recommended' })
+    .update(update)
     .eq('id', requestId)
-    .select('id, consultation_stage')
+    .select('id, consultation_stage, consultation_duration_minutes')
     .single();
 
   if (error && isMissingWorkflowColumnsError(error)) {
@@ -1658,11 +1723,19 @@ export async function markRecommendationsShared(requestId: string) {
   return { data, error: null };
 }
 
-export async function patientSelectRecommendedDoctor(requestId: string, doctorId: string) {
+export async function patientSelectRecommendedDoctor(
+  requestId: string,
+  doctorId: string,
+  input?: { consultationDurationMinutes?: number | null }
+) {
   const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId);
   if (doctorError || !doctor) {
     return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
   }
+
+  const durationMinutes = input?.consultationDurationMinutes ?? null;
+  const consultationFeeUsd =
+    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
 
   const { data, error } = await supabase
     .from('opinion_requests')
@@ -1670,10 +1743,17 @@ export async function patientSelectRecommendedDoctor(requestId: string, doctorId
       selected_doctor_id: doctor.id,
       doctor_id: doctor.id,
       doctor_name: doctor.full_name,
-      consultation_stage: 'doctor_selected'
+      consultation_stage: 'doctor_selected',
+      ...(durationMinutes != null
+        ? {
+            consultation_duration_minutes: durationMinutes,
+            consultation_fee_usd: consultationFeeUsd,
+            consultation_currency: doctorConsultationCurrency(doctor)
+          }
+        : {})
     })
     .eq('id', requestId)
-    .select('id, selected_doctor_id, doctor_id, consultation_stage')
+    .select('id, selected_doctor_id, doctor_id, consultation_stage, consultation_duration_minutes, consultation_fee_usd, consultation_currency')
     .single();
   if (error) return { data: null, error };
   return { data, error: null };
@@ -1683,19 +1763,31 @@ export async function patientSelectRecommendedDoctor(requestId: string, doctorId
 export async function patientSelectDoctorWithAvailability(
   requestId: string,
   doctorId: string,
-  availability: unknown
+  availability: unknown,
+  input?: { consultationDurationMinutes?: number | null }
 ) {
   const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId);
   if (doctorError || !doctor) {
     return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
   }
 
+  const durationMinutes = input?.consultationDurationMinutes ?? null;
+  const consultationFeeUsd =
+    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+
   const payload = {
     selected_doctor_id: doctor.id,
     doctor_id: doctor.id,
     doctor_name: doctor.full_name,
     patient_availability: availability,
-    consultation_stage: 'availability_submitted' as const
+    consultation_stage: 'availability_submitted' as const,
+    ...(durationMinutes != null
+      ? {
+          consultation_duration_minutes: durationMinutes,
+          consultation_fee_usd: consultationFeeUsd,
+          consultation_currency: doctorConsultationCurrency(doctor)
+        }
+      : {})
   };
 
   let { data, error } = await supabase

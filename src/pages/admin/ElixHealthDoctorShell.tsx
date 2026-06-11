@@ -46,7 +46,7 @@ function ElixHealthDoctorRoutes({ doctor }: { doctor: Doctor }) {
       <Route index element={<DoctorDashboardPage {...pageProps} />} />
       <Route path='cases' element={<CaseReviewPage {...pageProps} />} />
       <Route path='consultation' element={<DoctorConsultationPage {...pageProps} />} />
-      <Route path='availability' element={<AvailabilityPage />} />
+      <Route path='availability' element={<AvailabilityPage {...pageProps} />} />
     </Routes>
   );
 }

@@ -6,6 +6,7 @@ import {
   Group,
   MultiSelect,
   Paper,
+  SegmentedControl,
   Stack,
   Text
 } from '@mantine/core';
@@ -15,6 +16,12 @@ import {
   markRecommendationsShared,
   saveOpinionRequestRecommendations
 } from '../../../lib/opinionRequests';
+import {
+  consultationDurationSelectOptions,
+  doctorConsultationCurrency,
+  formatConsultationTierLabel,
+  getTierFeeUsd
+} from '../../../lib/consultationTiers';
 import { formatPatientAvailability } from '../../../lib/doctorSchedule';
 import type { Doctor } from '../../../types/doctor';
 import type { OpinionRequest, OpinionRequestRecommendation } from '../../../types/opinionRequest';
@@ -42,6 +49,9 @@ export default function RecommendDoctorsSection({
 }: RecommendDoctorsSectionProps) {
   const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [selectedDoctorIds, setSelectedDoctorIds] = useState<string[]>([]);
+  const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<string>(
+    String(request.consultation_duration_minutes ?? 30)
+  );
   const [busy, setBusy] = useState(false);
 
   const loadRecommendations = useCallback(async () => {
@@ -60,10 +70,24 @@ export default function RecommendDoctorsSection({
     void loadRecommendations();
   }, [loadRecommendations]);
 
-  const doctorOptions = doctors.map((doctor) => ({
-    value: doctor.id,
-    label: `${doctor.full_name} · ${doctor.specialty}`
-  }));
+  const durationMinutes = Number(consultationDurationMinutes);
+
+  const doctorOptions = doctors.map((doctor) => {
+    const fee = Number.isFinite(durationMinutes)
+      ? getTierFeeUsd(doctor, durationMinutes)
+      : null;
+    const feeLabel =
+      fee != null && Number.isFinite(durationMinutes)
+        ? formatConsultationTierLabel(
+            { duration_minutes: durationMinutes, fee_usd: fee },
+            { currency: doctorConsultationCurrency(doctor) }
+          )
+        : null;
+    return {
+      value: doctor.id,
+      label: `${doctor.full_name} · ${doctor.specialty}${feeLabel ? ` · ${feeLabel}` : ''}`
+    };
+  });
 
   const sharedStages = [
     'recommended',
@@ -117,7 +141,9 @@ export default function RecommendDoctorsSection({
     }
 
     if (shareWithPatient) {
-      const { error: shareError } = await markRecommendationsShared(request.id);
+      const { error: shareError } = await markRecommendationsShared(request.id, {
+        consultationDurationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : undefined
+      });
       setBusy(false);
       if (shareError) {
         onError(shareError.message);
@@ -173,6 +199,21 @@ export default function RecommendDoctorsSection({
           {isSharedWithPatient ? 'Shared with patient' : 'Not shared yet'}
         </Badge>
       </Group>
+
+      <Stack gap={4} mb='sm'>
+        <Text size='sm' fw={600}>
+          Consultation duration for this case
+        </Text>
+        <Text size='xs' c='dimmed'>
+          Patients will see each doctor&apos;s fee for this session length.
+        </Text>
+        <SegmentedControl
+          value={consultationDurationMinutes}
+          onChange={setConsultationDurationMinutes}
+          data={consultationDurationSelectOptions()}
+          disabled={busy}
+        />
+      </Stack>
 
       <MultiSelect
         label='Doctors to recommend'

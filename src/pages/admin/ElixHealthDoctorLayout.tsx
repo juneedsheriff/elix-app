@@ -21,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'cases', label: 'Cases', path: ELIX_HEALTH_PATHS.workspaceCases, icon: ClipboardList },
   {
     id: 'availability',
-    label: 'Availability',
+    label: 'Scheduler',
     path: ELIX_HEALTH_PATHS.workspaceAvailability,
     icon: Calendar
   }

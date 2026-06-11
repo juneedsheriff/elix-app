@@ -2,6 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, Trash2 } from 'lucide-react';
 import { deleteDoctorForAdmin, setDoctorVisibilityForAdmin, updateDoctorForAdmin } from '../../../lib/admins';
+import {
+  CONSULTATION_CURRENCY_OPTIONS,
+  consultationCurrencySymbol,
+  normalizeConsultationCurrency
+} from '../../../lib/consultationCurrency';
 import { doctorToAdminInput } from '../../../lib/doctorProfile';
 import type { AdminDoctorUpdateInput, Doctor } from '../../../types/doctor';
 import ConsultationHoursEditor from './ConsultationHoursEditor';
@@ -462,15 +467,44 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
               />
             </label>
             <label className='elixhealth-field'>
-              <span>Consultation fee (USD)</span>
-              <input
-                type='number'
-                min={0}
-                value={form.consultation_fee}
-                onChange={(e) => setField('consultation_fee', Number(e.target.value))}
-                required
-              />
+              <span>Consultation currency</span>
+              <select
+                value={form.consultation_currency}
+                onChange={(e) =>
+                  setField('consultation_currency', normalizeConsultationCurrency(e.target.value))
+                }
+              >
+                {CONSULTATION_CURRENCY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
+            {form.consultation_tiers.map((tier) => (
+              <label key={tier.duration_minutes} className='elixhealth-field'>
+                <span>
+                  {tier.duration_minutes === 60 ? '1 hour' : `${tier.duration_minutes} min`} consultation
+                  fee ({consultationCurrencySymbol(form.consultation_currency)})
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={tier.fee_usd}
+                  onChange={(e) =>
+                    setField(
+                      'consultation_tiers',
+                      form.consultation_tiers.map((item) =>
+                        item.duration_minutes === tier.duration_minutes
+                          ? { ...item, fee_usd: Number(e.target.value) }
+                          : item
+                      )
+                    )
+                  }
+                  required
+                />
+              </label>
+            ))}
             <label className='elixhealth-field'>
               <span>Calendar color</span>
               <input

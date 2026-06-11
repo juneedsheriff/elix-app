@@ -1,6 +1,7 @@
 import { Loader2, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatConsultationFeeUsd } from '../../lib/doctors';
+import ConsultationTierPricingDisplay from './ConsultationTierPricingDisplay';
+import { formatConsultationTiersSummary } from '../../lib/consultationTiers';
 import type { Doctor } from '../../types/doctor';
 
 type DoctorProfilePanelProps = {
@@ -46,7 +47,7 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
               <div className='tag-row'>
                 <span className='tag'>{doctor.country}</span>
                 <span className='tag'>{doctor.languages}</span>
-                <span className='tag'>{formatConsultationFeeUsd(doctor.fee_usd)} consult</span>
+                <span className='tag'>{formatConsultationTiersSummary(doctor)}</span>
               </div>
             </div>
           </div>
@@ -73,8 +74,10 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
               <dd>{doctor.languages}</dd>
             </div>
             <div>
-              <dt>Consultation fee</dt>
-              <dd>{formatConsultationFeeUsd(doctor.fee_usd)}</dd>
+              <dt>Consultation fees</dt>
+              <dd>
+                <ConsultationTierPricingDisplay doctor={doctor} />
+              </dd>
             </div>
             <div>
               <dt>Rating</dt>

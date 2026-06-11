@@ -1,0 +1,69 @@
+.consultation-duration-select {
+  border: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.consultation-duration-select legend {
+  font-weight: 600;
+  margin-bottom: 0.65rem;
+  color: var(--text, #0f172a);
+}
+
+.consultation-duration-select__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.consultation-duration-select__options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.consultation-duration-select__option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1.5px solid var(--border, #d7e2ea);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.consultation-duration-select__option:hover:not(.consultation-duration-select__option--selected) {
+  border-color: rgba(9, 171, 192, 0.45);
+}
+
+.consultation-duration-select__option--selected {
+  border-color: var(--brand-cyan, #09abc0);
+  background: rgba(9, 171, 192, 0.08);
+  box-shadow: 0 0 0 1px rgba(9, 171, 192, 0.25);
+}
+
+.consultation-duration-select__option input[type='radio'] {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--brand-cyan, #09abc0);
+  cursor: pointer;
+}
+
+.consultation-duration-select__label {
+  font-weight: 500;
+  color: var(--text, #0f172a);
+  line-height: 1.35;
+}
+
+.consultation-duration-select__option--selected .consultation-duration-select__label {
+  font-weight: 600;
+  color: var(--brand-cyan-dark, #078a9a);
+}
+
+.consultation-duration-select:disabled .consultation-duration-select__option {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

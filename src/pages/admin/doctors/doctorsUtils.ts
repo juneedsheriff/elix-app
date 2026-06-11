@@ -120,7 +120,10 @@ export function exportDoctorsCsv(doctors: Doctor[]) {
       doctorClinicName(doctor),
       doctor.clinic_city ?? '',
       doctorCountry(doctor),
-      formatConsultationFeeUsd(doctor.consultation_fee ?? doctor.fee_usd),
+      formatConsultationFeeUsd(
+        doctor.consultation_fee ?? doctor.fee_usd,
+        doctor.consultation_currency ?? 'USD'
+      ),
       login
     ]
       .map(escape)

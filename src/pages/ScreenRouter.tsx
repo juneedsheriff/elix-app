@@ -47,7 +47,7 @@ export default function ScreenRouter({ screenId, onNavigate, ...pageProps }: Scr
     case 'doctor-analytics':
       return <DoctorDashboardPage {...pageProps} onNavigate={onNavigate} />;
     case 'availability':
-      return <AvailabilityPage />;
+      return <AvailabilityPage {...pageProps} />;
     case 'admin-dashboard':
     case 'admin-analytics':
       return <AdminDashboardPage />;

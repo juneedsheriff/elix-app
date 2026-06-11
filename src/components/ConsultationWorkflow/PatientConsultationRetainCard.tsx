@@ -1,6 +1,8 @@
 import { Calendar, ChevronRight, CircleDollarSign, Stethoscope } from 'lucide-react';
 import '../OpinionRequests/patient-my-requests.css';
 import type { OpinionRequest } from '../../types/opinionRequest';
+import { normalizeConsultationCurrency } from '../../lib/consultationCurrency';
+import { formatConsultationTierLabel } from '../../lib/consultationTiers';
 import { formatPatientAvailability } from '../../lib/doctorSchedule';
 import { patientRequestStatusLabel } from '../../lib/opinionRequests';
 import {
@@ -134,9 +136,32 @@ export default function PatientConsultationRetainCard({
         ? 'Payment details'
         : 'Your consultation details';
 
+  const consultationFeeLine =
+    request.consultation_duration_minutes && request.consultation_fee_usd != null
+      ? formatConsultationTierLabel(
+          {
+            duration_minutes: request.consultation_duration_minutes,
+            fee_usd: request.consultation_fee_usd
+          },
+          { currency: normalizeConsultationCurrency(request.consultation_currency) }
+        )
+      : null;
+
   const details =
-    showPreferredTime || confirmedAppointment || (showPaymentBlock && paymentLine) ? (
+    showPreferredTime ||
+    confirmedAppointment ||
+    consultationFeeLine ||
+    (showPaymentBlock && paymentLine) ? (
       <ul className='pmr-card__details patient-consultation-retain__details'>
+        {consultationFeeLine ? (
+          <li className='pmr-detail'>
+            <CircleDollarSign size={15} className='pmr-detail__icon' aria-hidden />
+            <span>
+              <span className='pmr-detail__label'>Consultation fee</span>
+              <span className='pmr-detail__value'>{consultationFeeLine}</span>
+            </span>
+          </li>
+        ) : null}
         {showPreferredTime ? (
           <li className='pmr-detail'>
             <Calendar size={15} className='pmr-detail__icon' aria-hidden />

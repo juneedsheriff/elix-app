@@ -21,6 +21,13 @@ export type TimeSettings = {
   lunch_break_end?: string;
 };
 
+export type ConsultationCurrency = 'USD' | 'INR';
+
+export type ConsultationTier = {
+  duration_minutes: number;
+  fee_usd: number;
+};
+
 export type Doctor = {
   id: string;
   full_name: string;
@@ -49,6 +56,8 @@ export type Doctor = {
   scheduler_effect_from: string | null;
   scheduler_time_interval: number | null;
   consultation_fee: number | null;
+  consultation_tiers?: ConsultationTier[];
+  consultation_currency?: ConsultationCurrency;
   elix_patient_priority: boolean;
   scheduler_color: string | null;
   consultation_hours: ConsultationHours;
@@ -101,6 +110,8 @@ export type AdminDoctorUpdateInput = {
   scheduler_effect_from: string | null;
   scheduler_time_interval: number | null;
   consultation_fee: number;
+  consultation_tiers: ConsultationTier[];
+  consultation_currency: ConsultationCurrency;
   elix_patient_priority: boolean;
   scheduler_color: string;
   consultation_hours: ConsultationHours;

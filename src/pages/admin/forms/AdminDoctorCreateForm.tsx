@@ -217,16 +217,30 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                   onChange={(e) => setField('clinic_specialization', e.target.value || null)}
                 />
               </label>
-              <label className='elixhealth-field'>
-                <span>Consultation fee (USD)</span>
-                <input
-                  type='number'
-                  min={0}
-                  value={form.consultation_fee}
-                  onChange={(e) => setField('consultation_fee', Number(e.target.value))}
-                  required
-                />
-              </label>
+              {form.consultation_tiers.map((tier) => (
+                <label key={tier.duration_minutes} className='elixhealth-field'>
+                  <span>
+                    {tier.duration_minutes === 60 ? '1 hour' : `${tier.duration_minutes} min`} consultation
+                    fee (USD)
+                  </span>
+                  <input
+                    type='number'
+                    min={0}
+                    value={tier.fee_usd}
+                    onChange={(e) =>
+                      setField(
+                        'consultation_tiers',
+                        form.consultation_tiers.map((item) =>
+                          item.duration_minutes === tier.duration_minutes
+                            ? { ...item, fee_usd: Number(e.target.value) }
+                            : item
+                        )
+                      )
+                    }
+                    required
+                  />
+                </label>
+              ))}
               <label className='elixhealth-field elixhealth-field--full'>
                 <span>About clinic</span>
                 <textarea

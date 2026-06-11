@@ -19,6 +19,7 @@ import ElixHealthPatientsPage from './ElixHealthPatientsPage';
 import ElixHealthRequestsPage from './ElixHealthRequestsPage';
 import ElixHealthStaffPage from './ElixHealthStaffPage';
 import { AdministratorOnly } from './AdministratorOnly';
+import ElixPreloader from '../../components/ui/ElixPreloader';
 
 export default function ElixHealthApp() {
   const navigate = useNavigate();
@@ -112,11 +113,7 @@ export default function ElixHealthApp() {
       : null;
 
   if (authLoading || checking) {
-    return (
-      <div className='elixhealth-shell'>
-        <p className='muted'>Loading…</p>
-      </div>
-    );
+    return <ElixPreloader />;
   }
 
   return (

@@ -1,3 +1,5 @@
+import type { ConsultationTier } from './doctor';
+
 export type OpinionRequestStatus = 'submitted' | 'in_review' | 'closed';
 
 export type ConsultationStage =
@@ -33,6 +35,8 @@ export type OpinionRequestRecommendation = {
   created_at: string;
   doctor_name: string | null;
   doctor_specialty: string | null;
+  doctor_consultation_tiers?: ConsultationTier[] | null;
+  doctor_consultation_currency?: string | null;
 };
 
 export type ConsultationSummary = {
@@ -86,6 +90,9 @@ export type OpinionRequest = {
   payment_proof_file_name: string | null;
   payment_proof_mime_type: string | null;
   payment_proof_submitted_at: string | null;
+  consultation_duration_minutes: number | null;
+  consultation_fee_usd: number | null;
+  consultation_currency: string | null;
   pse_scheduling_message: string | null;
   schedule_confirmed_at: string | null;
   records_verified_at: string | null;
