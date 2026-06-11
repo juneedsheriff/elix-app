@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { useSupabase } from '../../context/SupabaseProvider';
 import { adminSignIn, adminSignOut, fetchAdminByAuthUserId } from '../../lib/admins';
@@ -18,28 +18,35 @@ import { AdministratorOnly } from './AdministratorOnly';
 export default function ElixHealthApp() {
   const navigate = useNavigate();
   const { configured, loading: authLoading, session } = useSupabase();
+  const userId = session?.user?.id ?? null;
   const [admin, setAdmin] = useState<Admin | null>(null);
+  const adminRef = useRef(admin);
+  adminRef.current = admin;
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const verifySession = useCallback(async () => {
-    if (!session?.user) {
+    if (!userId) {
       setAdmin(null);
       setChecking(false);
       return;
     }
 
-    setChecking(true);
-    const { data, error: fetchError } = await fetchAdminByAuthUserId(session.user.id);
+    const alreadyVerified = adminRef.current?.auth_user_id === userId;
+    if (!alreadyVerified) {
+      setChecking(true);
+    }
+
+    const { data, error: fetchError } = await fetchAdminByAuthUserId(userId);
     if (fetchError || !data) {
       setAdmin(null);
-      if (session) await adminSignOut();
+      await adminSignOut();
     } else {
       setAdmin(data);
     }
     setChecking(false);
-  }, [session]);
+  }, [userId]);
 
   useEffect(() => {
     if (authLoading) return;
