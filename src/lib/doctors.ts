@@ -1,17 +1,17 @@
-import type { Doctor } from '../types/doctor';
+import type { ConsultationCurrency, ConsultationTier, Doctor } from '../types/doctor';
+import { formatConsultationFee } from './consultationCurrency';
+import { normalizeConsultationTiersInput } from './consultationTiers';
 import { DOCTOR_PROFILE_COLUMNS, normalizeDoctorProfile } from './doctorProfile';
 import { supabase } from './supabase';
 
 const doctorColumns = DOCTOR_PROFILE_COLUMNS;
 
-/** Display consultation fee from doctors.fee_usd (whole US dollars). */
-export function formatConsultationFeeUsd(feeUsd: number): string {
-  const amount = Number.isFinite(feeUsd) ? Math.max(0, Math.round(feeUsd)) : 0;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0
-  }).format(amount);
+/** Display consultation fee in the doctor's currency (defaults to USD). */
+export function formatConsultationFeeUsd(
+  feeUsd: number,
+  currency: ConsultationCurrency = 'USD'
+): string {
+  return formatConsultationFee(feeUsd, currency);
 }
 
 /** Supabase may return numeric columns as strings; normalize for UI. */
@@ -106,4 +106,28 @@ export async function fetchDoctorSpecialties() {
   ].sort((a, b) => a.localeCompare(b));
 
   return { data: specialties, error: null };
+}
+
+export async function updateDoctorConsultationPricing(
+  tiers: ConsultationTier[],
+  currency: ConsultationCurrency
+) {
+  const normalized = normalizeConsultationTiersInput(tiers);
+  const { error } = await supabase.rpc('update_own_doctor_consultation_pricing', {
+    p_tiers: normalized,
+    p_currency: currency
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { data: null, error: { message: 'Not signed in.' } };
+  }
+
+  return fetchDoctorByAuthUserId(user.id);
 }

@@ -1543,11 +1543,16 @@ select {
 .record-select-text {
   display: grid;
   gap: 0.2rem;
+  flex: 1;
   min-width: 0;
 }
 
 .record-select-text strong {
   font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .record-select-text .muted {

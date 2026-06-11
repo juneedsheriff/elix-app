@@ -28,6 +28,8 @@
     "db:apply-opinion-request-files": "node scripts/apply-opinion-request-files.mjs",
     "db:apply-scheduling-coordination": "node scripts/apply-scheduling-coordination.mjs",
     "db:apply-payment-proof": "node scripts/apply-payment-proof.mjs",
+    "db:apply-consultation-duration-pricing": "node scripts/apply-consultation-duration-pricing.mjs",
+    "db:apply-consultation-currency": "node scripts/apply-consultation-currency.mjs",
     "db:apply-consultation-summary-pdf": "node scripts/apply-consultation-summary-pdf.mjs",
     "db:apply-recommendation-opinion-requests": "node scripts/apply-recommendation-opinion-requests.mjs",
     "db:apply-doctors-insert-admins": "node scripts/apply-doctors-insert-admins.mjs",

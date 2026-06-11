@@ -1,9 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
+import ConsultationDurationSelect from '../ConsultationWorkflow/ConsultationDurationSelect';
+import {
+  preferredDurationTiers,
+  STANDARD_CONSULTATION_DURATIONS
+} from '../../lib/consultationTiers';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import { createRecommendationOpinionRequest } from '../../lib/opinionRequests';
 import { fetchUserMedicalRecords } from '../../lib/records';
+import { truncateFileName } from '../../lib/truncateLabel';
 import type { MedicalRecord } from '../../types/medicalRecord';
 
 type RecommendationOpinionFormProps = {
@@ -22,6 +28,9 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
+  const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<number>(
+    STANDARD_CONSULTATION_DURATIONS[1]
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -112,6 +121,10 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       setSubmitError('Select at least one medical record to share.');
       return;
     }
+    if (!consultationDurationMinutes) {
+      setSubmitError('Choose how long you need for the consultation.');
+      return;
+    }
 
     setSubmitting(true);
     const patientName =
@@ -125,7 +138,8 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       recordIds: [...selectedIds],
       patientId: user?.id ?? null,
       patientName,
-      requestedSpecialty: selectedSpecialty
+      requestedSpecialty: selectedSpecialty,
+      consultationDurationMinutes
     });
     setSubmitting(false);
 
@@ -204,6 +218,16 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
           ) : null}
         </label>
 
+        <ConsultationDurationSelect
+          tiers={preferredDurationTiers()}
+          value={consultationDurationMinutes}
+          onChange={setConsultationDurationMinutes}
+          disabled={submitting}
+          label='Preferred consultation duration'
+          hint='Choose how long you need with the specialist. Exact pricing will be shown when doctors are recommended for your case.'
+          showFees={false}
+        />
+
         <fieldset className='opinion-fieldset'>
           <legend>Select medical records</legend>
           {recordsLoading ? (
@@ -237,7 +261,7 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
                   />
                   <FileText size={20} aria-hidden />
                   <span className='record-select-text'>
-                    <strong>{record.file_name}</strong>
+                    <strong title={record.file_name}>{truncateFileName(record.file_name)}</strong>
                     {record.summary ? <span className='muted'>{record.summary}</span> : null}
                   </span>
                 </label>

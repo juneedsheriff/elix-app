@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Star } from 'lucide-react';
-import { fetchDoctors, formatConsultationFeeUsd } from '../../lib/doctors';
+import { formatConsultationTiersSummary } from '../../lib/consultationTiers';
+import { fetchDoctors } from '../../lib/doctors';
 import type { Doctor } from '../../types/doctor';
 
 function DoctorCard({ doctor, onSelect }: { doctor: Doctor; onSelect: (doctor: Doctor) => void }) {
@@ -25,7 +26,7 @@ function DoctorCard({ doctor, onSelect }: { doctor: Doctor; onSelect: (doctor: D
         <div className='tag-row'>
           <span className='tag'>{doctor.rating.toFixed(1)} rating</span>
           <span className='tag'>{doctor.languages}</span>
-          <span className='tag'>{formatConsultationFeeUsd(doctor.fee_usd)}</span>
+          <span className='tag'>{formatConsultationTiersSummary(doctor)}</span>
         </div>
         <button type='button' className='text-btn doctor-view-btn' onClick={() => onSelect(doctor)}>
           View profile
@@ -80,7 +81,7 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
         d.country.toLowerCase().includes(q) ||
         d.languages.toLowerCase().includes(q) ||
         String(d.fee_usd).includes(q) ||
-        formatConsultationFeeUsd(d.fee_usd).toLowerCase().includes(q)
+        formatConsultationTiersSummary(d).toLowerCase().includes(q)
     );
   }, [doctors, query]);
 

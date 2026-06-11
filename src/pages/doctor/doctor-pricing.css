@@ -1,0 +1,29 @@
+.doctor-pricing-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.doctor-pricing-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.doctor-pricing-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.doctor-pricing-field input,
+.doctor-pricing-field select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  font: inherit;
+}
+
+.doctor-pricing-field--currency {
+  max-width: 320px;
+}

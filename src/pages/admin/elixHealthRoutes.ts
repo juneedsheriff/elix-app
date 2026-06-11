@@ -37,7 +37,7 @@ export function doctorNavIdFromPathname(pathname: string): ElixHealthDoctorNavId
 export function doctorPageTitleFromPathname(pathname: string): string {
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceConsultation)) return 'Consultation';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'Cases';
-  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Availability';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Scheduler';
   return 'Dashboard';
 }
 

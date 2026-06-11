@@ -26,6 +26,11 @@ import {
   pseSetPaymentPending,
   subscribeOpinionRequestLiveUpdates
 } from '../../../lib/opinionRequests';
+import {
+  formatConsultationFee,
+  normalizeConsultationCurrency
+} from '../../../lib/consultationCurrency';
+import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
 import AppointmentDateTimePicker from './AppointmentDateTimePicker';
 import PsePaymentStepPanel from './PsePaymentStepPanel';
 import PseRequestRecordsGallery from './PseRequestRecordsGallery';
@@ -98,7 +103,7 @@ export default function RequestWorkflowWizard({
       setScheduledAt(null);
     }
     setMeetingLink(request.meeting_link ?? '');
-    setPaymentAmount(request.payment_amount ?? '');
+    setPaymentAmount(request.payment_amount ?? request.consultation_fee_usd ?? '');
     setPaymentCurrency(request.payment_currency ?? 'USD');
     setPaymentReference(request.payment_reference ?? '');
     setPaymentLink(request.payment_link ?? '');
@@ -274,6 +279,18 @@ export default function RequestWorkflowWizard({
               {request.doctor_name ?? request.requested_specialty ?? '—'}
               {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
             </Text>
+            {request.consultation_duration_minutes && request.consultation_fee_usd != null ? (
+              <Text size='sm'>
+                <Text span fw={600}>
+                  Consultation quote:{' '}
+                </Text>
+                {formatDurationMinutesLabel(request.consultation_duration_minutes)} ·{' '}
+                {formatConsultationFee(
+                  request.consultation_fee_usd,
+                  normalizeConsultationCurrency(request.consultation_currency)
+                )}
+              </Text>
+            ) : null}
             <Text size='sm' c='dimmed'>
               Submitted {formatRequestDate(request.created_at)}
             </Text>
