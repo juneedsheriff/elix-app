@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSupabase } from '../../context/SupabaseProvider';
-import { adminSignIn, adminSignOut, fetchAdminByAuthUserId } from '../../lib/admins';
+import { adminSignOut, fetchAdminByAuthUserId } from '../../lib/admins';
+import { elixhealthSignIn } from '../../lib/elixhealthAuth';
+import { appScreenPath } from '../../lib/navigation/appRoutes';
+import { clearAuthSurface, getAuthSurface, setAuthSurface } from '../../lib/navigation/authSurface';
 import type { Admin } from '../../types/admin';
 import { ElixHealthAdminGuard } from './ElixHealthAdminShell';
 import ElixHealthDoctorCreatePage from './ElixHealthDoctorCreatePage';
 import ElixHealthDoctorEditPage from './ElixHealthDoctorEditPage';
 import ElixHealthDoctorsPage from './ElixHealthDoctorsPage';
+import { doctorSignOut, ElixHealthDoctorGuard } from './ElixHealthDoctorShell';
+import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import ElixHealthLogin from './ElixHealthLogin';
 import ElixHealthOverviewPage from './ElixHealthOverviewPage';
 import ElixHealthPatientEditPage from './ElixHealthPatientEditPage';
@@ -17,7 +22,8 @@ import { AdministratorOnly } from './AdministratorOnly';
 
 export default function ElixHealthApp() {
   const navigate = useNavigate();
-  const { configured, loading: authLoading, session } = useSupabase();
+  const location = useLocation();
+  const { configured, loading: authLoading, session, doctorProfile } = useSupabase();
   const userId = session?.user?.id ?? null;
   const [admin, setAdmin] = useState<Admin | null>(null);
   const adminRef = useRef(admin);
@@ -25,6 +31,12 @@ export default function ElixHealthApp() {
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isDoctorUser =
+    !admin &&
+    doctorProfile != null &&
+    doctorProfile.auth_user_id === userId &&
+    !doctorProfile.login_disabled;
 
   const verifySession = useCallback(async () => {
     if (!userId) {
@@ -38,13 +50,8 @@ export default function ElixHealthApp() {
       setChecking(true);
     }
 
-    const { data, error: fetchError } = await fetchAdminByAuthUserId(userId);
-    if (fetchError || !data) {
-      setAdmin(null);
-      await adminSignOut();
-    } else {
-      setAdmin(data);
-    }
+    const { data } = await fetchAdminByAuthUserId(userId);
+    setAdmin(data ?? null);
     setChecking(false);
   }, [userId]);
 
@@ -53,24 +60,56 @@ export default function ElixHealthApp() {
     void verifySession();
   }, [authLoading, verifySession]);
 
+  useEffect(() => {
+    if (authLoading || checking) return;
+    if (!isDoctorUser || location.pathname.endsWith('/login')) return;
+    if (getAuthSurface() === 'mobile') {
+      navigate(appScreenPath('doctor-dashboard'), { replace: true });
+    }
+  }, [authLoading, checking, isDoctorUser, location.pathname, navigate]);
+
   const handleSignIn = async (email: string, password: string) => {
     setBusy(true);
     setError(null);
-    const { error: signInError, admin: signedInAdmin } = await adminSignIn(email, password);
+    const { error: signInError, admin: signedInAdmin, doctor: signedInDoctor } = await elixhealthSignIn(
+      email,
+      password
+    );
     setBusy(false);
     if (signInError) {
       setError(signInError.message);
       return;
     }
-    setAdmin(signedInAdmin);
-    navigate('/elixhealth', { replace: true });
+
+    setAuthSurface('desktop');
+    if (signedInAdmin) {
+      setAdmin(signedInAdmin);
+      navigate(ELIX_HEALTH_PATHS.overview, { replace: true });
+      return;
+    }
+    if (signedInDoctor) {
+      setAdmin(null);
+      navigate(ELIX_HEALTH_PATHS.workspace, { replace: true });
+    }
   };
 
-  const handleSignOut = async () => {
+  const handleStaffSignOut = async () => {
+    clearAuthSurface();
     await adminSignOut();
     setAdmin(null);
     navigate('/elixhealth/login', { replace: true });
   };
+
+  const handleDoctorSignOut = async () => {
+    await doctorSignOut();
+    navigate('/elixhealth/login', { replace: true });
+  };
+
+  const loginRedirect = admin
+    ? ELIX_HEALTH_PATHS.overview
+    : isDoctorUser
+      ? ELIX_HEALTH_PATHS.workspace
+      : null;
 
   if (authLoading || checking) {
     return (
@@ -85,8 +124,8 @@ export default function ElixHealthApp() {
       <Route
         path='login'
         element={
-          admin ? (
-            <Navigate to='/elixhealth' replace />
+          loginRedirect ? (
+            <Navigate to={loginRedirect} replace />
           ) : (
             <ElixHealthLogin
               configured={configured}
@@ -98,7 +137,7 @@ export default function ElixHealthApp() {
         }
       />
       <Route
-        element={<ElixHealthAdminGuard admin={admin} onSignOut={() => void handleSignOut()} />}
+        element={<ElixHealthAdminGuard admin={admin} onSignOut={() => void handleStaffSignOut()} />}
       >
         <Route index element={<ElixHealthOverviewPage />} />
         <Route path='doctors' element={<ElixHealthDoctorsPage />} />
@@ -116,7 +155,21 @@ export default function ElixHealthApp() {
         <Route path='requests' element={<ElixHealthRequestsPage />} />
         <Route path='staff' element={<AdministratorOnly><ElixHealthStaffPage /></AdministratorOnly>} />
       </Route>
-      <Route path='*' element={<Navigate to={admin ? '/elixhealth' : '/elixhealth/login'} replace />} />
+      <Route
+        path='workspace/*'
+        element={
+          <ElixHealthDoctorGuard doctor={isDoctorUser ? doctorProfile : null} onSignOut={() => void handleDoctorSignOut()} />
+        }
+      />
+      <Route
+        path='*'
+        element={
+          <Navigate
+            to={admin ? ELIX_HEALTH_PATHS.overview : isDoctorUser ? ELIX_HEALTH_PATHS.workspace : '/elixhealth/login'}
+            replace
+          />
+        }
+      />
     </Routes>
   );
 }
