@@ -90,7 +90,10 @@ async function getDoctorIdForAuthUser(
 
   const base = env.SUPABASE_URL.replace(/\/$/, '');
   const url = `${base}/rest/v1/doctors?auth_user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`;
-  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+  const res = await fetch(url, {
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
+  });
   if (!res.ok) return null;
 
   const rows = (await res.json()) as { id?: string }[];
@@ -112,7 +115,10 @@ async function canDoctorUploadConsultationSummary(
 
   const base = env.SUPABASE_URL.replace(/\/$/, '');
   const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&doctor_id=eq.${encodeURIComponent(doctorId)}&select=id&limit=1`;
-  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+  const res = await fetch(url, {
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
+  });
   if (!res.ok) return false;
 
   const rows = (await res.json()) as unknown[];
@@ -453,7 +459,7 @@ export default {
         return jsonResponse(
           {
             error: 'Unauthorized',
-            hint: 'Send Authorization: Bearer <supabase_access_token> from a signed-in patient session.'
+            hint: 'Send Authorization: Bearer <supabase_access_token> from a signed-in Elix Health session (patient, doctor, or staff).'
           },
           401,
           origin,

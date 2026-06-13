@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { ensureFreshAccessToken } from './supabaseSession';
 
 const apiBase = import.meta.env.VITE_R2_API_URL?.replace(/\/$/, '') ?? '';
 
@@ -9,8 +10,7 @@ export function isR2StorageConfigured(): boolean {
 type R2ApiError = { message: string };
 
 async function getAccessToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  return ensureFreshAccessToken();
 }
 
 async function r2ApiRequest<T>(
@@ -50,7 +50,9 @@ async function r2ApiRequest<T>(
   if (!response.ok) {
     return {
       data: null,
-      error: { message: payload.error ?? `Storage API error (${response.status})` }
+      error: {
+        message: payload.error ?? `Storage API error (${response.status}).`
+      }
     };
   }
 

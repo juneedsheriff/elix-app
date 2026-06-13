@@ -557,6 +557,10 @@ export function hasConsultationSummary(summary: ConsultationSummary | null | und
   return Boolean(
     summary.pdf_storage_path?.trim() ||
       summary.chief_complaint?.trim() ||
+      summary.history_present_illness?.trim() ||
+      summary.vital_signs?.trim() ||
+      summary.current_medications?.trim() ||
+      summary.labs_diagnostics?.trim() ||
       summary.assessment_plan?.trim() ||
       summary.prescription?.trim()
   );

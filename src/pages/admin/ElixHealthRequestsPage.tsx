@@ -68,6 +68,7 @@ export default function ElixHealthRequestsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<OpinionRequest | null>(null);
   const [assigneeId, setAssigneeId] = useState('');
+  const assigneeDraftRef = useRef<Map<string, string>>(new Map());
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const stageSnapshotRef = useRef<Map<string, string | null>>(new Map());
 
@@ -143,7 +144,7 @@ export default function ElixHealthRequestsPage() {
         if (!current) return null;
         const updated = next.find((request) => request.id === current.id);
         if (!updated) return null;
-        return {
+        const merged = {
           ...current,
           ...updated,
           assigned_to: updated.assigned_to ?? current.assigned_to,
@@ -167,6 +168,10 @@ export default function ElixHealthRequestsPage() {
           invoice_total: updated.invoice_total ?? current.invoice_total,
           records: updated.records.length ? updated.records : current.records
         };
+        if (merged.assigned_to) {
+          setAssigneeId(merged.assigned_to);
+        }
+        return merged;
       });
     }
     setRefreshing(false);
@@ -226,9 +231,25 @@ export default function ElixHealthRequestsPage() {
     exportRequestsCsv(filteredRequests);
   }, [filteredRequests]);
 
+  useEffect(() => {
+    if (!drawerOpen || !selectedRequest?.assigned_to) return;
+    setAssigneeId(selectedRequest.assigned_to);
+  }, [drawerOpen, selectedRequest?.id, selectedRequest?.assigned_to]);
+
+  const handleAssigneeChange = useCallback(
+    (value: string) => {
+      setAssigneeId(value);
+      if (selectedRequest && !selectedRequest.assigned_to && value) {
+        assigneeDraftRef.current.set(selectedRequest.id, value);
+      }
+    },
+    [selectedRequest]
+  );
+
   const openRequest = useCallback((request: OpinionRequest) => {
     setSelectedRequest(request);
-    setAssigneeId(request.assigned_to ?? '');
+    const draft = assigneeDraftRef.current.get(request.id);
+    setAssigneeId(request.assigned_to ?? draft ?? '');
     setActionMessage(null);
     setSuccessMessage(null);
     setDrawerOpen(true);
@@ -314,11 +335,10 @@ export default function ElixHealthRequestsPage() {
       consultation_stage: 'assigned'
     });
     setAssigneeId(assigneeId);
+    assigneeDraftRef.current.delete(selectedRequest.id);
     setSuccessMessage(
       `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executiveName}.`
     );
-    setDrawerOpen(false);
-    setSelectedRequest(null);
     void refresh();
   };
 
@@ -418,7 +438,7 @@ export default function ElixHealthRequestsPage() {
         executives={executives}
         doctors={doctors}
         assigneeId={assigneeId}
-        onAssigneeChange={setAssigneeId}
+        onAssigneeChange={handleAssigneeChange}
         busy={busyId === selectedRequest?.id}
         onAssign={() => void handleAssign()}
         onOpenRecord={(path) => void openRecord(path)}

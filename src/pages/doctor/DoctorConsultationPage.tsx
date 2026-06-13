@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Loader2, Eraser } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { ArrowLeft, FileUp, Loader2, Eraser } from 'lucide-react';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
+import ConsultationSummaryPdfView from '../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
 import {
   CONSULTATION_SUMMARY_FIELDS,
   consultationSummaryToFormValues,
@@ -19,19 +20,35 @@ import {
   getDoctorConsultationRequestId
 } from '../../lib/navigation/doctorConsultationNav';
 import {
+  consultationNotesPdfValidationError,
   fetchConsultationSummary,
   fetchDoctorOpinionRequests,
-  saveDoctorConsultation
+  saveDoctorConsultation,
+  saveDoctorConsultationUpload
 } from '../../lib/opinionRequests';
-import type { OpinionRequest } from '../../types/opinionRequest';
+import { hasConsultationSummary } from '../../lib/consultationWizard';
+import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
 
-export default function DoctorConsultationPage({ dbConnected, onNavigate }: ScreenPageProps) {
+type ConsultationMode = 'fill' | 'upload';
+
+export default function DoctorConsultationPage({
+  dbConnected,
+  doctorProfile,
+  onNavigate
+}: ScreenPageProps) {
   const [request, setRequest] = useState<OpinionRequest | null>(null);
+  const [summary, setSummary] = useState<ConsultationSummary | null>(null);
   const [values, setValues] = useState<ConsultationSummaryFormValues>(emptyConsultationSummaryValues);
+  const [mode, setMode] = useState<ConsultationMode>('fill');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadNote, setUploadNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const consultationRequestIdRef = useRef(getDoctorConsultationRequestId());
 
   const [returnScreen] = useState(() => consumeReturnScreen() ?? 'case-review');
 
@@ -52,7 +69,7 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
     stop: stopVoice
   } = useConsultationVoiceDictation({ onDictated: handleDictated });
 
-  const consultationReady = !loading && Boolean(request);
+  const consultationReady = !loading && Boolean(request) && mode === 'fill';
   const {
     status: micStatus,
     requesting: micRequesting,
@@ -76,12 +93,25 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
 
   const goBack = useCallback(() => {
     stopVoice();
-    clearDoctorConsultationRequestId();
     onNavigate?.(returnScreen);
+    clearDoctorConsultationRequestId();
+    consultationRequestIdRef.current = null;
   }, [onNavigate, returnScreen, stopVoice]);
 
+  const switchMode = useCallback(
+    (nextMode: ConsultationMode) => {
+      if (nextMode === 'upload') {
+        stopVoice();
+      }
+      setMode(nextMode);
+      setError(null);
+      setSuccessMessage(null);
+    },
+    [stopVoice]
+  );
+
   const load = useCallback(async () => {
-    const requestId = getDoctorConsultationRequestId();
+    const requestId = consultationRequestIdRef.current;
     if (!requestId || !dbConnected) {
       setRequest(null);
       setLoading(false);
@@ -112,6 +142,7 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
     }
 
     setRequest(match);
+    setSummary(summaryRes.data ?? null);
 
     const fromSummary = consultationSummaryToFormValues(summaryRes.data);
     const hasSummary = Object.values(fromSummary).some(Boolean);
@@ -123,6 +154,10 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
       setValues(emptyConsultationSummaryValues());
     }
 
+    if (summaryRes.data?.pdf_storage_path && !hasSummary) {
+      setMode('upload');
+    }
+
     setLoading(false);
   }, [dbConnected]);
 
@@ -130,7 +165,7 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
     void load();
   }, [load]);
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleFillSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!request) return;
 
@@ -163,22 +198,78 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
       prescription: values.prescription.trim() || null
     };
 
-    const { error: submitError } = await saveDoctorConsultation(
+    const { data: savedSummary, error: submitError } = await saveDoctorConsultation(
       request.id,
       request,
       payload,
-      formatConsultationResponse(values)
+      formatConsultationResponse(values),
+      doctorProfile
     );
     setSubmitting(false);
     if (submitError) {
       setError(submitError.message);
       return;
     }
-    clearDoctorConsultationRequestId();
-    onNavigate?.(returnScreen);
+    if (savedSummary) setSummary(savedSummary);
+    setSuccessMessage('Consultation notes submitted successfully.');
+    setError(null);
+    void load();
   };
 
-  if (!getDoctorConsultationRequestId()) {
+  const handleUploadSubmit = async () => {
+    if (!request) return;
+
+    if (!uploadFile) {
+      setError('Select a PDF file to upload.');
+      return;
+    }
+
+    const validationError = consultationNotesPdfValidationError(uploadFile);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const { data: savedSummary, error: submitError } = await saveDoctorConsultationUpload(
+      request.id,
+      request,
+      uploadFile,
+      uploadNote,
+      doctorProfile
+    );
+    setSubmitting(false);
+    if (submitError) {
+      setError(submitError.message);
+      return;
+    }
+    if (savedSummary) setSummary(savedSummary);
+    setUploadFile(null);
+    setUploadNote('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSuccessMessage('Consultation notes uploaded successfully.');
+    setError(null);
+    void load();
+  };
+
+  const handleFileChange = (file: File | null) => {
+    if (!file) {
+      setUploadFile(null);
+      return;
+    }
+    const validationError = consultationNotesPdfValidationError(file);
+    if (validationError) {
+      setError(validationError);
+      setUploadFile(null);
+      return;
+    }
+    setError(null);
+    setUploadFile(file);
+  };
+
+  if (!consultationRequestIdRef.current) {
     return (
       <div className='doctor-consultation-page'>
         <button type='button' className='secondary-btn doctor-consultation-page__back' onClick={goBack}>
@@ -193,17 +284,15 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
   return (
     <div className='doctor-consultation-page'>
       <header className='doctor-consultation-page__header'>
-       
         <div className='doctor-consultation-page__heading'>
-        <button
-          type='button'
-          className='secondary-btn doctor-consultation-page__back'
-          onClick={goBack}
-          disabled={submitting}
-        >
-          <ArrowLeft size={18} aria-hidden />
-       
-        </button>
+          <button
+            type='button'
+            className='secondary-btn doctor-consultation-page__back'
+            onClick={goBack}
+            disabled={submitting}
+          >
+            <ArrowLeft size={18} aria-hidden />
+          </button>
           <h2 className='doctor-consultation-page__title'>Consultation</h2>
           {request ? (
             <p className='doctor-consultation-page__subtitle muted'>
@@ -226,120 +315,233 @@ export default function DoctorConsultationPage({ dbConnected, onNavigate }: Scre
         </p>
       ) : null}
 
+      {successMessage ? (
+        <p className='doctor-consultation-page__success' role='status'>
+          {successMessage}
+        </p>
+      ) : null}
+
       {!loading && request ? (
         <>
-          {micGateActive ? (
-            <MicrophonePermissionModal
-              status={micStatus}
-              requesting={micRequesting}
-              onAllow={requestMicAccess}
-              onContinueWithoutVoice={skipMicGate}
-            />
+          {hasConsultationSummary(summary) && summary ? (
+            <ConsultationSummaryPdfView summary={summary} request={request} />
           ) : null}
 
-          <form
-            id='doctor-consultation-form'
-            className='doctor-consultation-page__form'
-            onSubmit={(e) => void handleSubmit(e)}
-          >
-            <div
-              className={`doctor-consultation-page__fields ${micGateActive ? 'doctor-consultation-page__fields--locked' : ''}`}
-              aria-hidden={micGateActive}
+          <div className='doctor-consultation-page__tabs' role='tablist' aria-label='Consultation notes mode'>
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'fill'}
+              className={`doctor-consultation-page__tab${mode === 'fill' ? ' doctor-consultation-page__tab--active' : ''}`}
+              onClick={() => switchMode('fill')}
+              disabled={submitting}
             >
-          {voiceEnabled ? (
-            <p className='doctor-respond-voice-tip muted'>
-              Tap Voice on any field to dictate. Say &ldquo;new line&rdquo;, &ldquo;comma&rdquo;, or &ldquo;period&rdquo; for
-              formatting; lists are structured automatically for meds and prescriptions.
-            </p>
-          ) : null}
+              Fill notes
+            </button>
+            <button
+              type='button'
+              role='tab'
+              aria-selected={mode === 'upload'}
+              className={`doctor-consultation-page__tab${mode === 'upload' ? ' doctor-consultation-page__tab--active' : ''}`}
+              onClick={() => switchMode('upload')}
+              disabled={submitting}
+            >
+              Upload PDF
+            </button>
+          </div>
 
-          {CONSULTATION_SUMMARY_FIELDS.map(({ key, label }) => {
-            const isRecording = voiceField === key;
-            const displayValue = isRecording
-              ? previewDictationText(values[key], voiceSessionText, voiceInterimText)
-              : values[key];
-            const fieldHasContent =
-              Boolean(values[key].trim()) ||
-              (isRecording && Boolean(voiceSessionText.trim() || voiceInterimText.trim()));
+          {mode === 'fill' ? (
+            <>
+              {micGateActive ? (
+                <MicrophonePermissionModal
+                  status={micStatus}
+                  requesting={micRequesting}
+                  onAllow={requestMicAccess}
+                  onContinueWithoutVoice={skipMicGate}
+                />
+              ) : null}
 
-            return (
-              <label key={key} className='doctor-respond-label'>
-                <span className='doctor-respond-label__head'>
-                  <span>{label}</span>
-                  <span className='doctor-respond-label__actions'>
+              <form
+                id='doctor-consultation-form'
+                className='doctor-consultation-page__form'
+                onSubmit={(e) => void handleFillSubmit(e)}
+              >
+                <p className='muted doctor-consultation-page__mode-hint'>
+                  Complete the fields below. A branded consultation notes PDF with Elix logo and your
+                  clinic details will be generated on submit.
+                </p>
+
+                <div
+                  className={`doctor-consultation-page__fields ${micGateActive ? 'doctor-consultation-page__fields--locked' : ''}`}
+                  aria-hidden={micGateActive}
+                >
+                  {voiceEnabled ? (
+                    <p className='doctor-respond-voice-tip muted'>
+                      Tap Voice on any field to dictate. Say &ldquo;new line&rdquo;, &ldquo;comma&rdquo;, or
+                      &ldquo;period&rdquo; for formatting; lists are structured automatically for meds and
+                      prescriptions.
+                    </p>
+                  ) : null}
+
+                  {CONSULTATION_SUMMARY_FIELDS.map(({ key, label }) => {
+                    const isRecording = voiceField === key;
+                    const displayValue = isRecording
+                      ? previewDictationText(values[key], voiceSessionText, voiceInterimText)
+                      : values[key];
+                    const fieldHasContent =
+                      Boolean(values[key].trim()) ||
+                      (isRecording && Boolean(voiceSessionText.trim() || voiceInterimText.trim()));
+
+                    return (
+                      <label key={key} className='doctor-respond-label'>
+                        <span className='doctor-respond-label__head'>
+                          <span>{label}</span>
+                          <span className='doctor-respond-label__actions'>
+                            <button
+                              type='button'
+                              className='doctor-consultation-clear-btn'
+                              onClick={() => handleClearField(key)}
+                              disabled={submitting || micGateActive || !fieldHasContent}
+                              aria-label={`Clear ${label}`}
+                              title={`Clear ${label}`}
+                            >
+                              <Eraser size={14} aria-hidden />
+                              <span>Clear</span>
+                            </button>
+                            <VoiceDictationButton
+                              active={isRecording}
+                              supported={voiceEnabled}
+                              disabled={submitting || micGateActive}
+                              label={label}
+                              onClick={() => startVoice(key)}
+                            />
+                          </span>
+                        </span>
+                        <textarea
+                          className={`doctor-respond-textarea ${isRecording ? 'doctor-respond-textarea--recording' : ''}`}
+                          rows={key === 'prescription' || key === 'assessment_plan' ? 5 : 4}
+                          value={displayValue}
+                          onChange={(event) =>
+                            setValues((prev) => ({ ...prev, [key]: event.target.value }))
+                          }
+                          disabled={submitting || isRecording}
+                          placeholder={`Enter ${label.toLowerCase()}…`}
+                        />
+                        {isRecording ? (
+                          <span className='doctor-respond-voice-status' role='status'>
+                            Listening… tap Stop when finished
+                          </span>
+                        ) : null}
+                      </label>
+                    );
+                  })}
+
+                  {voiceError ? (
+                    <p className='auth-error' role='alert'>
+                      {voiceError}
+                    </p>
+                  ) : null}
+                </div>
+
+                <footer className='screen-form-footer screen-form-footer--inset'>
+                  <div className='screen-form-footer-actions'>
                     <button
                       type='button'
-                      className='doctor-consultation-clear-btn'
-                      onClick={() => handleClearField(key)}
-                      disabled={submitting || micGateActive || !fieldHasContent}
-                      aria-label={`Clear ${label}`}
-                      title={`Clear ${label}`}
+                      className='secondary-btn screen-form-btn'
+                      disabled={submitting}
+                      onClick={goBack}
                     >
-                      <Eraser size={14} aria-hidden />
-                      <span>Clear</span>
+                      Cancel
                     </button>
-                    <VoiceDictationButton
-                      active={isRecording}
-                      supported={voiceEnabled}
+                    <button
+                      type='submit'
+                      className='primary-btn screen-form-btn'
                       disabled={submitting || micGateActive}
-                      label={label}
-                      onClick={() => startVoice(key)}
-                    />
-                  </span>
-                </span>
-                <textarea
-                  className={`doctor-respond-textarea ${isRecording ? 'doctor-respond-textarea--recording' : ''}`}
-                  rows={key === 'prescription' || key === 'assessment_plan' ? 5 : 4}
-                  value={displayValue}
-                  onChange={(event) =>
-                    setValues((prev) => ({ ...prev, [key]: event.target.value }))
-                  }
-                  disabled={submitting || isRecording}
-                  placeholder={`Enter ${label.toLowerCase()}…`}
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 size={16} className='spin' aria-hidden /> Saving…
+                        </>
+                      ) : (
+                        'Submit'
+                      )}
+                    </button>
+                  </div>
+                </footer>
+              </form>
+            </>
+          ) : (
+            <div className='doctor-consultation-page__form'>
+              <p className='muted doctor-consultation-page__mode-hint'>
+                Upload an existing consultation notes PDF (max 10 MB). You can add an optional note for
+                the patient record.
+              </p>
+
+              <div className='doctor-consultation-page__upload'>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  accept='application/pdf,.pdf'
+                  className='doctor-consultation-page__file-input'
+                  onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
+                  disabled={submitting}
                 />
-                {isRecording ? (
-                  <span className='doctor-respond-voice-status' role='status'>
-                    Listening… tap Stop when finished
-                  </span>
-                ) : null}
-              </label>
-            );
-          })}
-
-          {voiceError ? (
-            <p className='auth-error' role='alert'>
-              {voiceError}
-            </p>
-          ) : null}
-            </div>
-
-            <footer className='screen-form-footer screen-form-footer--inset'>
-              <div className='screen-form-footer-actions'>
-             
                 <button
                   type='button'
-                  className='secondary-btn screen-form-btn'
+                  className='secondary-btn doctor-consultation-page__upload-btn'
+                  onClick={() => fileInputRef.current?.click()}
                   disabled={submitting}
-                  onClick={goBack}
                 >
-                  Cancel
+                  <FileUp size={18} aria-hidden />
+                  {uploadFile ? 'Change PDF' : 'Choose PDF'}
                 </button>
-                <button
-                  type='submit'
-                  className='primary-btn screen-form-btn'
-                  disabled={submitting || micGateActive}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 size={16} className='spin' aria-hidden /> Saving…
-                    </>
-                  ) : (
-                    'Submit' 
-                  )}
-                </button>
+                {uploadFile ? (
+                  <p className='doctor-consultation-page__file-name'>{uploadFile.name}</p>
+                ) : (
+                  <p className='muted doctor-consultation-page__file-hint'>No file selected</p>
+                )}
               </div>
-            </footer>
-        </form>
+
+              <label className='doctor-respond-label'>
+                <span>Optional note</span>
+                <textarea
+                  className='doctor-respond-textarea'
+                  rows={3}
+                  value={uploadNote}
+                  onChange={(event) => setUploadNote(event.target.value)}
+                  disabled={submitting}
+                  placeholder='Brief note to include with the uploaded notes…'
+                />
+              </label>
+
+              <footer className='screen-form-footer screen-form-footer--inset'>
+                <div className='screen-form-footer-actions'>
+                  <button
+                    type='button'
+                    className='secondary-btn screen-form-btn'
+                    disabled={submitting}
+                    onClick={goBack}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type='button'
+                    className='primary-btn screen-form-btn'
+                    disabled={submitting || !uploadFile}
+                    onClick={() => void handleUploadSubmit()}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 size={16} className='spin' aria-hidden /> Uploading…
+                      </>
+                    ) : (
+                      'Submit'
+                    )}
+                  </button>
+                </div>
+              </footer>
+            </div>
+          )}
         </>
       ) : null}
     </div>

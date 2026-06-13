@@ -2281,6 +2281,105 @@ select {
   box-shadow: 0 4px 20px rgba(15, 47, 70, 0.06);
 }
 
+.doctor-consultation-page__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+.doctor-consultation-page__tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.48rem 0.75rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.doctor-consultation-page__tab:hover,
+.doctor-consultation-page__tab:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+
+.doctor-consultation-page__tab--active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 47, 70, 0.08);
+}
+
+.doctor-consultation-page__tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.doctor-consultation-page__mode-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.doctor-consultation-page__success {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f766e;
+  background: color-mix(in srgb, #14b8a6 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, #14b8a6 28%, var(--border));
+}
+
+.doctor-consultation-page__upload {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.doctor-consultation-page__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.doctor-consultation-page__upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.doctor-consultation-page__file-name {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.doctor-consultation-page__file-hint {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
 .doctor-consultation-page__fields {
   display: flex;
   flex-direction: column;
