@@ -134,19 +134,13 @@ export default function RequestDetailDrawer({
 
 
 
+  const isClosed = request.status === 'closed';
+
   const isAssigned = Boolean(request.assigned_to);
 
   const canAssign = isAdmin && isPendingAdminAssignment(request);
 
-  const isClosed = request.status === 'closed';
-
-  const canCoordinate = staffIsPse && !isClosed;
-
-  const showWorkflowWizard = canCoordinate;
-
-  const needsAssignmentForAdmin = staffIsAdmin && !staffIsPse && !isAssigned && !isClosed;
-
-  const adminViewingAssigned = staffIsAdmin && !staffIsPse && isAssigned && !isClosed;
+  const showAssignSection = isAdmin && !isClosed;
 
   const assignedExecutiveName =
 
@@ -155,6 +149,33 @@ export default function RequestDetailDrawer({
     executives.find((executive) => executive.id === request.assigned_to)?.full_name ??
 
     null;
+
+  const executiveSelectData = (() => {
+    const options = executives.map((executive) => ({
+      value: executive.id,
+      label: executive.full_name
+    }));
+    if (
+      request.assigned_to &&
+      !options.some((option) => option.value === request.assigned_to)
+    ) {
+      options.unshift({
+        value: request.assigned_to,
+        label: assignedExecutiveName ?? 'Assigned executive'
+      });
+    }
+    return options;
+  })();
+
+  const assignSelectValue = assigneeId || request.assigned_to || null;
+
+  const canCoordinate = staffIsPse && !isClosed;
+
+  const showWorkflowWizard = canCoordinate;
+
+  const needsAssignmentForAdmin = staffIsAdmin && !staffIsPse && !isAssigned && !isClosed;
+
+  const adminViewingAssigned = staffIsAdmin && !staffIsPse && isAssigned && !isClosed;
 
   const statusColor = requestStatusColor(request);
 
@@ -411,7 +432,7 @@ export default function RequestDetailDrawer({
 
 
 
-          {canAssign ? (
+          {showAssignSection ? (
 
             <section className='request-detail-drawer__assign-card'>
 
@@ -433,7 +454,11 @@ export default function RequestDetailDrawer({
 
                   <Text size='xs' c='dimmed'>
 
-                    Hand off coordination to your team member.
+                    {isAssigned
+
+                      ? 'Assigned executive for this request.'
+
+                      : 'Hand off coordination to your team member.'}
 
                   </Text>
 
@@ -445,15 +470,9 @@ export default function RequestDetailDrawer({
 
                 placeholder='Select executive…'
 
-                data={executives.map((executive) => ({
+                data={executiveSelectData}
 
-                  value: executive.id,
-
-                  label: executive.full_name
-
-                }))}
-
-                value={assigneeId || null}
+                value={assignSelectValue}
 
                 onChange={(value) => onAssigneeChange(value ?? '')}
 
@@ -463,33 +482,39 @@ export default function RequestDetailDrawer({
 
                 size='md'
 
+                disabled={isAssigned || busy}
+
                 classNames={{ input: 'request-detail-drawer__select-input' }}
 
               />
 
-              <Button
+              {canAssign ? (
 
-                radius='md'
+                <Button
 
-                size='md'
+                  radius='md'
 
-                fullWidth
+                  size='md'
 
-                className='doctors-mgmt-header__primary request-detail-drawer__assign-btn'
+                  fullWidth
 
-                disabled={busy || !assigneeId || executives.length === 0}
+                  className='doctors-mgmt-header__primary request-detail-drawer__assign-btn'
 
-                loading={busy}
+                  disabled={busy || !assignSelectValue || executives.length === 0}
 
-                onClick={onAssign}
+                  loading={busy}
 
-                rightSection={<IconArrowRight size={18} stroke={1.75} />}
+                  onClick={onAssign}
 
-              >
+                  rightSection={<IconArrowRight size={18} stroke={1.75} />}
 
-                Assign request
+                >
 
-              </Button>
+                  Assign request
+
+                </Button>
+
+              ) : null}
 
             </section>
 

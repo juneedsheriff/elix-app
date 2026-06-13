@@ -30,6 +30,7 @@ import {
   uploadFileToR2
 } from './r2Storage';
 import { supabase } from './supabase';
+import { ensureFreshAccessToken, normalizeStorageAuthError } from './supabaseSession';
 import {
   recordOpinionRequestAudit,
   type OpinionRequestAuditAction,
@@ -2508,11 +2509,17 @@ export async function saveDoctorConsultation(
   requestId: string,
   request: OpinionRequest,
   input: Omit<ConsultationSummary, 'id' | 'request_id' | 'created_at' | 'updated_at' | 'pdf_storage_path'>,
-  responseText: string
+  responseText: string,
+  doctorProfile?: Doctor | null
 ) {
   const trimmedResponse = responseText.trim();
   if (!trimmedResponse) {
     return { data: null, error: { message: 'Write your response before sending.' } };
+  }
+
+  const sessionToken = await ensureFreshAccessToken();
+  if (!sessionToken) {
+    return { data: null, error: { message: 'Sign in again to save consultation notes.' } };
   }
 
   if (!isR2StorageConfigured()) {
@@ -2523,6 +2530,12 @@ export async function saveDoctorConsultation(
           'File storage is not configured. Set VITE_R2_API_URL so consultation PDFs can be saved.'
       }
     };
+  }
+
+  let doctor = doctorProfile ?? null;
+  if (!doctor && request.doctor_id) {
+    const doctorResult = await fetchDoctorById(request.doctor_id);
+    doctor = doctorResult.data ?? null;
   }
 
   const summaryForPdf: ConsultationSummary = {
@@ -2536,7 +2549,7 @@ export async function saveDoctorConsultation(
 
   const blob = await generateConsultationSummaryPdfBlob(
     summaryForPdf,
-    consultationSummaryPdfMetaFromRequest(request)
+    consultationSummaryPdfMetaFromRequest(request, doctor)
   );
   const file = new File([blob], `consultation-summary-${requestId}.pdf`, {
     type: 'application/pdf'
@@ -2547,7 +2560,14 @@ export async function saveDoctorConsultation(
     file.size
   );
   if (presignError || !uploadTarget) {
-    return { data: null, error: presignError ?? { message: 'Could not prepare PDF upload.' } };
+    return {
+      data: null,
+      error: {
+        message: normalizeStorageAuthError(
+          presignError?.message ?? 'Could not prepare PDF upload.'
+        )
+      }
+    };
   }
 
   const { error: uploadError } = await uploadFileToR2(
@@ -2557,21 +2577,31 @@ export async function saveDoctorConsultation(
     uploadTarget.storagePath
   );
   if (uploadError) {
-    return { data: null, error: uploadError };
+    return {
+      data: null,
+      error: { message: normalizeStorageAuthError(uploadError.message) }
+    };
   }
 
   const now = new Date().toISOString();
+  const summaryPayload = {
+    request_id: requestId,
+    doctor_id: input.doctor_id,
+    patient_auth_user_id: input.patient_auth_user_id,
+    chief_complaint: input.chief_complaint,
+    history_present_illness: input.history_present_illness,
+    vital_signs: input.vital_signs,
+    current_medications: input.current_medications,
+    labs_diagnostics: input.labs_diagnostics,
+    assessment_plan: input.assessment_plan,
+    prescription: input.prescription,
+    pdf_storage_path: uploadTarget.storagePath,
+    updated_at: now
+  };
+
   const { data, error } = await supabase
     .from('consultation_summaries')
-    .upsert(
-      {
-        request_id: requestId,
-        ...input,
-        pdf_storage_path: uploadTarget.storagePath,
-        updated_at: now
-      },
-      { onConflict: 'request_id' }
-    )
+    .upsert(summaryPayload, { onConflict: 'request_id' })
     .select(CONSULTATION_SUMMARY_SELECT)
     .single<ConsultationSummary>();
 
@@ -2580,9 +2610,38 @@ export async function saveDoctorConsultation(
       error.message?.includes('pdf_storage_path') || error.code === '42703'
         ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
         : '';
-    return { data: null, error: { message: `${error.message}${hint}` } };
+    return { data: null, error: { message: normalizeStorageAuthError(`${error.message}${hint}`) } };
   }
 
+  const finalize = await finalizeDoctorConsultationRequest(requestId, request, trimmedResponse);
+  if (finalize.error) {
+    return {
+      data: null,
+      error: { message: normalizeStorageAuthError(finalize.error.message) }
+    };
+  }
+  return { data, error: null };
+}
+
+const CONSULTATION_NOTES_PDF_MAX_BYTES = 10 * 1024 * 1024;
+
+export function consultationNotesPdfValidationError(file: File): string | null {
+  if (file.size < 1 || file.size > CONSULTATION_NOTES_PDF_MAX_BYTES) {
+    return 'Consultation notes PDF must be between 1 byte and 10 MB.';
+  }
+  const name = file.name.toLowerCase();
+  const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+  if (!isPdf) return 'Upload a PDF file for consultation notes.';
+  return null;
+}
+
+async function finalizeDoctorConsultationRequest(
+  requestId: string,
+  request: OpinionRequest,
+  responseText: string
+) {
+  const trimmedResponse = responseText.trim();
+  const now = new Date().toISOString();
   const requestUpdate: {
     doctor_response: string;
     responded_at: string;
@@ -2603,10 +2662,115 @@ export async function saveDoctorConsultation(
     .update(requestUpdate)
     .eq('id', requestId);
 
-  if (requestError) return { data: null, error: requestError };
+  if (requestError) return { error: requestError };
   await logRequestAudit(requestId, 'consultation_summary_saved', 'doctor', {
     metadata: { consultation_completed: shouldCloseRequestAfterConsultation(request) }
   });
+  return { error: null };
+}
+
+/** Doctor uploads a consultation notes PDF (no structured form). */
+export async function saveDoctorConsultationUpload(
+  requestId: string,
+  request: OpinionRequest,
+  file: File,
+  optionalNote?: string,
+  doctorProfile?: Doctor | null
+) {
+  const validationError = consultationNotesPdfValidationError(file);
+  if (validationError) {
+    return { data: null, error: { message: validationError } };
+  }
+
+  const sessionToken = await ensureFreshAccessToken();
+  if (!sessionToken) {
+    return { data: null, error: { message: 'Sign in again to upload consultation notes.' } };
+  }
+
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: {
+        message:
+          'File storage is not configured. Set VITE_R2_API_URL so consultation PDFs can be saved.'
+      }
+    };
+  }
+
+  const doctorId = doctorProfile?.id ?? request.doctor_id;
+  const patientId = request.patient_id;
+  if (!doctorId || !patientId) {
+    return { data: null, error: { message: 'This request is missing doctor or patient information.' } };
+  }
+
+  const { data: uploadTarget, error: presignError } = await createConsultationSummaryUploadUrl(
+    requestId,
+    file.size
+  );
+  if (presignError || !uploadTarget) {
+    return {
+      data: null,
+      error: {
+        message: normalizeStorageAuthError(
+          presignError?.message ?? 'Could not prepare PDF upload.'
+        )
+      }
+    };
+  }
+
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    'application/pdf',
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return {
+      data: null,
+      error: { message: normalizeStorageAuthError(uploadError.message) }
+    };
+  }
+
+  const note = optionalNote?.trim();
+  const responseText =
+    note || 'Consultation notes uploaded. See the attached PDF for the full clinical summary.';
+  const now = new Date().toISOString();
+  const summaryPayload = {
+    request_id: requestId,
+    doctor_id: doctorId,
+    patient_auth_user_id: patientId,
+    chief_complaint: note || null,
+    history_present_illness: null,
+    vital_signs: null,
+    current_medications: null,
+    labs_diagnostics: null,
+    assessment_plan: null,
+    prescription: null,
+    pdf_storage_path: uploadTarget.storagePath,
+    updated_at: now
+  };
+
+  const { data, error } = await supabase
+    .from('consultation_summaries')
+    .upsert(summaryPayload, { onConflict: 'request_id' })
+    .select(CONSULTATION_SUMMARY_SELECT)
+    .single<ConsultationSummary>();
+
+  if (error) {
+    const hint =
+      error.message?.includes('pdf_storage_path') || error.code === '42703'
+        ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
+        : '';
+    return { data: null, error: { message: normalizeStorageAuthError(`${error.message}${hint}`) } };
+  }
+
+  const finalize = await finalizeDoctorConsultationRequest(requestId, request, responseText);
+  if (finalize.error) {
+    return {
+      data: null,
+      error: { message: normalizeStorageAuthError(finalize.error.message) }
+    };
+  }
   return { data, error: null };
 }
 
