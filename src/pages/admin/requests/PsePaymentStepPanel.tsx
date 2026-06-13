@@ -5,13 +5,12 @@ import {
   Button,
   Grid,
   Group,
-  NumberInput,
   Paper,
   Stack,
   Text,
   TextInput
 } from '@mantine/core';
-import { IconExternalLink } from '@tabler/icons-react';
+import { IconExternalLink, IconReceipt } from '@tabler/icons-react';
 import {
   formatConsultationFee,
   normalizeConsultationCurrency
@@ -21,21 +20,20 @@ import {
   isScheduleConfirmed
 } from '../../../lib/consultationWizard';
 import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
+import ConsultationInvoicePdfView from '../../../components/ConsultationWorkflow/ConsultationInvoicePdfView';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import PaymentProofReview from './PaymentProofReview';
 
 type PsePaymentStepPanelProps = {
   request: OpinionRequest;
   paymentLink: string;
-  paymentAmount: number | string;
+  paymentAmount: number | null;
   paymentCurrency: string;
   paymentReference: string;
   busy: boolean;
   onPaymentLinkChange: (value: string) => void;
-  onPaymentAmountChange: (value: number | string) => void;
-  onPaymentCurrencyChange: (value: string) => void;
   onPaymentReferenceChange: (value: string) => void;
-  onSendPaymentLink: () => void;
+  onSendInvoiceAndPaymentLink: () => void;
   onMarkPending: () => void;
   onConfirmPayment: () => void;
   onReleaseToDoctor: () => void;
@@ -49,16 +47,26 @@ export default function PsePaymentStepPanel({
   paymentReference,
   busy,
   onPaymentLinkChange,
-  onPaymentAmountChange,
-  onPaymentCurrencyChange,
   onPaymentReferenceChange,
-  onSendPaymentLink,
+  onSendInvoiceAndPaymentLink,
   onMarkPending,
   onConfirmPayment,
   onReleaseToDoctor
 }: PsePaymentStepPanelProps) {
   const canSend = canPseSendPaymentLink(request);
   const linkShared = Boolean(request.payment_link?.trim());
+  const invoiceReady = Boolean(request.invoice_pdf_storage_path?.trim());
+  const canSubmitToPatient =
+    canSend && paymentAmount != null && Boolean(paymentLink.trim());
+  const formattedAmount =
+    request.invoice_total != null
+      ? formatConsultationFee(
+          Number(request.invoice_total),
+          normalizeConsultationCurrency(paymentCurrency)
+        )
+      : paymentAmount != null
+        ? formatConsultationFee(paymentAmount, normalizeConsultationCurrency(paymentCurrency))
+        : null;
   const statusLabel =
     request.payment_status === 'paid'
       ? 'Paid'
@@ -81,24 +89,35 @@ export default function PsePaymentStepPanel({
           {request.schedule_confirmed_at
             ? ` on ${new Date(request.schedule_confirmed_at).toLocaleString()}`
             : ''}
-          . You can send or update the payment link below.
+          . Enter the payment link below, then send the invoice and link together.
         </Alert>
       ) : (
         <Alert color='teal' radius='md' variant='light'>
-          Patient submitted their doctor and preferred time. You may send the payment link now.
+          Patient submitted their doctor and preferred time. Enter the payment link and send the
+          invoice together.
         </Alert>
       )}
 
-      {request.consultation_duration_minutes && request.consultation_fee_usd != null ? (
-        <Alert color='blue' radius='md' variant='light' title='Quoted consultation fee'>
-          {formatDurationMinutesLabel(request.consultation_duration_minutes)} ·{' '}
-          {formatConsultationFee(
-            request.consultation_fee_usd,
-            normalizeConsultationCurrency(request.consultation_currency)
-          )}{' '}
-          (pre-filled below; you can still adjust if needed).
+      {request.consultation_duration_minutes && formattedAmount ? (
+        <Alert color='blue' radius='md' variant='light' title='Doctor consultation fee'>
+          {formatDurationMinutesLabel(request.consultation_duration_minutes)} · {formattedAmount} (auto-filled
+          from the selected doctor&apos;s quote).
         </Alert>
-      ) : null}
+      ) : formattedAmount ? (
+        <Alert color='blue' radius='md' variant='light' title='Doctor consultation fee'>
+          {formattedAmount} (auto-filled from the selected doctor&apos;s quote).
+        </Alert>
+      ) : request.consultation_duration_minutes ? (
+        <Alert color='orange' radius='md' variant='light' title='Consultation fee missing'>
+          Could not resolve the fee for a{' '}
+          {formatDurationMinutesLabel(Number(request.consultation_duration_minutes))} session. Check
+          that the selected doctor has pricing for this duration.
+        </Alert>
+      ) : (
+        <Alert color='orange' radius='md' variant='light' title='Consultation fee missing'>
+          Confirm the patient selected a doctor and session length before sending a payment link.
+        </Alert>
+      )}
 
       <Paper radius='md' p='lg' withBorder className='pse-payment-panel__form'>
         <Group justify='space-between' align='center' mb='md'>
@@ -120,20 +139,24 @@ export default function PsePaymentStepPanel({
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <NumberInput
-              label='Amount'
-              value={paymentAmount}
-              onChange={onPaymentAmountChange}
-              min={0}
-              decimalScale={2}
-            />
+            <Stack gap={4}>
+              <Text size='sm' fw={500}>
+                Amount
+              </Text>
+              <Text size='sm' fw={600}>
+                {formattedAmount ?? '—'}
+              </Text>
+            </Stack>
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <TextInput
-              label='Currency'
-              value={paymentCurrency}
-              onChange={(e) => onPaymentCurrencyChange(e.currentTarget.value)}
-            />
+            <Stack gap={4}>
+              <Text size='sm' fw={500}>
+                Currency
+              </Text>
+              <Text size='sm' fw={600}>
+                {paymentCurrency}
+              </Text>
+            </Stack>
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 8 }}>
             <TextInput
@@ -149,13 +172,20 @@ export default function PsePaymentStepPanel({
           <Button
             className='doctors-mgmt-header__primary'
             radius='md'
+            leftSection={<IconReceipt size={16} />}
             loading={busy}
-            disabled={!canSend}
-            onClick={onSendPaymentLink}
+            disabled={!canSubmitToPatient}
+            onClick={onSendInvoiceAndPaymentLink}
           >
-            {linkShared ? 'Update payment link' : 'Send to patient'}
+            {linkShared ? 'Regenerate invoice & update link' : 'Generate invoice & send to patient'}
           </Button>
-          <Button variant='default' radius='md' loading={busy} disabled={!canSend} onClick={onMarkPending}>
+          <Button
+            variant='default'
+            radius='md'
+            loading={busy}
+            disabled={!canSend || paymentAmount == null}
+            onClick={onMarkPending}
+          >
             Mark pending (no link)
           </Button>
           <Button variant='light' color='cyan' radius='md' loading={busy} onClick={onConfirmPayment}>
@@ -163,6 +193,25 @@ export default function PsePaymentStepPanel({
           </Button>
         </Group>
       </Paper>
+
+      {invoiceReady ? (
+        <Paper radius='md' p='lg' withBorder className='pse-payment-panel__invoice'>
+          <Group justify='space-between' align='center' mb='md' wrap='wrap' gap='sm'>
+            <Stack gap={2}>
+              <Text fw={700} size='sm'>
+                Consultation invoice
+              </Text>
+              <Text size='xs' c='dimmed'>
+                Shared with the patient on their Payment step.
+              </Text>
+            </Stack>
+            <Badge variant='light' color='green' radius='xl'>
+              Sent to patient
+            </Badge>
+          </Group>
+          <ConsultationInvoicePdfView request={request} variant='pse' />
+        </Paper>
+      ) : null}
 
       {linkShared ? (
         <Paper radius='md' p='md' withBorder className='pse-payment-panel__shared'>
@@ -188,7 +237,6 @@ export default function PsePaymentStepPanel({
           </Anchor>
         </Paper>
       ) : null}
- 
 
       <PaymentProofReview request={request} />
 

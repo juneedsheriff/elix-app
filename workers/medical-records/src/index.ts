@@ -165,6 +165,81 @@ async function canAccessConsultationSummaryPdfForRequest(
   return Boolean(doctorId && summary.doctor_id === doctorId);
 }
 
+async function canStaffUploadConsultationInvoice(
+  userId: string,
+  authHeader: string,
+  requestId: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  const expectedPrefix = `consultation-invoices/${requestId.trim()}/`;
+  if (!storagePath.startsWith(expectedPrefix)) return false;
+
+  const staff = await isStaffMember(userId, authHeader, env);
+  if (!staff) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=id,assigned_to&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!res.ok) return false;
+
+  const rows = (await res.json()) as { assigned_to?: string | null }[];
+  const row = rows[0];
+  if (!row) return false;
+
+  if (!row.assigned_to) return true;
+
+  const staffUrl = `${base}/rest/v1/admins?auth_user_id=eq.${encodeURIComponent(userId)}&select=id,role&limit=1`;
+  const staffRes = await fetch(staffUrl, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!staffRes.ok) return false;
+  const staffRows = (await staffRes.json()) as { id?: string; role?: string }[];
+  const staffRow = staffRows[0];
+  if (!staffRow?.id) return false;
+  if (staffRow.role === 'administrator') return true;
+  return row.assigned_to === staffRow.id;
+}
+
+async function canAccessConsultationInvoiceForRequest(
+  authHeader: string,
+  userId: string,
+  requestId: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const normalizedPath = storagePath.trim();
+  const select = 'id,invoice_pdf_storage_path,patient_id';
+
+  const fetchRow = async (useServiceRole: boolean) => {
+    const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=${select}&limit=1`;
+    const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, useServiceRole) });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as {
+      invoice_pdf_storage_path?: string | null;
+      patient_id?: string | null;
+    }[];
+    return rows[0] ?? null;
+  };
+
+  let row = await fetchRow(false);
+  const staff = await isStaffMember(userId, authHeader, env);
+
+  if (!row && staff && env.SUPABASE_SERVICE_ROLE_KEY) {
+    row = await fetchRow(true);
+    if (row) {
+      const visibleToStaff = await fetchRow(false);
+      if (!visibleToStaff) return false;
+    }
+  }
+
+  if (!row?.invoice_pdf_storage_path?.trim()) return false;
+  if (row.invoice_pdf_storage_path.trim() !== normalizedPath) return false;
+  if (row.patient_id === userId) return true;
+  return staff;
+}
+
 async function canAccessPaymentProofForRequest(
   authHeader: string,
   userId: string,
@@ -232,10 +307,17 @@ async function canAccessStoragePathViaRls(
 
   const summaryUrl = `${base}/rest/v1/consultation_summaries?pdf_storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
   const summaryRes = await fetch(summaryUrl, { headers });
-  if (!summaryRes.ok) return false;
+  if (summaryRes.ok) {
+    const summaryRows = (await summaryRes.json()) as unknown[];
+    if (Array.isArray(summaryRows) && summaryRows.length > 0) return true;
+  }
 
-  const summaryRows = (await summaryRes.json()) as unknown[];
-  return Array.isArray(summaryRows) && summaryRows.length > 0;
+  const invoiceUrl = `${base}/rest/v1/opinion_requests?invoice_pdf_storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const invoiceRes = await fetch(invoiceUrl, { headers });
+  if (!invoiceRes.ok) return false;
+
+  const invoiceRows = (await invoiceRes.json()) as unknown[];
+  return Array.isArray(invoiceRows) && invoiceRows.length > 0;
 }
 
 async function assertCanAccessPath(
@@ -272,6 +354,15 @@ async function assertCanAccessPath(
       env
     );
     if (summaryAllowed) return;
+
+    const invoiceAllowed = await canAccessConsultationInvoiceForRequest(
+      authHeader,
+      options.userId,
+      requestId,
+      storagePath,
+      env
+    );
+    if (invoiceAllowed) return;
   }
 
   const allowed = await canAccessStoragePathViaRls(authHeader, storagePath, env);
@@ -377,6 +468,50 @@ export default {
 
       const pathPrefixes = await getAllowedPathPrefixes(user, authHeader, env);
 
+      if (pathname === '/v1/consultation-invoice/upload-url' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          contentLength?: number;
+        };
+
+        if (!body.requestId?.trim()) {
+          return jsonResponse({ error: 'requestId is required' }, 400, origin, env);
+        }
+
+        const contentLength = Number(body.contentLength ?? 0);
+        if (!contentLength || contentLength > 10 * 1024 * 1024) {
+          return jsonResponse({ error: 'File must be between 1 byte and 10 MB' }, 400, origin, env);
+        }
+
+        const requestId = body.requestId.trim();
+        const storagePath = storagePathFor(
+          `consultation-invoices/${requestId}`,
+          'consultation-invoice.pdf'
+        );
+
+        const canUpload = await canStaffUploadConsultationInvoice(
+          user.id,
+          authHeader,
+          requestId,
+          storagePath,
+          env
+        );
+        if (!canUpload) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        return jsonResponse(
+          {
+            uploadUrl: `${workerOrigin(request)}/v1/records/object`,
+            storagePath,
+            storageBucket: env.R2_BUCKET_NAME || 'medical-records'
+          },
+          200,
+          origin,
+          env
+        );
+      }
+
       if (pathname === '/v1/consultation-summary/upload-url' && request.method === 'POST') {
         const body = (await request.json()) as {
           requestId?: string;
@@ -463,21 +598,38 @@ export default {
         const ownsPrefix = pathPrefixes.some((prefix) => storagePath.startsWith(prefix));
         if (!ownsPrefix) {
           const consultationPrefix = 'consultation-summaries/';
-          if (!storagePath.startsWith(consultationPrefix)) {
-            throw new Error('Forbidden');
-          }
-          const requestId = storagePath.slice(consultationPrefix.length).split('/')[0];
-          if (!requestId) {
-            throw new Error('Forbidden');
-          }
-          const canUpload = await canDoctorUploadConsultationSummary(
-            user.id,
-            authHeader,
-            requestId,
-            storagePath,
-            env
-          );
-          if (!canUpload) {
+          const invoicePrefix = 'consultation-invoices/';
+          if (storagePath.startsWith(consultationPrefix)) {
+            const requestId = storagePath.slice(consultationPrefix.length).split('/')[0];
+            if (!requestId) {
+              throw new Error('Forbidden');
+            }
+            const canUpload = await canDoctorUploadConsultationSummary(
+              user.id,
+              authHeader,
+              requestId,
+              storagePath,
+              env
+            );
+            if (!canUpload) {
+              throw new Error('Forbidden');
+            }
+          } else if (storagePath.startsWith(invoicePrefix)) {
+            const requestId = storagePath.slice(invoicePrefix.length).split('/')[0];
+            if (!requestId) {
+              throw new Error('Forbidden');
+            }
+            const canUpload = await canStaffUploadConsultationInvoice(
+              user.id,
+              authHeader,
+              requestId,
+              storagePath,
+              env
+            );
+            if (!canUpload) {
+              throw new Error('Forbidden');
+            }
+          } else {
             throw new Error('Forbidden');
           }
         }

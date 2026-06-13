@@ -11,6 +11,7 @@ import {
   canPseSendPaymentLink,
   hasConsultationSummary,
   readPseWizardStoredStep,
+  resolvePsePaymentQuote,
   resolveWizardStepOnUpdate,
   writePseWizardStoredStep,
   type WizardProgressContext
@@ -19,10 +20,11 @@ import {
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
   pseConfirmPayment,
+  pseGenerateConsultationInvoice,
   pseMarkRecordsVerified,
   pseReleaseToDoctor,
   pseScheduleAppointment,
-  pseSendPaymentLink,
+  pseSendInvoiceAndPaymentLink,
   pseSetPaymentPending,
   subscribeOpinionRequestLiveUpdates
 } from '../../../lib/opinionRequests';
@@ -36,8 +38,14 @@ import PsePaymentStepPanel from './PsePaymentStepPanel';
 import PseRequestRecordsGallery from './PseRequestRecordsGallery';
 import RecommendDoctorsSection from './RecommendDoctorsSection';
 import type { Doctor } from '../../../types/doctor';
-import type { ConsultationSummary, OpinionRequest } from '../../../types/opinionRequest';
+import type { ConsultationSummary, OpinionRequest, OpinionRequestRecommendation } from '../../../types/opinionRequest';
 import { formatRequestDate } from './requestsUtils';
+
+function resolveInvoiceDoctor(request: OpinionRequest, doctors: Doctor[]): Doctor | null {
+  const doctorId = request.selected_doctor_id ?? request.doctor_id;
+  if (!doctorId) return null;
+  return doctors.find((doctor) => doctor.id === doctorId) ?? null;
+}
 
 type RequestWorkflowWizardProps = {
   request: OpinionRequest;
@@ -76,12 +84,10 @@ export default function RequestWorkflowWizard({
     step: expandedStep ?? initialWizardStep,
     lastSuggested: initialWizardStep
   });
-  const [recommendationsCount, setRecommendationsCount] = useState(0);
+  const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [summary, setSummary] = useState<ConsultationSummary | null>(null);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [meetingLink, setMeetingLink] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState<number | string>('');
-  const [paymentCurrency, setPaymentCurrency] = useState('USD');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLink, setPaymentLink] = useState('');
   const [busy, setBusy] = useState(false);
@@ -91,7 +97,10 @@ export default function RequestWorkflowWizard({
       fetchOpinionRequestRecommendations(request.id),
       fetchConsultationSummary(request.id)
     ]);
-    if (!recRes.error) setRecommendationsCount(recRes.data?.length ?? 0);
+    if (!recRes.error) {
+      const list = recRes.data ?? [];
+      setRecommendations(list);
+    }
     if (!summaryRes.error) setSummary(summaryRes.data);
   }, [request.id]);
 
@@ -103,8 +112,6 @@ export default function RequestWorkflowWizard({
       setScheduledAt(null);
     }
     setMeetingLink(request.meeting_link ?? '');
-    setPaymentAmount(request.payment_amount ?? request.consultation_fee_usd ?? '');
-    setPaymentCurrency(request.payment_currency ?? 'USD');
     setPaymentReference(request.payment_reference ?? '');
     setPaymentLink(request.payment_link ?? '');
     void loadMeta();
@@ -113,10 +120,10 @@ export default function RequestWorkflowWizard({
   const progressCtx: WizardProgressContext = useMemo(
     () => ({
       request,
-      recommendationsCount,
+      recommendationsCount: recommendations.length,
       hasSummary: hasConsultationSummary(summary)
     }),
-    [request, recommendationsCount, summary]
+    [request, recommendations.length, summary]
   );
 
   const suggestedStep = useMemo(() => getSuggestedActiveStep(progressCtx, 'pse'), [progressCtx]);
@@ -142,6 +149,10 @@ export default function RequestWorkflowWizard({
   }, [request.id, loadMeta, onUpdated]);
 
   const wizardSteps = getWizardSteps('pse', progressCtx, expandedStep ?? suggestedStep);
+  const paymentQuote = useMemo(
+    () => resolvePsePaymentQuote(request, doctors, recommendations),
+    [request, doctors, recommendations]
+  );
 
   const setExpandedStepTracked = (index: number | null) => {
     if (index !== null) {
@@ -194,33 +205,76 @@ export default function RequestWorkflowWizard({
     onUpdated();
   };
 
-  const handleSendPaymentLink = async () => {
+  const generateInvoiceForRequest = async () => {
+    const { amount, currency } = paymentQuote;
+    if (amount == null || !Number.isFinite(amount) || amount <= 0) {
+      return {
+        data: null,
+        error: { message: 'Consultation fee is missing. Confirm the patient selected a doctor and session length.' }
+      };
+    }
+    const doctor = resolveInvoiceDoctor(request, doctors);
+    if (!doctor) {
+      return {
+        data: null,
+        error: { message: 'Could not load the selected doctor profile. Refresh and try again.' }
+      };
+    }
+    return pseGenerateConsultationInvoice(request, { amount, currency, doctor });
+  };
+
+  const handleSendInvoiceAndPaymentLink = async () => {
     if (!canPseSendPaymentLink(request)) {
       onError('Wait for the patient to confirm the schedule before sending a payment link.');
       return;
     }
-    const amount = paymentAmount === '' ? null : Number(paymentAmount);
-    if (amount == null || !Number.isFinite(amount) || amount <= 0) {
-      onError('Enter the payment amount the patient should pay.');
+    if (!paymentLink.trim()) {
+      onError('Enter a payment link for the patient.');
       return;
     }
+    const { amount, currency } = paymentQuote;
+    if (amount == null || !Number.isFinite(amount) || amount <= 0) {
+      onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
+      return;
+    }
+
     setBusy(true);
-    const { error } = await pseSendPaymentLink(request.id, {
-      paymentLink: paymentLink,
+    const doctor = resolveInvoiceDoctor(request, doctors);
+    if (!doctor) {
+      setBusy(false);
+      onError('Could not load the selected doctor profile. Refresh and try again.');
+      return;
+    }
+
+    const { error } = await pseSendInvoiceAndPaymentLink(request, {
+      paymentLink,
       amount,
-      currency: paymentCurrency
+      currency,
+      doctor
     });
     setBusy(false);
     if (error) {
       onError(error.message);
       return;
     }
-    onSuccess('Payment link sent to the patient.');
+    onSuccess(
+      request.payment_link?.trim()
+        ? 'Invoice regenerated and payment link updated for the patient.'
+        : 'Invoice generated and payment link sent to the patient.'
+    );
     onUpdated();
   };
 
   const handlePaymentPending = async () => {
     setBusy(true);
+    if (!request.invoice_pdf_storage_path?.trim()) {
+      const invoiceRes = await generateInvoiceForRequest();
+      if (invoiceRes.error) {
+        setBusy(false);
+        onError(invoiceRes.error.message);
+        return;
+      }
+    }
     const { error } = await pseSetPaymentPending(request.id);
     setBusy(false);
     if (error) {
@@ -233,9 +287,11 @@ export default function RequestWorkflowWizard({
 
   const handleConfirmPayment = async () => {
     setBusy(true);
+    const { amount, currency } = paymentQuote;
+    const chargeAmount = request.invoice_total ?? amount;
     const { error } = await pseConfirmPayment(request.id, {
-      amount: paymentAmount === '' ? null : Number(paymentAmount),
-      currency: paymentCurrency,
+      amount: chargeAmount,
+      currency,
       reference: paymentReference
     });
     setBusy(false);
@@ -367,15 +423,13 @@ export default function RequestWorkflowWizard({
           <PsePaymentStepPanel
             request={request}
             paymentLink={paymentLink}
-            paymentAmount={paymentAmount}
-            paymentCurrency={paymentCurrency}
+            paymentAmount={paymentQuote.amount}
+            paymentCurrency={paymentQuote.currency}
             paymentReference={paymentReference}
             busy={busy}
             onPaymentLinkChange={setPaymentLink}
-            onPaymentAmountChange={setPaymentAmount}
-            onPaymentCurrencyChange={setPaymentCurrency}
             onPaymentReferenceChange={setPaymentReference}
-            onSendPaymentLink={() => void handleSendPaymentLink()}
+            onSendInvoiceAndPaymentLink={() => void handleSendInvoiceAndPaymentLink()}
             onMarkPending={() => void handlePaymentPending()}
             onConfirmPayment={() => void handleConfirmPayment()}
             onReleaseToDoctor={() => void handleReleaseToDoctor()}

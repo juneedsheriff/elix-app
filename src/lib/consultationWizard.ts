@@ -1,4 +1,16 @@
-import type { ConsultationSummary, OpinionRequest } from '../types/opinionRequest';
+import type { Doctor } from '../types/doctor';
+import type {
+  ConsultationSummary,
+  OpinionRequest,
+  OpinionRequestRecommendation
+} from '../types/opinionRequest';
+import { normalizeConsultationCurrency } from './consultationCurrency';
+import {
+  doctorConsultationCurrency,
+  getTierFeeFromTiers,
+  getTierFeeUsd,
+  normalizeConsultationDurationMinutes
+} from './consultationTiers';
 
 export type WizardAudience = 'pse' | 'patient';
 
@@ -481,6 +493,63 @@ export function resolveWizardStepOnUpdate(
 export function getInitialPseWizardStep(ctx: WizardProgressContext) {
   const maxNav = getMaxCompletedStepIndex(ctx, 'pse') + 1;
   return initialPseWizardStep(ctx.request.id, maxNav);
+}
+
+/** Amount and currency the patient should pay — from the doctor's quoted consultation fee. */
+export function resolvePsePaymentQuote(
+  request: OpinionRequest,
+  doctors: Doctor[] = [],
+  recommendations: OpinionRequestRecommendation[] = []
+): { amount: number | null; currency: ReturnType<typeof normalizeConsultationCurrency> } {
+  const durationMinutes = normalizeConsultationDurationMinutes(request.consultation_duration_minutes);
+  const storedFee = Number(request.consultation_fee_usd);
+  if (Number.isFinite(storedFee) && storedFee > 0) {
+    return {
+      amount: storedFee,
+      currency: normalizeConsultationCurrency(request.consultation_currency)
+    };
+  }
+
+  const doctorId = request.selected_doctor_id ?? request.doctor_id;
+  if (doctorId && durationMinutes != null) {
+    const recommendation = recommendations.find((item) => item.doctor_id === doctorId);
+    const recommendationFee = getTierFeeFromTiers(
+      recommendation?.doctor_consultation_tiers,
+      durationMinutes
+    );
+    if (recommendationFee != null) {
+      return {
+        amount: recommendationFee,
+        currency: normalizeConsultationCurrency(recommendation?.doctor_consultation_currency)
+      };
+    }
+
+    const doctor = doctors.find((item) => item.id === doctorId);
+    if (doctor) {
+      const fee = getTierFeeUsd(doctor, durationMinutes);
+      if (fee != null && Number.isFinite(fee)) {
+        return {
+          amount: fee,
+          currency: doctorConsultationCurrency(doctor)
+        };
+      }
+    }
+  }
+
+  const paymentAmount = Number(request.payment_amount);
+  if (Number.isFinite(paymentAmount) && paymentAmount > 0) {
+    return {
+      amount: paymentAmount,
+      currency: normalizeConsultationCurrency(
+        request.payment_currency ?? request.consultation_currency
+      )
+    };
+  }
+
+  return {
+    amount: null,
+    currency: normalizeConsultationCurrency(request.consultation_currency)
+  };
 }
 
 export function hasConsultationSummary(summary: ConsultationSummary | null | undefined): boolean {

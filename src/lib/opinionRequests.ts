@@ -8,7 +8,13 @@ import type {
   OpinionRequestStatus,
   PaymentStatus
 } from '../types/opinionRequest';
+import type { Doctor } from '../types/doctor';
 import { normalizeConsultationCurrency } from './consultationCurrency';
+import {
+  buildConsultationInvoiceNumber,
+  computeConsultationInvoiceTotals,
+  generateConsultationInvoicePdfBlob
+} from './consultationInvoicePdf';
 import { doctorConsultationCurrency, getTierFeeUsd, parseConsultationTiers } from './consultationTiers';
 import { fetchDoctorByAuthUserId, fetchDoctorById } from './doctors';
 import { fetchPatientByAuthUserId } from './patients';
@@ -17,6 +23,7 @@ import {
   generateConsultationSummaryPdfBlob
 } from './consultationSummaryPdf';
 import {
+  createConsultationInvoiceUploadUrl,
   createConsultationSummaryUploadUrl,
   createR2UploadUrl,
   isR2StorageConfigured,
@@ -69,9 +76,20 @@ const workflowFieldsCore = `
   consultation_currency
 `;
 
+const workflowFieldsInvoice = `
+  invoice_pdf_storage_path,
+  invoice_generated_at,
+  invoice_number,
+  invoice_subtotal,
+  invoice_tax_rate,
+  invoice_tax_amount,
+  invoice_total
+`;
+
 const workflowFields = `
   ${workflowFieldsCore},
   records_verified_at,
+  ${workflowFieldsInvoice},
   ${workflowFieldsExtended}
 `;
 
@@ -93,6 +111,17 @@ function stripPaymentProofFromSelect(select: string) {
     .replace(/,?\s*payment_proof_file_name\s*/g, '')
     .replace(/,?\s*payment_proof_mime_type\s*/g, '')
     .replace(/,?\s*payment_proof_submitted_at\s*/g, '');
+}
+
+function stripInvoiceFromSelect(select: string) {
+  return select
+    .replace(/,?\s*invoice_pdf_storage_path\s*/g, '')
+    .replace(/,?\s*invoice_generated_at\s*/g, '')
+    .replace(/,?\s*invoice_number\s*/g, '')
+    .replace(/,?\s*invoice_subtotal\s*/g, '')
+    .replace(/,?\s*invoice_tax_rate\s*/g, '')
+    .replace(/,?\s*invoice_tax_amount\s*/g, '')
+    .replace(/,?\s*invoice_total\s*/g, '');
 }
 
 function stripSchedulingFromSelect(select: string) {
@@ -498,7 +527,12 @@ function isMissingWorkflowColumnsError(error: { message?: string } | null) {
     msg.includes('schedule_confirmed_at') ||
     msg.includes('consultation_duration_minutes') ||
     msg.includes('consultation_fee_usd') ||
-    msg.includes('consultation_currency')
+    msg.includes('consultation_currency') ||
+    msg.includes('invoice_pdf_storage_path') ||
+    msg.includes('invoice_generated_at') ||
+    msg.includes('invoice_number') ||
+    msg.includes('invoice_subtotal') ||
+    msg.includes('invoice_tax')
   );
 }
 
@@ -533,6 +567,13 @@ type RequestListRow = {
   consultation_duration_minutes?: number | null;
   consultation_fee_usd?: number | null;
   consultation_currency?: string | null;
+  invoice_pdf_storage_path?: string | null;
+  invoice_generated_at?: string | null;
+  invoice_number?: string | null;
+  invoice_subtotal?: number | string | null;
+  invoice_tax_rate?: number | string | null;
+  invoice_tax_amount?: number | string | null;
+  invoice_total?: number | string | null;
   records_verified_at?: string | null;
   doctor_response: string | null;
   responded_at: string | null;
@@ -868,12 +909,24 @@ function mapRequestRow(
     payment_proof_submitted_at: row.payment_proof_submitted_at ?? null,
     pse_scheduling_message: row.pse_scheduling_message ?? null,
     schedule_confirmed_at: row.schedule_confirmed_at ?? null,
-    consultation_duration_minutes: row.consultation_duration_minutes ?? null,
+    consultation_duration_minutes:
+      row.consultation_duration_minutes == null
+        ? null
+        : Number(row.consultation_duration_minutes),
     consultation_fee_usd:
       row.consultation_fee_usd === null || row.consultation_fee_usd === undefined
         ? null
         : Number(row.consultation_fee_usd),
     consultation_currency: row.consultation_currency ?? null,
+    invoice_pdf_storage_path: row.invoice_pdf_storage_path ?? null,
+    invoice_generated_at: row.invoice_generated_at ?? null,
+    invoice_number: row.invoice_number ?? null,
+    invoice_subtotal:
+      row.invoice_subtotal == null ? null : Number(row.invoice_subtotal),
+    invoice_tax_rate: row.invoice_tax_rate == null ? null : Number(row.invoice_tax_rate),
+    invoice_tax_amount:
+      row.invoice_tax_amount == null ? null : Number(row.invoice_tax_amount),
+    invoice_total: row.invoice_total == null ? null : Number(row.invoice_total),
     records_verified_at: row.records_verified_at ?? null,
     records
   };
@@ -952,6 +1005,13 @@ type WorkflowFieldRow = Pick<
   | 'pse_scheduling_message'
   | 'schedule_confirmed_at'
   | 'records_verified_at'
+  | 'invoice_pdf_storage_path'
+  | 'invoice_generated_at'
+  | 'invoice_number'
+  | 'invoice_subtotal'
+  | 'invoice_tax_rate'
+  | 'invoice_tax_amount'
+  | 'invoice_total'
 >;
 
 function mergeWorkflowFields(request: OpinionRequest, row: WorkflowFieldRow): OpinionRequest {
@@ -981,6 +1041,25 @@ function mergeWorkflowFields(request: OpinionRequest, row: WorkflowFieldRow): Op
       row.payment_proof_submitted_at ?? request.payment_proof_submitted_at,
     pse_scheduling_message: row.pse_scheduling_message ?? request.pse_scheduling_message,
     schedule_confirmed_at: row.schedule_confirmed_at ?? request.schedule_confirmed_at,
+    consultation_duration_minutes:
+      row.consultation_duration_minutes == null
+        ? request.consultation_duration_minutes
+        : Number(row.consultation_duration_minutes),
+    consultation_fee_usd:
+      row.consultation_fee_usd == null
+        ? request.consultation_fee_usd
+        : Number(row.consultation_fee_usd),
+    consultation_currency: row.consultation_currency ?? request.consultation_currency,
+    invoice_pdf_storage_path: row.invoice_pdf_storage_path ?? request.invoice_pdf_storage_path,
+    invoice_generated_at: row.invoice_generated_at ?? request.invoice_generated_at,
+    invoice_number: row.invoice_number ?? request.invoice_number,
+    invoice_subtotal:
+      row.invoice_subtotal == null ? request.invoice_subtotal : Number(row.invoice_subtotal),
+    invoice_tax_rate:
+      row.invoice_tax_rate == null ? request.invoice_tax_rate : Number(row.invoice_tax_rate),
+    invoice_tax_amount:
+      row.invoice_tax_amount == null ? request.invoice_tax_amount : Number(row.invoice_tax_amount),
+    invoice_total: row.invoice_total == null ? request.invoice_total : Number(row.invoice_total),
     records_verified_at: row.records_verified_at ?? request.records_verified_at
   };
 }
@@ -1007,6 +1086,14 @@ async function enrichRequestsWithWorkflowFields(requests: OpinionRequest[]): Pro
       break;
     }
     if (result.error && isMissingWorkflowColumnsError(result.error)) {
+      const withoutInvoice = stripInvoiceFromSelect(workflowSelect);
+      if (withoutInvoice !== workflowSelect) {
+        const retryInvoice = await supabase.from('opinion_requests').select(withoutInvoice).in('id', ids);
+        if (!retryInvoice.error && retryInvoice.data?.length) {
+          data = retryInvoice.data as WorkflowFieldRow[];
+          break;
+        }
+      }
       const withoutProof = stripPaymentProofFromSelect(workflowSelect);
       if (withoutProof !== workflowSelect) {
         const retryProof = await supabase.from('opinion_requests').select(withoutProof).in('id', ids);
@@ -2009,14 +2096,189 @@ export async function patientSubmitPaymentProof(requestId: string, file: File) {
   return { data, error: null };
 }
 
-/** PSE sends payment link after schedule is confirmed by the patient. */
-export async function pseSendPaymentLink(
-  requestId: string,
-  input: { paymentLink: string; amount?: number | null; currency?: string | null }
+/** PSE generates a consultation invoice PDF for the patient before sending payment. */
+async function uploadConsultationInvoicePdf(
+  request: OpinionRequest,
+  input: { amount: number; currency: string; doctor: Doctor }
+) {
+  const amount = Math.round(Number(input.amount));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { data: null, error: { message: 'Consultation fee is missing for this request.' } };
+  }
+
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: {
+        message:
+          'File storage is not configured. Set VITE_R2_API_URL so consultation invoices can be saved.'
+      }
+    };
+  }
+
+  const currency = normalizeConsultationCurrency(input.currency);
+  const totals = computeConsultationInvoiceTotals(amount, currency);
+  const issuedAt = new Date();
+  const invoiceNumber = buildConsultationInvoiceNumber(request.id, issuedAt);
+
+  const blob = await generateConsultationInvoicePdfBlob({
+    invoiceNumber,
+    issuedAt,
+    patientName: request.patient_name,
+    patientEmail: request.patient_email,
+    requestId: request.id,
+    doctor: input.doctor,
+    durationMinutes: request.consultation_duration_minutes,
+    currency,
+    totals
+  });
+
+  const file = new File([blob], `consultation-invoice-${request.id}.pdf`, {
+    type: 'application/pdf'
+  });
+
+  const { data: uploadTarget, error: presignError } = await createConsultationInvoiceUploadUrl(
+    request.id,
+    file.size
+  );
+  if (presignError || !uploadTarget) {
+    return { data: null, error: presignError ?? { message: 'Could not prepare invoice upload.' } };
+  }
+
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    'application/pdf',
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { data: null, error: uploadError };
+  }
+
+  return {
+    data: {
+      storagePath: uploadTarget.storagePath,
+      invoiceNumber,
+      issuedAt: issuedAt.toISOString(),
+      totals,
+      currency
+    },
+    error: null
+  };
+}
+
+function consultationInvoiceDbPayload(upload: {
+  storagePath: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  totals: ReturnType<typeof computeConsultationInvoiceTotals>;
+}) {
+  return {
+    invoice_pdf_storage_path: upload.storagePath,
+    invoice_generated_at: upload.issuedAt,
+    invoice_number: upload.invoiceNumber,
+    invoice_subtotal: upload.totals.subtotal,
+    invoice_tax_rate: upload.totals.taxRate,
+    invoice_tax_amount: upload.totals.taxAmount,
+    invoice_total: upload.totals.total
+  };
+}
+
+const invoiceSelectFields =
+  'id, invoice_pdf_storage_path, invoice_generated_at, invoice_number, invoice_subtotal, invoice_tax_rate, invoice_tax_amount, invoice_total, payment_link, payment_status, consultation_stage, payment_amount, payment_currency';
+
+export async function pseGenerateConsultationInvoice(
+  request: OpinionRequest,
+  input: { amount: number; currency: string; doctor: Doctor }
+) {
+  const uploaded = await uploadConsultationInvoicePdf(request, input);
+  if (uploaded.error || !uploaded.data) {
+    return { data: null, error: uploaded.error };
+  }
+
+  const payload = consultationInvoiceDbPayload(uploaded.data);
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', request.id)
+    .select(invoiceSelectFields)
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation invoice is not enabled in the database. Run npm run db:apply-consultation-invoice or apply supabase/migrations/037_consultation_invoice.sql.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** Generate invoice PDF and send payment link in one request update (better realtime for patients). */
+export async function pseSendInvoiceAndPaymentLink(
+  request: OpinionRequest,
+  input: { paymentLink: string; amount: number; currency: string; doctor: Doctor }
 ) {
   const link = input.paymentLink.trim();
   if (!link) {
     return { data: null, error: { message: 'Enter a payment link for the patient.' } };
+  }
+
+  const uploaded = await uploadConsultationInvoicePdf(request, input);
+  if (uploaded.error || !uploaded.data) {
+    return { data: null, error: uploaded.error };
+  }
+
+  const payload = {
+    ...consultationInvoiceDbPayload(uploaded.data),
+    payment_link: link,
+    payment_status: 'pending' as const,
+    consultation_stage: 'payment_pending' as const,
+    payment_amount: uploaded.data.totals.total,
+    payment_currency: uploaded.data.currency
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', request.id)
+    .select(invoiceSelectFields)
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation invoice is not enabled in the database. Run npm run db:apply-consultation-invoice or apply supabase/migrations/037_consultation_invoice.sql.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  return { data, error: null };
+}
+
+/** PSE sends payment link after schedule is confirmed by the patient. */
+export async function pseSendPaymentLink(
+  requestId: string,
+  input: { paymentLink: string; amount?: number | null; currency?: string | null },
+  options?: { requireInvoice?: boolean; invoiceStoragePath?: string | null }
+) {
+  const link = input.paymentLink.trim();
+  if (!link) {
+    return { data: null, error: { message: 'Enter a payment link for the patient.' } };
+  }
+  if (options?.requireInvoice && !options.invoiceStoragePath?.trim()) {
+    return {
+      data: null,
+      error: { message: 'Generate the consultation invoice before sending the payment link.' }
+    };
   }
   const { data, error } = await supabase
     .from('opinion_requests')
@@ -2346,17 +2608,65 @@ export async function forwardOpinionRequestToDoctor(requestId: string, coordinat
   return { data, error: null };
 }
 
+const PAYMENT_WORKFLOW_REALTIME_FIELDS = new Set([
+  'payment_link',
+  'payment_status',
+  'payment_amount',
+  'payment_currency',
+  'consultation_stage',
+  'invoice_pdf_storage_path',
+  'invoice_generated_at',
+  'invoice_number',
+  'invoice_subtotal',
+  'invoice_tax_rate',
+  'invoice_tax_amount',
+  'invoice_total'
+]);
+
+function isPaymentWorkflowRealtimePayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const row = (payload as { new?: Record<string, unknown> | null }).new;
+  if (!row) return false;
+  return Object.keys(row).some((key) => PAYMENT_WORKFLOW_REALTIME_FIELDS.has(key));
+}
+
+function createDebouncedLiveRefresh(onChange: () => void, debounceMs: number) {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let followUpTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const refresh = () => {
+    onChange();
+  };
+
+  const scheduleRefresh = (payload?: unknown) => {
+    if (isPaymentWorkflowRealtimePayload(payload)) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (followUpTimer) clearTimeout(followUpTimer);
+      refresh();
+      followUpTimer = setTimeout(refresh, debounceMs);
+      return;
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(refresh, debounceMs);
+  };
+
+  const cancel = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (followUpTimer) clearTimeout(followUpTimer);
+    debounceTimer = null;
+    followUpTimer = null;
+  };
+
+  return { scheduleRefresh, cancel };
+}
+
 /** Live updates for a single request detail view (recommendations, stage, summary). */
 export function subscribeOpinionRequestLiveUpdates(
   requestId: string,
   onChange: () => void
 ): () => void {
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const scheduleRefresh = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => onChange(), 200);
-  };
+  const { scheduleRefresh, cancel } = createDebouncedLiveRefresh(onChange, 400);
 
   const channel = supabase
     .channel(`opinion-request-live:${requestId}`)
@@ -2368,7 +2678,7 @@ export function subscribeOpinionRequestLiveUpdates(
         table: 'opinion_requests',
         filter: `id=eq.${requestId}`
       },
-      scheduleRefresh
+      (payload) => scheduleRefresh(payload)
     )
     .on(
       'postgres_changes',
@@ -2378,7 +2688,7 @@ export function subscribeOpinionRequestLiveUpdates(
         table: 'opinion_request_recommendations',
         filter: `request_id=eq.${requestId}`
       },
-      scheduleRefresh
+      () => scheduleRefresh()
     )
     .on(
       'postgres_changes',
@@ -2388,12 +2698,12 @@ export function subscribeOpinionRequestLiveUpdates(
         table: 'consultation_summaries',
         filter: `request_id=eq.${requestId}`
       },
-      scheduleRefresh
+      () => scheduleRefresh()
     )
     .subscribe();
 
   return () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
+    cancel();
     void supabase.removeChannel(channel);
   };
 }
@@ -2403,12 +2713,7 @@ export function subscribePatientOpinionRequestUpdates(
   patientAuthUserId: string,
   onChange: () => void
 ): () => void {
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const scheduleRefresh = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => onChange(), 350);
-  };
+  const { scheduleRefresh, cancel } = createDebouncedLiveRefresh(onChange, 500);
 
   const channel = supabase
     .channel(`patient-opinion-requests:${patientAuthUserId}`)
@@ -2420,7 +2725,7 @@ export function subscribePatientOpinionRequestUpdates(
         table: 'opinion_requests',
         filter: `patient_id=eq.${patientAuthUserId}`
       },
-      scheduleRefresh
+      (payload) => scheduleRefresh(payload)
     )
     .on(
       'postgres_changes',
@@ -2440,7 +2745,7 @@ export function subscribePatientOpinionRequestUpdates(
     .subscribe();
 
   return () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
+    cancel();
     void supabase.removeChannel(channel);
   };
 }
@@ -2450,12 +2755,7 @@ export function subscribeStaffOpinionRequestUpdates(
   onChange: () => void,
   options?: { assignedToAdminId?: string | null }
 ): () => void {
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const scheduleRefresh = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => onChange(), 300);
-  };
+  const { scheduleRefresh, cancel } = createDebouncedLiveRefresh(onChange, 400);
 
   const assigneeId = options?.assignedToAdminId?.trim() || null;
   const channelName = assigneeId
@@ -2474,7 +2774,7 @@ export function subscribeStaffOpinionRequestUpdates(
       { event: '*', schema: 'public', table: 'opinion_requests' },
       (payload) => {
         const row = (payload.new ?? payload.old) as { assigned_to?: string | null } | null;
-        if (matchesAssignee(row)) scheduleRefresh();
+        if (matchesAssignee(row)) scheduleRefresh(payload);
       }
     )
     .on(
@@ -2490,7 +2790,7 @@ export function subscribeStaffOpinionRequestUpdates(
     .subscribe();
 
   return () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
+    cancel();
     void supabase.removeChannel(channel);
   };
 }
