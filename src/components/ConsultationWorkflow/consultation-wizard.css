@@ -947,6 +947,94 @@
   gap: 0.35rem;
 }
 
+.consultation-invoice-pdf--collapsible {
+  border: 1px solid color-mix(in srgb, var(--border, #d1d5db) 85%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--patient-wizard-teal-soft, #dff6f8) 35%, #fff);
+  overflow: hidden;
+}
+
+.consultation-invoice-pdf__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.consultation-invoice-pdf__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.15rem 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.consultation-invoice-pdf__toggle-label {
+  line-height: 1.3;
+}
+
+.consultation-invoice-pdf__chevron {
+  flex-shrink: 0;
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.consultation-invoice-pdf--expanded .consultation-invoice-pdf__chevron {
+  transform: rotate(180deg);
+}
+
+.consultation-invoice-pdf__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.consultation-invoice-pdf__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.consultation-invoice-pdf__panel {
+  padding: 0 0.75rem 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border, #d1d5db) 70%, transparent);
+}
+
+.consultation-invoice-pdf__meta {
+  padding-top: 0.75rem;
+}
+
+.consultation-invoice-pdf__meta p {
+  margin: 0 0 0.35rem;
+}
+
+.consultation-invoice-pdf__status {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}
+
+.consultation-invoice-pdf__iframe {
+  display: block;
+  width: 100%;
+  min-height: 22rem;
+  margin-top: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
 .consultation-summary-pdf__viewer {
   margin-bottom: 0.75rem;
   border: 1px solid #d1d5db;

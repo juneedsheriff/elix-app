@@ -98,12 +98,31 @@ export function preferredDurationTiers(): ConsultationTier[] {
   }));
 }
 
+export function normalizeConsultationDurationMinutes(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const minutes = Math.round(Number(value));
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : null;
+}
+
 export function getTierForDuration(
   doctor: Pick<Doctor, 'consultation_tiers' | 'consultation_fee' | 'fee_usd'>,
   durationMinutes: number
 ): ConsultationTier | null {
+  const duration = normalizeConsultationDurationMinutes(durationMinutes);
+  if (duration == null) return null;
   const tiers = getDoctorConsultationTiers(doctor);
-  return tiers.find((tier) => tier.duration_minutes === durationMinutes) ?? null;
+  return tiers.find((tier) => tier.duration_minutes === duration) ?? null;
+}
+
+export function getTierFeeFromTiers(
+  tiers: ConsultationTier[] | null | undefined,
+  durationMinutes: unknown
+): number | null {
+  const duration = normalizeConsultationDurationMinutes(durationMinutes);
+  if (duration == null || !tiers?.length) return null;
+  const tier = tiers.find((item) => item.duration_minutes === duration);
+  if (!tier || !Number.isFinite(tier.fee_usd) || tier.fee_usd <= 0) return null;
+  return tier.fee_usd;
 }
 
 export function getTierFeeUsd(

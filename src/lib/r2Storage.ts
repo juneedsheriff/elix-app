@@ -111,6 +111,19 @@ export type MedicalRecordDownloadOptions = {
   requestId?: string;
 };
 
+export async function createConsultationInvoiceUploadUrl(requestId: string, contentLength: number) {
+  return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
+    '/v1/consultation-invoice/upload-url',
+    {
+      method: 'POST',
+      json: {
+        requestId,
+        contentLength
+      }
+    }
+  );
+}
+
 export async function createConsultationSummaryUploadUrl(requestId: string, contentLength: number) {
   return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
     '/v1/consultation-summary/upload-url',

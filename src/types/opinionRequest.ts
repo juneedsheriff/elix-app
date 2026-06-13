@@ -96,6 +96,13 @@ export type OpinionRequest = {
   pse_scheduling_message: string | null;
   schedule_confirmed_at: string | null;
   records_verified_at: string | null;
+  invoice_pdf_storage_path: string | null;
+  invoice_generated_at: string | null;
+  invoice_number: string | null;
+  invoice_subtotal: number | null;
+  invoice_tax_rate: number | null;
+  invoice_tax_amount: number | null;
+  invoice_total: number | null;
   records: OpinionRequestFile[];
   recommendations?: OpinionRequestRecommendation[];
   consultation_summary?: ConsultationSummary | null;

@@ -157,6 +157,14 @@ export default function ElixHealthRequestsPage() {
             updated.payment_proof_submitted_at ?? current.payment_proof_submitted_at,
           payment_proof_storage_path:
             updated.payment_proof_storage_path ?? current.payment_proof_storage_path,
+          invoice_pdf_storage_path:
+            updated.invoice_pdf_storage_path ?? current.invoice_pdf_storage_path,
+          invoice_generated_at: updated.invoice_generated_at ?? current.invoice_generated_at,
+          invoice_number: updated.invoice_number ?? current.invoice_number,
+          invoice_subtotal: updated.invoice_subtotal ?? current.invoice_subtotal,
+          invoice_tax_rate: updated.invoice_tax_rate ?? current.invoice_tax_rate,
+          invoice_tax_amount: updated.invoice_tax_amount ?? current.invoice_tax_amount,
+          invoice_total: updated.invoice_total ?? current.invoice_total,
           records: updated.records.length ? updated.records : current.records
         };
       });

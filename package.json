@@ -31,6 +31,7 @@
     "db:apply-consultation-duration-pricing": "node scripts/apply-consultation-duration-pricing.mjs",
     "db:apply-consultation-currency": "node scripts/apply-consultation-currency.mjs",
     "db:apply-consultation-summary-pdf": "node scripts/apply-consultation-summary-pdf.mjs",
+    "db:apply-consultation-invoice": "node scripts/apply-consultation-invoice.mjs",
     "db:apply-recommendation-opinion-requests": "node scripts/apply-recommendation-opinion-requests.mjs",
     "db:apply-doctors-insert-admins": "node scripts/apply-doctors-insert-admins.mjs",
     "db:apply-admin-delete-requests": "node scripts/apply-admin-delete-requests.mjs",

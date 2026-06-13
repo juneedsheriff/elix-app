@@ -33,6 +33,7 @@ import {
   type WizardProgressContext
 } from '../../lib/consultationWizard';
 import ConsultationSummaryPdfView from './ConsultationSummaryPdfView';
+import ConsultationInvoicePdfView from './ConsultationInvoicePdfView';
 import PatientRequestRecordsModal from './PatientRequestRecordsModal';
 import PatientPaymentProofUpload from './PatientPaymentProofUpload';
 import PatientConsultationRetainCard, {
@@ -592,6 +593,11 @@ export default function PatientConsultationWizard({
       case 3:
         return (
           <div className='doctor-response-block patient-view'>
+            {request.invoice_pdf_storage_path?.trim() ? (
+              <div className='patient-payment-step__invoice'>
+                <ConsultationInvoicePdfView request={request} variant='patient' />
+              </div>
+            ) : null}
             {isPatientPaymentConfirmed(request) ? (
               <>
                 {renderPaymentRetain()}
