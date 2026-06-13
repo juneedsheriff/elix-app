@@ -30,6 +30,11 @@ import {
   uploadFileToR2
 } from './r2Storage';
 import { supabase } from './supabase';
+import {
+  recordOpinionRequestAudit,
+  type OpinionRequestAuditAction,
+  type OpinionRequestAuditActorRole
+} from './opinionRequestAudit';
 
 const PAYMENT_PROOF_MAX_BYTES = 10 * 1024 * 1024;
 const PAYMENT_PROOF_ACCEPTED_TYPES = new Set([
@@ -377,6 +382,15 @@ const requestListSelectMinimalLegacy = `
 /** Patient-facing: waiting for a doctor opinion (no response text yet). */
 export function isAwaitingDoctorReply(request: Pick<OpinionRequest, 'doctor_response'>): boolean {
   return !request.doctor_response?.trim();
+}
+
+/** Patient my-requests list: consultation finished or case closed. */
+export function isPatientRequestCompleted(
+  request: Pick<OpinionRequest, 'consultation_stage' | 'doctor_response' | 'status'>
+): boolean {
+  if (request.consultation_stage === 'completed') return true;
+  if (request.doctor_response?.trim()) return true;
+  return request.status === 'closed';
 }
 
 /** Request submitted by patient but not yet assigned by admin. */
@@ -735,6 +749,9 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
     }
   }
 
+  await logRequestAudit(request.id, 'request_created', 'patient', {
+    metadata: { doctor_id: doctor.id, doctor_name: doctorName }
+  });
   return { data: { id: request.id }, error: null };
 }
 
@@ -847,6 +864,12 @@ export async function createRecommendationOpinionRequest(input: CreateRecommenda
     }
   }
 
+  await logRequestAudit(request.id, 'recommendation_request_created', 'patient', {
+    metadata: {
+      requested_specialty: input.requestedSpecialty?.trim() || null,
+      record_count: input.recordIds.length
+    }
+  });
   return { data: { id: request.id }, error: null };
 }
 
@@ -955,6 +978,7 @@ export async function submitDoctorOpinionResponse(requestId: string, responseTex
       : '';
     return { data: null, error: { message: `${error.message}${hint}` } };
   }
+  await logRequestAudit(requestId, 'doctor_opinion_submitted', 'doctor');
   return { data, error: null };
 }
 
@@ -1564,6 +1588,7 @@ export async function deleteOpinionRequestForAdmin(requestId: string) {
 
   if (!rpcError) {
     if (rpcOk === true) {
+      await logRequestAudit(requestId, 'request_deleted', 'administrator');
       return { data: [{ id: requestId }], error: null };
     }
     return { data: null, error: { message: 'Request not found or could not be deleted.' } };
@@ -1604,6 +1629,7 @@ export async function deleteOpinionRequestForAdmin(requestId: string) {
     };
   }
 
+  await logRequestAudit(requestId, 'request_deleted', 'administrator');
   return { data, error: null };
 }
 
@@ -1665,6 +1691,15 @@ export async function deleteAllOpinionRequestsForPatientForAdmin(patientAuthUser
 // Consultation workflow mutations
 // -----------------------------------------------------------------------------
 
+async function logRequestAudit(
+  requestId: string,
+  action: OpinionRequestAuditAction,
+  actorRole: OpinionRequestAuditActorRole,
+  options?: { summary?: string; metadata?: Record<string, unknown>; actorName?: string | null }
+) {
+  return recordOpinionRequestAudit(requestId, action, { actorRole, ...options });
+}
+
 export async function pseMarkRecordsVerified(requestId: string) {
   const verifiedAt = new Date().toISOString();
   let { data, error } = await supabase
@@ -1685,6 +1720,9 @@ export async function pseMarkRecordsVerified(requestId: string) {
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'records_verified', 'pse', {
+    metadata: { records_verified_at: verifiedAt }
+  });
   return { data, error: null };
 }
 
@@ -1714,6 +1752,9 @@ export async function saveOpinionRequestRecommendations(
     .select('id, request_id, doctor_id, rank, note, created_at');
 
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'doctors_recommended', 'pse', {
+    metadata: { recommendation_count: input.length }
+  });
   return { data: (data ?? []) as unknown as OpinionRequestRecommendation[], error: null };
 }
 
@@ -1807,6 +1848,7 @@ export async function markRecommendationsShared(
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'recommendations_shared', 'pse');
   return { data, error: null };
 }
 
@@ -1843,6 +1885,9 @@ export async function patientSelectRecommendedDoctor(
     .select('id, selected_doctor_id, doctor_id, consultation_stage, consultation_duration_minutes, consultation_fee_usd, consultation_currency')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'doctor_selected', 'patient', {
+    metadata: { doctor_id: doctor.id, doctor_name: doctor.full_name }
+  });
   return { data, error: null };
 }
 
@@ -1895,6 +1940,9 @@ export async function patientSelectDoctorWithAvailability(
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'doctor_and_availability_submitted', 'patient', {
+    metadata: { doctor_id: doctor.id, doctor_name: doctor.full_name }
+  });
   return { data, error: null };
 }
 
@@ -1909,6 +1957,7 @@ export async function patientSubmitAvailability(requestId: string, availability:
     .select('id, consultation_stage')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'availability_submitted', 'patient');
   return { data, error: null };
 }
 
@@ -1928,6 +1977,9 @@ export async function pseProposeConfirmedSchedule(
     .select('id, scheduled_at, pse_scheduling_message, consultation_stage')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'schedule_proposed', 'pse', {
+    metadata: { scheduled_at: input.scheduledAt }
+  });
   return { data, error: null };
 }
 
@@ -1953,6 +2005,7 @@ export async function pseProposeScheduleAlternatives(
     .select('id, pse_scheduling_message, consultation_stage')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'schedule_alternatives_proposed', 'pse');
   return { data, error: null };
 }
 
@@ -1981,6 +2034,7 @@ export async function pseApprovePatientSelection(requestId: string) {
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'patient_selection_approved', 'pse');
   return { data, error: null };
 }
 
@@ -2009,6 +2063,9 @@ export async function patientConfirmSchedule(requestId: string) {
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'schedule_confirmed', 'patient', {
+    metadata: { schedule_confirmed_at: confirmedAt }
+  });
   return { data, error: null };
 }
 
@@ -2093,6 +2150,9 @@ export async function patientSubmitPaymentProof(requestId: string, file: File) {
     return { data: null, error };
   }
 
+  await logRequestAudit(requestId, 'payment_proof_submitted', 'patient', {
+    metadata: { file_name: file.name, submitted_at: submittedAt }
+  });
   return { data, error: null };
 }
 
@@ -2216,6 +2276,9 @@ export async function pseGenerateConsultationInvoice(
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(request.id, 'invoice_generated', 'pse', {
+    metadata: { invoice_number: payload.invoice_number }
+  });
   return { data, error: null };
 }
 
@@ -2261,6 +2324,9 @@ export async function pseSendInvoiceAndPaymentLink(
   }
 
   if (error) return { data: null, error };
+  await logRequestAudit(request.id, 'invoice_and_payment_sent', 'pse', {
+    metadata: { payment_amount: uploaded.data.totals.total, payment_currency: uploaded.data.currency }
+  });
   return { data, error: null };
 }
 
@@ -2293,6 +2359,9 @@ export async function pseSendPaymentLink(
     .select('id, payment_link, payment_status, consultation_stage, payment_amount, payment_currency')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'payment_link_sent', 'pse', {
+    metadata: { payment_amount: input.amount ?? null, payment_currency: input.currency ?? null }
+  });
   return { data, error: null };
 }
 
@@ -2311,6 +2380,9 @@ export async function pseScheduleAppointment(
     .select('id, scheduled_at, meeting_link, consultation_stage')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'appointment_scheduled', 'pse', {
+    metadata: { scheduled_at: input.scheduledAt, meeting_link: input.meetingLink?.trim() || null }
+  });
   return { data, error: null };
 }
 
@@ -2322,6 +2394,7 @@ export async function pseSetPaymentPending(requestId: string) {
     .select('id, payment_status, consultation_stage')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'payment_pending_set', 'pse');
   return { data, error: null };
 }
 
@@ -2343,6 +2416,13 @@ export async function pseConfirmPayment(
     .select('id, payment_status, consultation_stage, payment_confirmed_at')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'payment_confirmed', 'pse', {
+    metadata: {
+      payment_amount: input.amount ?? null,
+      payment_currency: input.currency ?? null,
+      payment_reference: input.reference?.trim() || null
+    }
+  });
   return { data, error: null };
 }
 
@@ -2354,6 +2434,7 @@ export async function pseReleaseToDoctor(requestId: string) {
     .select('id, status')
     .single();
   if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'released_to_doctor', 'pse');
   return { data, error: null };
 }
 
@@ -2523,6 +2604,9 @@ export async function saveDoctorConsultation(
     .eq('id', requestId);
 
   if (requestError) return { data: null, error: requestError };
+  await logRequestAudit(requestId, 'consultation_summary_saved', 'doctor', {
+    metadata: { consultation_completed: shouldCloseRequestAfterConsultation(request) }
+  });
   return { data, error: null };
 }
 
@@ -2574,6 +2658,9 @@ export async function assignOpinionRequest(requestId: string, assigneeAdminId: s
     return { data: null, error: { message: `${error.message}${hint}` } };
   }
 
+  await logRequestAudit(requestId, 'request_assigned', 'administrator', {
+    metadata: { assigned_to: assigneeAdminId }
+  });
   return { data, error: null };
 }
 
@@ -2605,6 +2692,7 @@ export async function forwardOpinionRequestToDoctor(requestId: string, coordinat
     return { data: null, error: { message: `${error.message}${hint}` } };
   }
 
+  await logRequestAudit(requestId, 'request_forwarded_to_doctor', 'pse');
   return { data, error: null };
 }
 

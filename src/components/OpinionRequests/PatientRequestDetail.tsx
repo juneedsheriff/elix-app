@@ -1,5 +1,6 @@
 import { ArrowLeft, Clock, FileText, MessageSquare, Stethoscope } from 'lucide-react';
 import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
+import OpinionRequestAuditLink from './OpinionRequestAuditLink';
 import { isRecommendationOpinionRequest, patientRequestStatusLabel } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
@@ -20,6 +21,7 @@ type PatientRequestDetailProps = {
   request: OpinionRequest;
   liveTick?: number;
   onBack: () => void;
+  onOpenActivity: () => void;
   onUpdated: () => void;
   onOpenRecord: (storagePath: string | null) => void;
   onMessage: (message: string, type: 'error' | 'success') => void;
@@ -29,6 +31,7 @@ export default function PatientRequestDetail({
   request,
   liveTick,
   onBack,
+  onOpenActivity,
   onUpdated,
   onOpenRecord,
   onMessage
@@ -53,6 +56,7 @@ export default function PatientRequestDetail({
               </span>
             ) : null}
             <span className={`tag status-${request.status}`}>{statusText}</span>
+            <OpinionRequestAuditLink onOpen={onOpenActivity} />
           </div>
         </div>
 

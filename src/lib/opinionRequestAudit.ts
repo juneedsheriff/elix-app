@@ -1,0 +1,289 @@
+import { supabase } from './supabase';
+
+export type OpinionRequestAuditActorRole = 'patient' | 'pse' | 'administrator' | 'doctor' | 'system';
+
+export type OpinionRequestAuditAction =
+  | 'request_created'
+  | 'recommendation_request_created'
+  | 'request_assigned'
+  | 'request_forwarded_to_doctor'
+  | 'request_deleted'
+  | 'records_verified'
+  | 'doctors_recommended'
+  | 'recommendations_shared'
+  | 'doctor_selected'
+  | 'doctor_and_availability_submitted'
+  | 'availability_submitted'
+  | 'schedule_proposed'
+  | 'schedule_alternatives_proposed'
+  | 'patient_selection_approved'
+  | 'schedule_confirmed'
+  | 'payment_proof_submitted'
+  | 'invoice_generated'
+  | 'payment_link_sent'
+  | 'invoice_and_payment_sent'
+  | 'appointment_scheduled'
+  | 'payment_pending_set'
+  | 'payment_confirmed'
+  | 'released_to_doctor'
+  | 'doctor_opinion_submitted'
+  | 'consultation_summary_saved';
+
+export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditAction, string> = {
+  request_created: 'Second opinion request submitted',
+  recommendation_request_created: 'Recommendation request submitted',
+  request_assigned: 'Request assigned to care team member',
+  request_forwarded_to_doctor: 'Request forwarded to doctor',
+  request_deleted: 'Request deleted',
+  records_verified: 'Medical records verified',
+  doctors_recommended: 'Doctors recommended to patient',
+  recommendations_shared: 'Doctor recommendations shared with patient',
+  doctor_selected: 'Doctor selected',
+  doctor_and_availability_submitted: 'Doctor and preferred time submitted',
+  availability_submitted: 'Preferred appointment time submitted',
+  schedule_proposed: 'Appointment schedule proposed',
+  schedule_alternatives_proposed: 'Alternative appointment times proposed',
+  patient_selection_approved: 'Patient doctor selection approved',
+  schedule_confirmed: 'Appointment schedule confirmed',
+  payment_proof_submitted: 'Payment proof uploaded',
+  invoice_generated: 'Consultation invoice generated',
+  payment_link_sent: 'Payment link sent to patient',
+  invoice_and_payment_sent: 'Invoice generated and payment link sent',
+  appointment_scheduled: 'Appointment scheduled',
+  payment_pending_set: 'Marked as payment pending',
+  payment_confirmed: 'Payment confirmed',
+  released_to_doctor: 'Case released to doctor',
+  doctor_opinion_submitted: 'Doctor opinion submitted',
+  consultation_summary_saved: 'Consultation summary saved'
+};
+
+export type OpinionRequestAuditEvent = {
+  id: string;
+  request_id: string;
+  actor_user_id: string | null;
+  actor_role: OpinionRequestAuditActorRole;
+  actor_name: string | null;
+  action: OpinionRequestAuditAction;
+  summary: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export function formatOpinionRequestAuditActorRole(role: OpinionRequestAuditActorRole): string {
+  switch (role) {
+    case 'patient':
+      return 'Patient';
+    case 'pse':
+      return 'PSE / Patient service';
+    case 'administrator':
+      return 'Administrator';
+    case 'doctor':
+      return 'Doctor';
+    default:
+      return 'System';
+  }
+}
+
+export function formatOpinionRequestAuditActorLabel(event: Pick<OpinionRequestAuditEvent, 'actor_role' | 'actor_name'>): string {
+  const roleLabel = formatOpinionRequestAuditActorRole(event.actor_role);
+  if (event.actor_name?.trim()) {
+    return `${roleLabel} · ${event.actor_name.trim()}`;
+  }
+  return roleLabel;
+}
+
+function isMissingAuditTableError(error: { message?: string; code?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  const code = error?.code ?? '';
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    msg.includes('opinion_request_audit_events') ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find the table')
+  );
+}
+
+async function resolveActorName(
+  userId: string,
+  role: OpinionRequestAuditActorRole
+): Promise<string | null> {
+  if (role === 'patient') {
+    const { data } = await supabase
+      .from('patients')
+      .select('full_name')
+      .eq('auth_user_id', userId)
+      .maybeSingle();
+    return data?.full_name?.trim() || null;
+  }
+
+  if (role === 'doctor') {
+    const { data } = await supabase
+      .from('doctors')
+      .select('full_name')
+      .eq('auth_user_id', userId)
+      .maybeSingle();
+    return data?.full_name?.trim() || null;
+  }
+
+  if (role === 'pse' || role === 'administrator') {
+    const { data } = await supabase
+      .from('admins')
+      .select('full_name')
+      .eq('auth_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+    return data?.full_name?.trim() || null;
+  }
+
+  return null;
+}
+
+async function resolveStaffAuditActor(
+  hintRole: OpinionRequestAuditActorRole
+): Promise<{
+  actorUserId: string | null;
+  actorRole: OpinionRequestAuditActorRole;
+  actorName: string | null;
+}> {
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { actorUserId: null, actorRole: hintRole, actorName: null };
+  }
+
+  const { data: admin } = await supabase
+    .from('admins')
+    .select('full_name, role')
+    .eq('auth_user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (admin) {
+    const staffRole: OpinionRequestAuditActorRole =
+      admin.role === 'patient_service_executive' ? 'pse' : 'administrator';
+    return {
+      actorUserId: user.id,
+      actorRole:
+        hintRole === 'patient' || hintRole === 'doctor' || hintRole === 'system'
+          ? hintRole
+          : staffRole,
+      actorName: admin.full_name?.trim() || null
+    };
+  }
+
+  if (hintRole === 'patient' || hintRole === 'doctor') {
+    const name = await resolveActorName(user.id, hintRole);
+    return { actorUserId: user.id, actorRole: hintRole, actorName: name };
+  }
+
+  return {
+    actorUserId: user.id,
+    actorRole: hintRole,
+    actorName: await resolveActorName(user.id, hintRole)
+  };
+}
+
+async function resolveAuditActor(
+  actorRole: OpinionRequestAuditActorRole,
+  actorName?: string | null
+): Promise<{
+  actorUserId: string | null;
+  actorRole: OpinionRequestAuditActorRole;
+  actorName: string | null;
+}> {
+  if (actorRole === 'system') {
+    return { actorUserId: null, actorRole: 'system', actorName: actorName?.trim() || 'System' };
+  }
+
+  if (actorRole === 'pse' || actorRole === 'administrator') {
+    const staff = await resolveStaffAuditActor(actorRole);
+    if (staff.actorName || staff.actorUserId) {
+      return {
+        ...staff,
+        actorName: actorName?.trim() || staff.actorName
+      };
+    }
+  }
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { actorUserId: null, actorRole, actorName: actorName?.trim() || null };
+  }
+
+  const resolvedName = actorName?.trim() || (await resolveActorName(user.id, actorRole));
+  return { actorUserId: user.id, actorRole, actorName: resolvedName };
+}
+
+export async function recordOpinionRequestAudit(
+  requestId: string,
+  action: OpinionRequestAuditAction,
+  options?: {
+    summary?: string;
+    metadata?: Record<string, unknown>;
+    actorRole?: OpinionRequestAuditActorRole;
+    actorName?: string | null;
+  }
+): Promise<void> {
+  const actorRole = options?.actorRole ?? 'system';
+  const summary = options?.summary?.trim() || OPINION_REQUEST_AUDIT_ACTION_LABELS[action];
+
+  try {
+    const actor = await resolveAuditActor(actorRole, options?.actorName);
+    const { error } = await supabase.from('opinion_request_audit_events').insert({
+      request_id: requestId,
+      actor_user_id: actor.actorUserId,
+      actor_role: actor.actorRole,
+      actor_name: actor.actorName,
+      action,
+      summary,
+      metadata: options?.metadata ?? {}
+    });
+
+    if (error && !isMissingAuditTableError(error)) {
+      console.warn('[opinionRequestAudit] insert failed:', error.message);
+    }
+  } catch (error) {
+    console.warn('[opinionRequestAudit] unexpected error:', error);
+  }
+}
+
+export async function fetchOpinionRequestAuditEvents(requestId: string): Promise<{
+  data: OpinionRequestAuditEvent[] | null;
+  error: { message: string } | null;
+}> {
+  const { data, error } = await supabase
+    .from('opinion_request_audit_events')
+    .select(
+      'id, request_id, actor_user_id, actor_role, actor_name, action, summary, metadata, created_at'
+    )
+    .eq('request_id', requestId)
+    .order('created_at', { ascending: false })
+    .returns<OpinionRequestAuditEvent[]>();
+
+  if (error) {
+    if (isMissingAuditTableError(error)) {
+      return {
+        data: null,
+        error: {
+          message:
+            'Activity history is not enabled yet. Run npm run db:apply-opinion-request-audit or apply supabase/migrations/038_opinion_request_audit.sql.'
+        }
+      };
+    }
+    return { data: null, error: { message: error.message } };
+  }
+
+  return {
+    data: (data ?? []).map((row) => ({
+      ...row,
+      metadata: (row.metadata ?? {}) as Record<string, unknown>
+    })),
+    error: null
+  };
+}
