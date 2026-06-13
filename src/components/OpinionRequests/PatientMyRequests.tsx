@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, ClipboardList, Loader2, Sparkles } from 'lucide-react';
+import {
+  ChevronRight,
+  ClipboardList,
+  Loader2,
+  Sparkles
+} from 'lucide-react';
 import PatientRequestDetail from './PatientRequestDetail';
 import PatientRequestListCard from './PatientRequestListCard';
+import OpinionRequestActivityPage from './OpinionRequestActivityPage';
 import RecommendationOpinionForm from './RecommendationOpinionForm';
 import SecondOpinionChoiceModal from './SecondOpinionChoiceModal';
 import {
   fetchPatientOpinionRequests,
+  isPatientRequestCompleted,
+  isRecommendationOpinionRequest,
   subscribePatientOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
@@ -57,6 +65,7 @@ export default function PatientMyRequests({
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('id');
+  const showActivity = searchParams.get('activity') === '1';
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +75,28 @@ export default function PatientMyRequests({
   const [liveTick, setLiveTick] = useState(0);
   const [choiceModalOpen, setChoiceModalOpen] = useState(false);
   const [showRecommendationForm, setShowRecommendationForm] = useState(false);
+  const [requestTab, setRequestTab] = useState<'upcoming' | 'completed'>('upcoming');
   const hasLoadedOnceRef = useRef(false);
+
+  const { completedRequests, upcomingRequests, showRequestTabs, visibleRequests } = useMemo(() => {
+      const completed = requests.filter(isPatientRequestCompleted);
+      const upcoming = requests.filter((request) => !isPatientRequestCompleted(request));
+      const showTabs = completed.length > 0 && upcoming.length > 0;
+      const visible = showTabs
+        ? requestTab === 'completed'
+          ? completed
+          : upcoming
+        : upcoming.length > 0
+          ? upcoming
+          : completed;
+
+      return {
+        completedRequests: completed,
+        upcomingRequests: upcoming,
+        showRequestTabs: showTabs,
+        visibleRequests: visible
+      };
+    }, [requests, requestTab]);
 
   const canLoad = Boolean(patientAuthUserId);
 
@@ -127,6 +157,18 @@ export default function PatientMyRequests({
     setSearchParams({ id: requestId });
     setActionMessage(null);
     setSuccessMessage(null);
+  };
+
+  const openActivity = (requestId: string) => {
+    setSearchParams({ id: requestId, activity: '1' });
+  };
+
+  const closeActivity = () => {
+    if (!selectedId) {
+      setSearchParams({});
+      return;
+    }
+    setSearchParams({ id: selectedId });
   };
 
   const closeDetail = () => {
@@ -210,6 +252,22 @@ export default function PatientMyRequests({
       );
     }
 
+    if (showActivity) {
+      const activityLabel = isRecommendationOpinionRequest(selectedRequest) && !selectedRequest.doctor_name
+        ? 'Doctor recommendations'
+        : (selectedRequest.doctor_name ?? 'Consultation request');
+
+      return (
+        <OpinionRequestActivityPage
+          requestId={selectedRequest.id}
+          requestLabel={activityLabel}
+          refreshKey={liveTick}
+          onBack={closeActivity}
+          backLabel='Back to request'
+        />
+      );
+    }
+
     return (
       <div className='screen-grid doctors-screen patient-request-detail-view'>
         <section className='section-card patient-request-detail-view__card'>
@@ -227,6 +285,7 @@ export default function PatientMyRequests({
             request={selectedRequest}
             liveTick={liveTick}
             onBack={closeDetail}
+            onOpenActivity={() => openActivity(selectedRequest.id)}
             onUpdated={() => void load({ silent: true })}
             onOpenRecord={(path) => void openRecord(path)}
             onMessage={handleMessage}
@@ -254,30 +313,22 @@ export default function PatientMyRequests({
       <div className='pmr-page'>
         <div className='pmr-header-panel'>
           <section className='pmr-hero-banner' aria-labelledby='pmr-hero-heading'>
-            <div className='pmr-hero-banner__content'>
-              <h2 id='pmr-hero-heading' className='pmr-hero-banner__title'>
-                My requests
-              </h2>
-              <p className='pmr-hero-banner__text'>
-                Track consultations, payments, and doctor responses in one place.
-              </p>
-              <div className='pmr-hero-banner__badges'>
-                {!loading && requests.length > 0 ? (
-                  <span className='pmr-hero-badge pmr-hero-badge--active'>
-                    <Check size={12} strokeWidth={3} aria-hidden />
-                    {requests.length} Active
-                  </span>
-                ) : null}
-                <span className='pmr-hero-badge pmr-hero-badge--info'>
-                  <Check size={12} strokeWidth={3} aria-hidden />
-                  Live status updates
+            <div className='pmr-hero-banner__glow' aria-hidden />
+            <div className='pmr-hero-banner__inner'>
+              <div className='pmr-hero-banner__content'>
+                <p className='pmr-hero-banner__eyebrow'>Your consultations</p>
+                <h2 id='pmr-hero-heading' className='pmr-hero-banner__title'>
+                  My requests
+                </h2>
+                <p className='pmr-hero-banner__text'>
+                  Track consultations, payments, and doctor responses in one place.
+                </p>
+              </div>
+              <div className='pmr-hero-banner__art' aria-hidden>
+                <span className='pmr-hero-banner__icon-wrap'>
+                  <ClipboardList size={26} strokeWidth={1.75} />
                 </span>
               </div>
-            </div>
-            <div className='pmr-hero-banner__art' aria-hidden>
-              <span className='pmr-hero-banner__icon-wrap'>
-                <ClipboardList size={32} strokeWidth={1.75} />
-              </span>
             </div>
           </section>
 
@@ -319,6 +370,35 @@ export default function PatientMyRequests({
         </div>
 
         <div className='pmr-body'>
+          {!loading && !error && showRequestTabs ? (
+            <div className='pmr-tabs' role='tablist' aria-label='Request categories'>
+              <button
+                type='button'
+                role='tab'
+                id='pmr-tab-upcoming'
+                aria-selected={requestTab === 'upcoming'}
+                aria-controls='pmr-request-panel'
+                className={requestTab === 'upcoming' ? 'pmr-tab pmr-tab--active' : 'pmr-tab'}
+                onClick={() => setRequestTab('upcoming')}
+              >
+                Upcoming
+                <span className='pmr-tab__count'>{upcomingRequests.length}</span>
+              </button>
+              <button
+                type='button'
+                role='tab'
+                id='pmr-tab-completed'
+                aria-selected={requestTab === 'completed'}
+                aria-controls='pmr-request-panel'
+                className={requestTab === 'completed' ? 'pmr-tab pmr-tab--active' : 'pmr-tab'}
+                onClick={() => setRequestTab('completed')}
+              >
+                Completed
+                <span className='pmr-tab__count'>{completedRequests.length}</span>
+              </button>
+            </div>
+          ) : null}
+
           {loading ? (
             <div className='pmr-skeleton-list' aria-live='polite' aria-busy='true'>
               <div className='pmr-skeleton-card' />
@@ -343,9 +423,14 @@ export default function PatientMyRequests({
             </div>
           ) : null}
 
-          {!loading && !error && requests.length > 0 ? (
-            <ul className='pmr-list' role='list'>
-              {requests.map((request) => (
+          {!loading && !error && visibleRequests.length > 0 ? (
+            <ul
+              id='pmr-request-panel'
+              className='pmr-list'
+              role='list'
+              aria-labelledby={showRequestTabs ? `pmr-tab-${requestTab}` : undefined}
+            >
+              {visibleRequests.map((request) => (
                 <PatientRequestListCard
                   key={request.id}
                   request={request}

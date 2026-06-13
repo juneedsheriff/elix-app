@@ -667,6 +667,27 @@ body.doctors-mgmt-table-fullscreen-open {
   flex-wrap: wrap;
 }
 
+.request-detail-drawer__audit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 22%, var(--border));
+  background: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface));
+  color: var(--brand-cyan);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.request-detail-drawer__audit-btn:hover,
+.request-detail-drawer__audit-btn:focus-visible {
+  background: color-mix(in srgb, var(--brand-cyan) 12%, var(--surface));
+  outline: none;
+}
+
 .request-detail-drawer__patient {
   display: flex;
   align-items: center;

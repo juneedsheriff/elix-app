@@ -1,17 +1,11 @@
+import { useEffect, useState } from 'react';
 import {
-
   Badge,
-
   Button,
-
   Drawer,
-
   Select,
-
   Text,
-
   ThemeIcon
-
 } from '@mantine/core';
 
 import {
@@ -35,6 +29,8 @@ import {
 } from '@tabler/icons-react';
 
 import { isPendingAdminAssignment, staffRequestStatusLabel } from '../../../lib/opinionRequests';
+import OpinionRequestActivityPage from '../../../components/OpinionRequests/OpinionRequestActivityPage';
+import OpinionRequestAuditLink from '../../../components/OpinionRequests/OpinionRequestAuditLink';
 
 import type { Admin } from '../../../types/admin';
 
@@ -119,6 +115,12 @@ export default function RequestDetailDrawer({
   onSuccess
 
 }: RequestDetailDrawerProps) {
+
+  const [showActivity, setShowActivity] = useState(false);
+
+  useEffect(() => {
+    setShowActivity(false);
+  }, [request?.id, opened]);
 
   const staff = useElixHealthStaff();
 
@@ -256,6 +258,12 @@ export default function RequestDetailDrawer({
 
             </Badge>
 
+            <OpinionRequestAuditLink
+              buttonClassName='request-detail-drawer__audit-btn'
+              buttonLabel='Activity history'
+              onOpen={() => setShowActivity(true)}
+            />
+
           </div>
 
           {isClosed ? (
@@ -276,6 +284,17 @@ export default function RequestDetailDrawer({
 
         <div className='request-detail-drawer__content'>
 
+          {showActivity ? (
+            <OpinionRequestActivityPage
+              variant='staff'
+              requestId={request.id}
+              requestLabel={request.patient_name ?? 'Patient request'}
+              backLabel='Back to coordination'
+              subtitle='Actions by patient, PSE, doctor, and admin on this request.'
+              onBack={() => setShowActivity(false)}
+            />
+          ) : (
+            <>
           {needsAssignmentForAdmin ? (
 
             <section className='request-detail-drawer__notice request-detail-drawer__notice--warn'>
@@ -507,6 +526,9 @@ export default function RequestDetailDrawer({
             </section>
 
           ) : null}
+
+            </>
+          )}
 
         </div>
 

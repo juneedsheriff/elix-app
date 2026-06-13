@@ -57,6 +57,21 @@ function isAppointmentScheduled(request: OpinionRequest): boolean {
   return stage === 'scheduled' || stage === 'schedule_confirmed' || stage === 'paid' || stage === 'completed';
 }
 
+function statusAccentClass(request: OpinionRequest): string {
+  const stage = request.consultation_stage;
+  if (stage === 'paid' || stage === 'completed' || request.doctor_response?.trim()) {
+    return 'pmr-card__accent pmr-card__accent--success';
+  }
+  if (
+    stage === 'payment_pending' ||
+    stage === 'recommended' ||
+    stage === 'schedule_proposed'
+  ) {
+    return 'pmr-card__accent pmr-card__accent--warn';
+  }
+  return 'pmr-card__accent pmr-card__accent--active';
+}
+
 function statusPillClass(request: OpinionRequest): string {
   const stage = request.consultation_stage;
   if (stage === 'paid' || stage === 'completed' || request.doctor_response?.trim()) {
@@ -107,6 +122,8 @@ export default function PatientRequestListCard({
         onClick={() => onOpen(request.id)}
         aria-label={`View request for ${doctorName}, ${statusLabel}`}
       >
+        <span className={statusAccentClass(request)} aria-hidden />
+        <div className='pmr-card__inner'>
         <div className='pmr-card__top'>
           <span className='pmr-card__avatar' aria-hidden>
             {doctorInitials(request.doctor_name)}
@@ -186,6 +203,7 @@ export default function PatientRequestListCard({
             <ChevronRight size={13} aria-hidden />
           </span>
         </footer>
+        </div>
       </button>
     </li>
   );
