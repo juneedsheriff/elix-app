@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PatientConsultationRetainCard, {
-  hasRetainedConsultationDetails
+  isUpcomingPatientConsultation
 } from '../../components/ConsultationWorkflow/PatientConsultationRetainCard';
 import PatientRequestListCard from '../../components/OpinionRequests/PatientRequestListCard';
 import '../../components/OpinionRequests/patient-my-requests.css';
@@ -94,9 +94,10 @@ export default function PatientDashboardPage({
 
   const openRequest = useCallback(
     (requestId: string) => {
+      onNavigate?.('my-requests');
       navigate(`${appScreenPath('my-requests')}?id=${encodeURIComponent(requestId)}`);
     },
-    [navigate]
+    [navigate, onNavigate]
   );
 
   const load = useCallback(
@@ -161,8 +162,8 @@ export default function PatientDashboardPage({
   );
   const avgReply = averageResponseTime(requests);
   const recent = requests.slice(0, 3);
-  const consultationsWithDetails = useMemo(
-    () => requests.filter(hasRetainedConsultationDetails),
+  const upcomingConsultations = useMemo(
+    () => requests.filter(isUpcomingPatientConsultation),
     [requests]
   );
 
@@ -246,9 +247,7 @@ export default function PatientDashboardPage({
             <div className='pd-hero__content'>
               <p className='pd-hero__eyebrow'>Welcome back</p>
               <h1 className='pd-hero__title'>Hi, {greetingName}</h1>
-              <p className='pd-hero__subtitle'>
-                Your health command center — track requests, records, and consultations in one place.
-              </p>
+           
             </div>
             {patientProfile?.elix_id ? (
               <span className='pd-hero__badge'>{patientProfile.elix_id}</span>
@@ -382,15 +381,15 @@ export default function PatientDashboardPage({
           </p>
         ) : null}
 
-        {!loading && consultationsWithDetails.length > 0 ? (
+        {!loading && upcomingConsultations.length > 0 ? (
           <section className='pd-consultations' aria-labelledby='pd-consultations-heading'>
             <div className='pd-consultations__head'>
               <h2 id='pd-consultations-heading'>Active consultation</h2>
               <p>Your upcoming visit at a glance</p>
             </div>
             <ul className='pd-consultations__list'>
-              {consultationsWithDetails.map((request) => (
-                <li key={request.id}>
+              {upcomingConsultations.map((request) => (
+                <li key={request.id} className='pd-consultations__item'>
                   <PatientConsultationRetainCard
                     request={request}
                     onOpen={openRequest}

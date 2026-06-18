@@ -10,6 +10,8 @@ export type UploadedFile = {
   storage_path: string;
   summary: string | null;
   uploaded_at: string;
+  record_category?: string | null;
+  external_url?: string | null;
 };
 
 /** Alias used by opinion-request flows */

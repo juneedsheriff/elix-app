@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Stack, Text, TextInput } from '@mantine/core';
+import { Anchor, Button, Stack, Text, TextInput } from '@mantine/core';
 import ConsultationSummaryPdfView from '../../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
 import ConsultationWizardAccordion from '../../../components/ConsultationWorkflow/ConsultationWizardAccordion';
 import {
@@ -19,9 +19,13 @@ import {
 import {
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
+  fetchStaffOpinionRequestById,
   pseConfirmPayment,
   pseGenerateConsultationInvoice,
+  pseMarkCaseDetailsReviewed,
   pseMarkRecordsVerified,
+  pseProceedWithoutRecords,
+  pseRejectRecords,
   pseReleaseToDoctor,
   pseScheduleAppointment,
   pseSendInvoiceAndPaymentLink,
@@ -34,6 +38,7 @@ import {
 } from '../../../lib/consultationCurrency';
 import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
 import AppointmentDateTimePicker from './AppointmentDateTimePicker';
+import PsePatientCaseDetailsPanel from './PsePatientCaseDetailsPanel';
 import PsePaymentStepPanel from './PsePaymentStepPanel';
 import PseRequestRecordsGallery from './PseRequestRecordsGallery';
 import RecommendDoctorsSection from './RecommendDoctorsSection';
@@ -53,6 +58,7 @@ type RequestWorkflowWizardProps = {
   canCoordinate: boolean;
   onOpenRecord: (storagePath: string) => void;
   onUpdated: () => void;
+  onRequestPatch?: (patch: Partial<OpinionRequest> & { id: string }) => void;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
 };
@@ -63,6 +69,7 @@ export default function RequestWorkflowWizard({
   canCoordinate,
   onOpenRecord,
   onUpdated,
+  onRequestPatch,
   onError,
   onSuccess
 }: RequestWorkflowWizardProps) {
@@ -91,6 +98,8 @@ export default function RequestWorkflowWizard({
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLink, setPaymentLink] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectForm, setShowRejectForm] = useState(false);
 
   const loadMeta = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -142,11 +151,22 @@ export default function RequestWorkflowWizard({
   }, [request.id, suggestedStep, maxNavigableStep]);
 
   useEffect(() => {
-    return subscribeOpinionRequestLiveUpdates(request.id, () => {
+    return subscribeOpinionRequestLiveUpdates(request.id, (hint) => {
+      if (hint?.type === 'case_details' && onRequestPatch) {
+        onRequestPatch({
+          id: request.id,
+          patient_case_details: hint.patient_case_details ?? null,
+          message: hint.message ?? request.message,
+          requested_specialty: hint.requested_specialty ?? request.requested_specialty
+        });
+      }
+      void fetchStaffOpinionRequestById(request.id).then((result) => {
+        if (result.data) onRequestPatch?.(result.data);
+      });
       void loadMeta();
       onUpdated();
     });
-  }, [request.id, loadMeta, onUpdated]);
+  }, [request.id, request.message, request.requested_specialty, loadMeta, onUpdated, onRequestPatch]);
 
   const wizardSteps = getWizardSteps('pse', progressCtx, expandedStep ?? suggestedStep);
   const paymentQuote = useMemo(
@@ -183,7 +203,55 @@ export default function RequestWorkflowWizard({
     onSuccess('Medical records marked as verified. The patient will see this on their dashboard.');
     onUpdated();
     void loadMeta();
+    setExpandedStepTracked(3);
+  };
+
+  const proceedWithoutRecords = async () => {
+    setBusy(true);
+    const { error } = await pseProceedWithoutRecords(request.id);
+    setBusy(false);
+    if (error) {
+      onError(error.message);
+      return;
+    }
+    onSuccess('Marked as proceeding without attached records.');
+    onUpdated();
+    void loadMeta();
+    setExpandedStepTracked(3);
+  };
+
+  const markCaseDetailsReviewed = async () => {
+    setBusy(true);
+    const { error } = await pseMarkCaseDetailsReviewed(request.id);
+    setBusy(false);
+    if (error) {
+      onError(error.message);
+      return;
+    }
+    onSuccess('Patient case details marked as reviewed.');
+    onUpdated();
+    void loadMeta();
     setExpandedStepTracked(2);
+  };
+
+  const submitRecordRejection = async () => {
+    const trimmed = rejectReason.trim();
+    if (!trimmed) {
+      onError('Please provide a reason for rejecting the records before sending.');
+      return;
+    }
+    setBusy(true);
+    const { error } = await pseRejectRecords(request.id, trimmed);
+    setBusy(false);
+    if (error) {
+      onError(error.message);
+      return;
+    }
+    onSuccess('Rejection sent to patient. They will see the reason on their dashboard.');
+    setRejectReason('');
+    setShowRejectForm(false);
+    onUpdated();
+    void loadMeta();
   };
 
   const handleSchedule = async () => {
@@ -301,7 +369,7 @@ export default function RequestWorkflowWizard({
     }
     onSuccess('Payment confirmed.');
     onUpdated();
-    setExpandedStepTracked(4);
+    setExpandedStepTracked(5);
   };
 
   const handleReleaseToDoctor = async () => {
@@ -363,16 +431,36 @@ export default function RequestWorkflowWizard({
               </Text>
             ) : null}
             <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(1)}>
-              Continue to verify records →
+              Continue to case details →
             </Button>
           </Stack>
         );
       case 1:
         return (
+          <PsePatientCaseDetailsPanel
+            request={request}
+            busy={busy}
+            canCoordinate={canCoordinate}
+            onMarkReviewed={() => void markCaseDetailsReviewed()}
+            onUpdated={onUpdated}
+            onError={onError}
+            onSuccess={onSuccess}
+          />
+        );
+      case 2: {
+        const hasRecords = request.records.length > 0;
+        return (
           <Stack gap='sm' className='request-workflow-step'>
             <Text size='xs' c='dimmed'>
-              Open each file and confirm it matches the patient&apos;s case before recommending doctors.
+              Open each file and confirm it matches the patient&apos;s case before recommending
+              doctors.
             </Text>
+            {request.patient_proceeded_without_records_at && !hasRecords ? (
+              <Text size='sm' c='blue'>
+                Patient chose to proceed without documents on{' '}
+                {new Date(request.patient_proceeded_without_records_at).toLocaleString()}.
+              </Text>
+            ) : null}
             <PseRequestRecordsGallery
               records={request.records}
               requestId={request.id}
@@ -382,20 +470,99 @@ export default function RequestWorkflowWizard({
               <Text size='sm' c='green'>
                 Verified {new Date(request.records_verified_at).toLocaleString()}
               </Text>
+            ) : request.pse_proceeded_without_records_at ? (
+              <Text size='sm' c='green'>
+                Proceeded without records{' '}
+                {new Date(request.pse_proceeded_without_records_at).toLocaleString()}
+              </Text>
+            ) : request.records_rejected_at ? (
+              <Stack gap='xs'>
+                <Text size='sm' c='red'>
+                  Rejected {new Date(request.records_rejected_at).toLocaleString()}
+                </Text>
+                {request.records_rejection_reason ? (
+                  <Text size='sm' c='dimmed'>
+                    Reason: {request.records_rejection_reason}
+                  </Text>
+                ) : null}
+              </Stack>
             ) : canCoordinate ? (
-              <Button
-                className='doctors-mgmt-header__primary'
-                radius='md'
-                loading={busy}
-                onClick={() => void markRecordsVerified()}
-              >
-                Mark records as verified
-              </Button>
+              <Stack gap='sm'>
+                {hasRecords ? (
+                  <Button
+                    className='doctors-mgmt-header__primary'
+                    radius='md'
+                    loading={busy}
+                    onClick={() => void markRecordsVerified()}
+                  >
+                    Approve
+                  </Button>
+                ) : (
+                  <Button
+                    className='doctors-mgmt-header__primary'
+                    radius='md'
+                    loading={busy}
+                    onClick={() => void proceedWithoutRecords()}
+                  >
+                    Proceed
+                  </Button>
+                )}
+                {hasRecords ? (
+                  !showRejectForm ? (
+                    <Button
+                      variant='outline'
+                      color='red'
+                      radius='md'
+                      onClick={() => setShowRejectForm(true)}
+                    >
+                      Reject
+                    </Button>
+                  ) : (
+                    <Stack gap='xs' className='pse-records-reject-form'>
+                      <Text size='sm' fw={600}>
+                        Rejection reason
+                      </Text>
+                      <Text size='xs' c='dimmed'>
+                        Describe why the records cannot be accepted. The patient will see this on their
+                        dashboard.
+                      </Text>
+                      <textarea
+                        className='pse-reject-textarea'
+                        rows={4}
+                        placeholder='e.g. The uploaded files are unreadable. Please re-upload clear scans of your reports.'
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                      />
+                      <Stack gap='xs'>
+                        <Button
+                          color='red'
+                          radius='md'
+                          loading={busy}
+                          disabled={!rejectReason.trim()}
+                          onClick={() => void submitRecordRejection()}
+                        >
+                          Send Rejection to Patient
+                        </Button>
+                        <Button
+                          variant='subtle'
+                          radius='md'
+                          onClick={() => {
+                            setShowRejectForm(false);
+                            setRejectReason('');
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  )
+                ) : null}
+              </Stack>
             ) : null}
           </Stack>
         );
-      case 2:
-        if (!canCoordinate) return null;
+      }
+      case 3:
         return (
           <Stack gap='sm' className='request-workflow-step'>
             <RecommendDoctorsSection
@@ -408,17 +575,16 @@ export default function RequestWorkflowWizard({
               }}
               onError={onError}
               onSuccess={onSuccess}
-              onPatientSelectionApproved={() => setExpandedStepTracked(3)}
+              onPatientSelectionApproved={() => setExpandedStepTracked(4)}
             />
-            {canPseSendPaymentLink(request) ? (
-              <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(3)}>
+            {canCoordinate && canPseSendPaymentLink(request) ? (
+              <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(4)}>
                 Continue to send payment link →
               </Button>
             ) : null}
           </Stack>
         );
-      case 3:
-        if (!canCoordinate) return null;
+      case 4:
         return (
           <PsePaymentStepPanel
             request={request}
@@ -427,6 +593,7 @@ export default function RequestWorkflowWizard({
             paymentCurrency={paymentQuote.currency}
             paymentReference={paymentReference}
             busy={busy}
+            readOnly={!canCoordinate}
             onPaymentLinkChange={setPaymentLink}
             onPaymentReferenceChange={setPaymentReference}
             onSendInvoiceAndPaymentLink={() => void handleSendInvoiceAndPaymentLink()}
@@ -435,9 +602,8 @@ export default function RequestWorkflowWizard({
             onReleaseToDoctor={() => void handleReleaseToDoctor()}
           />
         );
-      case 4:
-        if (!canCoordinate) return null;
-        return (
+      case 5:
+        return canCoordinate ? (
           <Stack gap='md' className='request-workflow-step'>
             <AppointmentDateTimePicker value={scheduledAt} onChange={setScheduledAt} />
             <TextInput
@@ -461,15 +627,40 @@ export default function RequestWorkflowWizard({
               </Text>
             ) : null}
           </Stack>
+        ) : (
+          <Stack gap='sm' className='request-workflow-step'>
+            <Text fw={600} size='sm'>
+              Appointment schedule
+            </Text>
+            {request.scheduled_at ? (
+              <Text size='sm'>
+                {new Date(request.scheduled_at).toLocaleString()}
+                {request.meeting_link ? (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <Anchor href={request.meeting_link} target='_blank' rel='noreferrer' size='sm'>
+                      {request.meeting_link}
+                    </Anchor>
+                  </>
+                ) : null}
+              </Text>
+            ) : (
+              <Text size='sm' c='dimmed'>
+                No appointment was scheduled.
+              </Text>
+            )}
+          </Stack>
         );
-      case 5:
+      case 6:
         return (
           <Stack gap='sm' className='request-workflow-step'>
             {hasConsultationSummary(summary) && summary ? (
               <ConsultationSummaryPdfView summary={summary} request={request} />
             ) : (
               <Text size='sm' c='dimmed'>
-                No consultation summary yet. The doctor submits notes after the appointment is completed.
+                No consultation summary yet. The doctor submits notes after the appointment is
+                completed.
               </Text>
             )}
             <Button variant='subtle' size='xs' onClick={() => void loadMeta()}>
@@ -490,7 +681,7 @@ export default function RequestWorkflowWizard({
       steps={wizardSteps}
       expandedIndex={expandedStep}
       suggestedIndex={suggestedStep}
-      canNavigate={(index) => canCoordinate && canPseNavigateToStep(index, progressCtx)}
+      canNavigate={(index) => canPseNavigateToStep(index, progressCtx)}
       onToggle={toggleStep}
       renderPanel={renderStepContent}
     />

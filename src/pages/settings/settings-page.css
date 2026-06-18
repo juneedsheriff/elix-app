@@ -81,12 +81,14 @@
   color: #15803d;
   background: #f0fdf4;
   border: 1px solid rgba(34, 197, 94, 0.18);
+  margin-left: 5px;
 }
 
 .settings-hero-badge--disconnected {
   color: #b45309;
   background: #fffbeb;
   border: 1px solid rgba(245, 158, 11, 0.2);
+  margin-left: 5px;
 }
 
 .settings-hero-badge--account {
@@ -122,8 +124,7 @@
 
 @media (max-width: 420px) {
   .settings-hero-banner {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
+     gap: 0.5rem;
     padding: 1rem;
   }
 

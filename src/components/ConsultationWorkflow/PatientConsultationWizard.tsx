@@ -16,24 +16,25 @@ import type { LucideIcon } from 'lucide-react';
 import {
   canPatientNavigateToStep,
   areDoctorsSharedWithPatient,
-  getInitialPatientWizardStep,
-  getMaxCompletedStepIndex,
   getSuggestedActiveStep,
   getWizardSteps,
   hasConsultationSummary,
+  hasPatientProceededWithoutRecords,
   hasPatientPaymentDue,
   isAwaitingPseAvailabilityForSelfSelectedDoctor,
+  isPatientConsultationNotesComplete,
   isPatientPaymentLinkPending,
   isPatientAppointmentPhase,
   isPatientPaymentConfirmed,
   isPaymentAccessible,
   PATIENT_WIZARD_STEPS,
-  resolveWizardStepOnUpdate,
+  readPatientWizardStoredStep,
   writePatientWizardStoredStep,
   type WizardProgressContext
 } from '../../lib/consultationWizard';
 import ConsultationSummaryPdfView from './ConsultationSummaryPdfView';
 import ConsultationInvoicePdfView from './ConsultationInvoicePdfView';
+import PatientAttachRecordsModal from './PatientAttachRecordsModal';
 import PatientRequestRecordsModal from './PatientRequestRecordsModal';
 import PatientPaymentProofUpload from './PatientPaymentProofUpload';
 import PatientConsultationRetainCard, {
@@ -43,11 +44,18 @@ import PatientConsultationRetainCard, {
 import {
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
+  isRecommendationOpinionRequest,
   patientConfirmSchedule,
+  patientProceedWithoutRecords,
+  canPatientManageRequestRecords,
   patientSelectDoctorWithAvailability,
   patientSubmitAvailability,
-  subscribeOpinionRequestLiveUpdates
+  subscribeOpinionRequestLiveUpdates,
+  type SavedPatientCaseDetailsPatch
 } from '../../lib/opinionRequests';
+import { fetchDoctorSpecialties } from '../../lib/doctors';
+import PatientCaseDetailsEditor from '../OpinionRequests/PatientCaseDetailsEditor';
+import MedicalRecordsChoicePrompt from '../OpinionRequests/MedicalRecordsChoicePrompt';
 import {
   buildPatientAvailabilityPayload,
   formatPatientAvailability,
@@ -73,6 +81,7 @@ function recommendationFeeLabel(
 type PatientConsultationWizardProps = {
   request: OpinionRequest;
   onUpdated: () => void;
+  onRequestPatch?: (patch: SavedPatientCaseDetailsPatch) => void;
   onMessage: (message: string, type: 'error' | 'success') => void;
   onOpenRecord: (storagePath: string) => void;
   /** Bumped when the parent silently reloads request rows from the server. */
@@ -101,6 +110,45 @@ function formatAppointmentDisplay(iso: string): string {
     minute: '2-digit'
   });
   return `${day} • ${time}`;
+}
+
+const JOIN_MEETING_LEAD_MS = 5 * 60 * 1000;
+
+function isJoinMeetingAvailable(scheduledAt: string | null | undefined, now = Date.now()): boolean {
+  if (!scheduledAt?.trim()) return false;
+  const start = new Date(scheduledAt).getTime();
+  if (Number.isNaN(start)) return false;
+  return now >= start - JOIN_MEETING_LEAD_MS;
+}
+
+function getMillisecondsUntilMeetingStart(
+  scheduledAt: string | null | undefined,
+  now = Date.now()
+): number | null {
+  if (!scheduledAt?.trim()) return null;
+  const start = new Date(scheduledAt).getTime();
+  if (Number.isNaN(start)) return null;
+  return Math.max(0, start - now);
+}
+
+function getMillisecondsUntilJoinOpens(
+  scheduledAt: string | null | undefined,
+  now = Date.now()
+): number | null {
+  const untilMeeting = getMillisecondsUntilMeetingStart(scheduledAt, now);
+  if (untilMeeting === null) return null;
+  return Math.max(0, untilMeeting - JOIN_MEETING_LEAD_MS);
+}
+
+function formatAppointmentCountdown(remainingMs: number): string {
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function downloadAppointmentIcs(input: {
@@ -144,6 +192,7 @@ function downloadAppointmentIcs(input: {
 export default function PatientConsultationWizard({
   request,
   onUpdated,
+  onRequestPatch,
   onMessage,
   onOpenRecord,
   liveTick = 0
@@ -156,14 +205,12 @@ export default function PatientConsultationWizard({
     }),
     [request]
   );
-  const [expandedStep, setExpandedStep] = useState<number | null>(() =>
-    getInitialPatientWizardStep(initialProgressCtx)
-  );
-  const stepStateRef = useRef<{ requestId: string | null; step: number | null; lastSuggested: number }>({
-    requestId: request.id,
-    step: getInitialPatientWizardStep(initialProgressCtx),
-    lastSuggested: getSuggestedActiveStep(initialProgressCtx, 'patient')
+  const [expandedStep, setExpandedStep] = useState<number | null>(() => {
+    const stored = readPatientWizardStoredStep(request.id);
+    return stored ?? 0;
   });
+  const lastSuggestedStepRef = useRef(getSuggestedActiveStep(initialProgressCtx, 'patient'));
+  const lastRequestIdRef = useRef(request.id);
   const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [summary, setSummary] = useState<ConsultationSummary | null>(null);
   const [pickingDoctorId, setPickingDoctorId] = useState<string | null>(null);
@@ -171,6 +218,34 @@ export default function PatientConsultationWizard({
   const [availabilityNotes, setAvailabilityNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [attachRecordsModalOpen, setAttachRecordsModalOpen] = useState(false);
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchDoctorSpecialties().then(({ data }) => {
+      if (!cancelled) setSpecialties(data ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!request.scheduled_at) return;
+    const start = new Date(request.scheduled_at).getTime();
+    if (Number.isNaN(start)) return;
+
+    setNowTick(Date.now());
+    if (Date.now() >= start) return;
+
+    const intervalId = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [request.scheduled_at]);
+
+  const joinMeetingAvailable = isJoinMeetingAvailable(request.scheduled_at, nowTick);
+  const joinOpensInMs = getMillisecondsUntilJoinOpens(request.scheduled_at, nowTick);
 
   const loadExtras = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -207,34 +282,48 @@ export default function PatientConsultationWizard({
     () => ({
       request,
       recommendationsCount: recommendations.length,
-      hasSummary: hasConsultationSummary(summary)
+      hasSummary:
+        hasConsultationSummary(summary) || Boolean(request.doctor_response?.trim())
     }),
     [request, recommendations.length, summary]
   );
 
   const suggestedStep = useMemo(() => getSuggestedActiveStep(progressCtx, 'patient'), [progressCtx]);
-  const maxNavigableStep = useMemo(
-    () => getMaxCompletedStepIndex(progressCtx, 'patient') + 1,
-    [progressCtx]
-  );
   const wizardSteps = getWizardSteps('patient', progressCtx, expandedStep ?? suggestedStep);
   const onAppointmentStep = isPatientAppointmentPhase(request);
   const doctorsShared = areDoctorsSharedWithPatient(request, recommendations.length);
-  const documentsVerified = Boolean(request.records_verified_at) || doctorsShared;
+  const proceededWithoutDocuments = hasPatientProceededWithoutRecords(request);
+  const canManageRequestRecords = canPatientManageRequestRecords(request);
+  const documentsVerified =
+    Boolean(request.records_verified_at) || doctorsShared || proceededWithoutDocuments;
+  const awaitingDocumentChoice =
+    request.records.length === 0 &&
+    !request.records_verified_at &&
+    !request.records_rejected_at &&
+    !proceededWithoutDocuments &&
+    !doctorsShared;
 
   useEffect(() => {
-    const next = resolveWizardStepOnUpdate(request.id, suggestedStep, stepStateRef.current, {
-      audience: 'patient',
-      maxNavigableStep,
-      progressCtx
-    });
-    stepStateRef.current = next;
-    setExpandedStep(next.step);
-  }, [request.id, suggestedStep, maxNavigableStep, progressCtx]);
+    if (lastRequestIdRef.current !== request.id) {
+      lastRequestIdRef.current = request.id;
+      const stored = readPatientWizardStoredStep(request.id);
+      const initial = stored ?? 0;
+      setExpandedStep(initial);
+      lastSuggestedStepRef.current = suggestedStep;
+      return;
+    }
+
+    if (suggestedStep > lastSuggestedStepRef.current) {
+      setExpandedStep(suggestedStep);
+      writePatientWizardStoredStep(request.id, suggestedStep);
+      lastSuggestedStepRef.current = suggestedStep;
+    }
+  }, [request.id, suggestedStep]);
 
   const setExpandedStepTracked = (step: number | null) => {
-    if (step !== null) writePatientWizardStoredStep(request.id, step);
-    stepStateRef.current = { ...stepStateRef.current, step };
+    if (step !== null) {
+      writePatientWizardStoredStep(request.id, step);
+    }
     setExpandedStep(step);
   };
 
@@ -246,6 +335,28 @@ export default function PatientConsultationWizard({
   const goToStep = (index: number) => {
     if (!canPatientNavigateToStep(index, progressCtx)) return;
     setExpandedStepTracked(index);
+  };
+
+  const handleUploadRecords = () => {
+    setAttachRecordsModalOpen(true);
+  };
+
+  const handleAddMoreRecords = () => {
+    setDocumentsModalOpen(false);
+    setAttachRecordsModalOpen(true);
+  };
+
+  const handleProceedWithoutDocuments = async () => {
+    setBusy(true);
+    const { error } = await patientProceedWithoutRecords(request.id);
+    setBusy(false);
+    if (error) {
+      onMessage(error.message, 'error');
+      return;
+    }
+    onMessage('You chose to continue without medical records. Our care team will review your request.', 'success');
+    onUpdated();
+    goToStep(2);
   };
 
   const pickingDoctor = useMemo(
@@ -349,33 +460,94 @@ export default function PatientConsultationWizard({
     switch (index) {
       case 0:
         return (
-          <div className='doctor-response-block patient-view'>
-            <p className='muted'>
-              Sent to {request.doctor_name ?? 'our care team'} on{' '}
-              {new Date(request.created_at).toLocaleString()}.
+          <div className='doctor-response-block patient-view patient-request-case-details-step'>
+            <p className='muted patient-request-case-details-step__intro'>
+              Submitted to {request.doctor_name ?? 'our care team'} on{' '}
+              {new Date(request.created_at).toLocaleString()}. Complete your case details below.
             </p>
-            <p>{request.message}</p>
+
+            <PatientCaseDetailsEditor
+              request={request}
+              specialties={specialties}
+              specialtyMode={
+                isRecommendationOpinionRequest(request) ? 'patient_select' : 'from_doctor'
+              }
+              doctorSpecialty={request.doctor_specialty}
+              actorRole='patient'
+              sectionsThrough={8}
+              showPreferences
+              showConsent
+              onSaved={(patch) => {
+                onRequestPatch?.(patch);
+                onUpdated();
+              }}
+              onError={(message) => onMessage(message, 'error')}
+              onSuccess={(message) => onMessage(message, 'success')}
+            />
           </div>
         );
       case 1:
         return (
           <div className='doctor-response-block patient-view patient-docs-verification'>
-            {documentsVerified ? (
+            {request.records_rejected_at ? (
+              <div className='patient-docs-verification__box patient-docs-rejected'>
+                <span className='patient-docs-rejected-badge'>Records Rejected</span>
+                <p className='patient-docs-verification__text muted'>
+                  Our care team was unable to process your submitted documents on{' '}
+                  {new Date(request.records_rejected_at).toLocaleString()}.
+                </p>
+                {request.records_rejection_reason ? (
+                  <p className='patient-docs-verification__text'>
+                    <strong>Reason: </strong>
+                    {request.records_rejection_reason}
+                  </p>
+                ) : null}
+                <p className='patient-docs-verification__text muted'>
+                  Please re-upload your medical records and our team will review them.
+                </p>
+                <div className='patient-docs-verification__actions'>
+                  <button
+                    type='button'
+                    className='primary-btn patient-docs-verification__btn'
+                    onClick={handleUploadRecords}
+                    disabled={busy}
+                  >
+                    Upload medical records
+                  </button>
+                </div>
+              </div>
+            ) : awaitingDocumentChoice ? (
+              <div className='patient-docs-verification__box patient-docs-choice'>
+                <p className='patient-docs-verification__text muted'>
+                  No records found for this request.
+                </p>
+                <MedicalRecordsChoicePrompt
+                  question='Do you want to upload records or proceed without documents?'
+                  onUpload={handleUploadRecords}
+                  onProceedWithout={() => void handleProceedWithoutDocuments()}
+                  disabled={busy}
+                />
+              </div>
+            ) : documentsVerified ? (
               <div className='patient-docs-verification__box'>
                 {request.records_verified_at ? (
                   <span className='patient-docs-verified-badge'>Verified</span>
+                ) : proceededWithoutDocuments ? (
+                  <span className='patient-docs-verified-badge'>Without documents</span>
                 ) : null}
                 <p className='patient-docs-verification__text muted'>
                   {request.records_verified_at
                     ? `Your documents were verified on ${new Date(request.records_verified_at).toLocaleString()}.`
-                    : 'Your documents have been verified.'}{' '}
+                    : proceededWithoutDocuments
+                      ? `You chose to proceed without documents on ${new Date(request.patient_proceeded_without_records_at!).toLocaleString()}. Our care team will continue reviewing your request.`
+                      : 'Your documents have been verified.'}{' '}
                   {doctorsShared
                     ? 'Choose from the doctors recommended for you below.'
                     : awaitingSelfSelectAvailability
                       ? 'Our team is confirming availability with your selected doctor.'
                       : 'Our team will share doctor recommendations next.'}
                 </p>
-                {request.records.length > 0 || (!doctorsShared && suggestedStep > 1) ? (
+                {request.records.length > 0 || proceededWithoutDocuments || (!doctorsShared && suggestedStep > 1) ? (
                   <div className='patient-docs-verification__actions'>
                     {!doctorsShared && suggestedStep > 1 ? (
                       <button
@@ -387,12 +559,34 @@ export default function PatientConsultationWizard({
                       </button>
                     ) : null}
                     {request.records.length > 0 ? (
+                      <>
+                        <button
+                          type='button'
+                          className='secondary-btn patient-docs-verification__btn patient-view-documents-btn'
+                          onClick={() => setDocumentsModalOpen(true)}
+                        >
+                          View documents ({request.records.length})
+                        </button>
+                        {canManageRequestRecords ? (
+                          <button
+                            type='button'
+                            className='secondary-btn patient-docs-verification__btn'
+                            onClick={handleUploadRecords}
+                            disabled={busy}
+                          >
+                            Add more records
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {proceededWithoutDocuments && request.records.length === 0 ? (
                       <button
                         type='button'
-                        className='secondary-btn patient-docs-verification__btn patient-view-documents-btn'
-                        onClick={() => setDocumentsModalOpen(true)}
+                        className='secondary-btn patient-docs-verification__btn'
+                        onClick={handleUploadRecords}
+                        disabled={busy}
                       >
-                        View documents ({request.records.length})
+                        Upload records later
                       </button>
                     ) : null}
                   </div>
@@ -413,6 +607,16 @@ export default function PatientConsultationWizard({
                     >
                       View documents ({request.records.length})
                     </button>
+                    {canManageRequestRecords ? (
+                      <button
+                        type='button'
+                        className='secondary-btn patient-docs-verification__btn'
+                        onClick={handleUploadRecords}
+                        disabled={busy}
+                      >
+                        Add more records
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </>
@@ -733,15 +937,32 @@ export default function PatientConsultationWizard({
                   </button>
                 ) : null}
 
-                {request.payment_status === 'paid' && request.meeting_link ? (
-                  <a
-                    href={request.meeting_link}
-                    target='_blank'
-                    rel='noreferrer'
-                    className='primary-btn patient-appointment-step__join-btn'
-                  >
-                    Join meeting
-                  </a>
+                {request.payment_status === 'paid' && request.meeting_link && request.scheduled_at ? (
+                  joinMeetingAvailable ? (
+                    <a
+                      href={request.meeting_link}
+                      target='_blank'
+                      rel='noreferrer'
+                      className='primary-btn patient-appointment-step__join-btn'
+                    >
+                      Join meeting
+                    </a>
+                  ) : (
+                    <div className='patient-appointment-step__join-wrap'>
+                      <button
+                        type='button'
+                        className='primary-btn patient-appointment-step__join-btn'
+                        disabled
+                      >
+                        Join meeting
+                      </button>
+                      <p className='patient-appointment-step__countdown' aria-live='polite'>
+                        {joinOpensInMs !== null
+                          ? `Meeting Starts in ${formatAppointmentCountdown(joinOpensInMs)}`
+                          : 'Meeting Starts 5 minutes before your appointment.'}
+                      </p>
+                    </div>
+                  )
                 ) : null}
               </div>
             ) : (
@@ -816,7 +1037,9 @@ export default function PatientConsultationWizard({
             const isAccessible = canPatientNavigateToStep(index, progressCtx);
             const isExpanded = expandedStep === index;
             const isCurrent = index === suggestedStep;
-            const isComplete = step.state === 'complete';
+            const isNotesStep = index === PATIENT_WIZARD_STEPS.length - 1;
+            const notesComplete = isNotesStep && isPatientConsultationNotesComplete(progressCtx);
+            const isComplete = step.state === 'complete' || notesComplete;
             const StepIcon = PATIENT_STEP_ICONS[index] ?? FileText;
             const stateClass = isComplete
               ? 'patient-wizard-timeline__step--complete'
@@ -856,7 +1079,11 @@ export default function PatientConsultationWizard({
                       <span className='patient-wizard-card__labels'>
                         <span className='patient-wizard-card__title-row'>
                           <span className='patient-wizard-card__title'>{stepDef.title}</span>
-                          {isCurrent ? (
+                          {notesComplete ? (
+                            <span className='patient-wizard-card__badge patient-wizard-card__badge--complete'>
+                              Completed
+                            </span>
+                          ) : isCurrent && !isComplete ? (
                             <span className='patient-wizard-card__badge'>In progress</span>
                           ) : null}
                         </span>
@@ -899,9 +1126,25 @@ export default function PatientConsultationWizard({
 
       <PatientRequestRecordsModal
         open={documentsModalOpen}
+        requestId={request.id}
         records={request.records}
+        canManage={canManageRequestRecords}
         onClose={() => setDocumentsModalOpen(false)}
         onOpenRecord={onOpenRecord}
+        onAddMore={canManageRequestRecords ? handleAddMoreRecords : undefined}
+        onDetached={onUpdated}
+        onSuccess={(message) => onMessage(message, 'success')}
+        onError={(message) => onMessage(message, 'error')}
+      />
+
+      <PatientAttachRecordsModal
+        open={attachRecordsModalOpen}
+        requestId={request.id}
+        attachedRecordIds={request.records.map((record) => record.id)}
+        onClose={() => setAttachRecordsModalOpen(false)}
+        onSuccess={(message) => onMessage(message, 'success')}
+        onError={(message) => onMessage(message, 'error')}
+        onAttached={onUpdated}
       />
     </div>
   );

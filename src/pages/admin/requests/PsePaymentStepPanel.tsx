@@ -31,6 +31,7 @@ type PsePaymentStepPanelProps = {
   paymentCurrency: string;
   paymentReference: string;
   busy: boolean;
+  readOnly?: boolean;
   onPaymentLinkChange: (value: string) => void;
   onPaymentReferenceChange: (value: string) => void;
   onSendInvoiceAndPaymentLink: () => void;
@@ -46,6 +47,7 @@ export default function PsePaymentStepPanel({
   paymentCurrency,
   paymentReference,
   busy,
+  readOnly = false,
   onPaymentLinkChange,
   onPaymentReferenceChange,
   onSendInvoiceAndPaymentLink,
@@ -135,6 +137,7 @@ export default function PsePaymentStepPanel({
               label='Payment link (external)'
               placeholder='https://…'
               value={paymentLink}
+              readOnly={readOnly}
               onChange={(e) => onPaymentLinkChange(e.currentTarget.value)}
             />
           </Grid.Col>
@@ -163,35 +166,38 @@ export default function PsePaymentStepPanel({
               label='Payment reference'
               placeholder='Receipt / transaction ID (after patient pays)'
               value={paymentReference}
+              readOnly={readOnly}
               onChange={(e) => onPaymentReferenceChange(e.currentTarget.value)}
             />
           </Grid.Col>
         </Grid>
 
-        <Group gap='sm' mt='lg' wrap='wrap'>
-          <Button
-            className='doctors-mgmt-header__primary'
-            radius='md'
-            leftSection={<IconReceipt size={16} />}
-            loading={busy}
-            disabled={!canSubmitToPatient}
-            onClick={onSendInvoiceAndPaymentLink}
-          >
-            {linkShared ? 'Regenerate invoice & update link' : 'Generate invoice & send to patient'}
-          </Button>
-          <Button
-            variant='default'
-            radius='md'
-            loading={busy}
-            disabled={!canSend || paymentAmount == null}
-            onClick={onMarkPending}
-          >
-            Mark pending (no link)
-          </Button>
-          <Button variant='light' color='cyan' radius='md' loading={busy} onClick={onConfirmPayment}>
-            Confirm payment received
-          </Button>
-        </Group>
+        {!readOnly ? (
+          <Group gap='sm' mt='lg' wrap='wrap'>
+            <Button
+              className='doctors-mgmt-header__primary'
+              radius='md'
+              leftSection={<IconReceipt size={16} />}
+              loading={busy}
+              disabled={!canSubmitToPatient}
+              onClick={onSendInvoiceAndPaymentLink}
+            >
+              {linkShared ? 'Regenerate invoice & update link' : 'Generate invoice & send to patient'}
+            </Button>
+            <Button
+              variant='default'
+              radius='md'
+              loading={busy}
+              disabled={!canSend || paymentAmount == null}
+              onClick={onMarkPending}
+            >
+              Mark pending (no link)
+            </Button>
+            <Button variant='light' color='cyan' radius='md' loading={busy} onClick={onConfirmPayment}>
+              Confirm payment received
+            </Button>
+          </Group>
+        ) : null}
       </Paper>
 
       {invoiceReady ? (
@@ -240,7 +246,7 @@ export default function PsePaymentStepPanel({
 
       <PaymentProofReview request={request} />
 
-      {request.payment_status === 'paid' ? (
+      {request.payment_status === 'paid' && !readOnly ? (
         <Button variant='light' color='cyan' radius='md' loading={busy} onClick={onReleaseToDoctor}>
           Release to doctor
         </Button>

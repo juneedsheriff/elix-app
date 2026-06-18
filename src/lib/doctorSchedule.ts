@@ -1,4 +1,4 @@
-import type { ConsultationHours, ConsultationHoursDay, Doctor } from '../types/doctor';
+import type { ConsultationHours, ConsultationHoursDay, ConsultationHoursInterval, Doctor } from '../types/doctor';
 
 const DAY_LABELS: Record<keyof ConsultationHours, string> = {
   monday: 'Monday',
@@ -10,9 +10,27 @@ const DAY_LABELS: Record<keyof ConsultationHours, string> = {
   sunday: 'Sunday'
 };
 
+function dayIntervals(day: ConsultationHoursDay): ConsultationHoursInterval[] {
+  if (!day.enabled) return [];
+  if (day.intervals?.length) return day.intervals;
+  return [{ start: day.start, end: day.end }];
+}
+
+function formatInterval(start: string, end: string): string {
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(':');
+    const hour = Number(hours);
+    if (!Number.isFinite(hour)) return time;
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes ?? '00'} ${suffix}`;
+  };
+  return `${formatTime(start)} – ${formatTime(end)}`;
+}
+
 function formatDay(day: ConsultationHoursDay): string {
   if (!day.enabled) return 'Unavailable';
-  return `${day.start} – ${day.end}`;
+  return dayIntervals(day).map((interval) => formatInterval(interval.start, interval.end)).join(', ');
 }
 
 /** Human-readable weekly consultation hours for PSE review. */

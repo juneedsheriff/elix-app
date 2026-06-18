@@ -79,7 +79,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     signInAsPatient: 'Sign in as patient',
     createPatientAccount: 'Create patient account',
     fullNamePlaceholder: 'Full name',
-    connected: 'Elix connected',
+    connected: 'Expert Care, Informed Decisions',
     languageLabel: 'Language',
     chooseLanguage: 'Choose language',
     close: 'Close',

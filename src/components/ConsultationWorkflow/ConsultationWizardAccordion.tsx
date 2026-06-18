@@ -16,6 +16,7 @@ import './consultation-wizard.css';
 const COORDINATION_STEP_ICONS: LucideIcon[] = [
   ClipboardList,
   FileText,
+  ShieldCheck,
   Users,
   CreditCard,
   Calendar,
@@ -91,6 +92,7 @@ export default function ConsultationWizardAccordion({
             const isAccessible = canNavigate(index);
             const isExpanded = expandedIndex === index;
             const isCurrent = index === suggestedIndex;
+            const isLastStep = index === steps.length - 1;
             const isComplete = step.state === 'complete';
             const StepIcon = COORDINATION_STEP_ICONS[index] ?? FileText;
             const stateClass = isComplete
@@ -131,7 +133,11 @@ export default function ConsultationWizardAccordion({
                       <span className='patient-wizard-card__labels'>
                         <span className='patient-wizard-card__title-row'>
                           <span className='patient-wizard-card__title'>{stepDef.title}</span>
-                          {isCurrent ? (
+                          {isComplete && isLastStep ? (
+                            <span className='patient-wizard-card__badge patient-wizard-card__badge--complete'>
+                              Completed
+                            </span>
+                          ) : isCurrent && !isComplete ? (
                             <span className='patient-wizard-card__badge'>In progress</span>
                           ) : null}
                         </span>

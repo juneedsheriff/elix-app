@@ -1,0 +1,26 @@
+.doctor-case-details-modal-root {
+  z-index: 260;
+}
+
+.doctor-case-details-modal {
+  width: min(100%, 920px);
+  max-height: min(92dvh, 940px);
+}
+
+.doctor-case-details-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.doctor-case-details-modal__footer .primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+@media (max-width: 720px) {
+  .doctor-case-details-modal {
+    width: min(100%, 100%);
+  }
+}

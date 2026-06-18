@@ -16,11 +16,7 @@ export default function SettingsPage({
       <section className='settings-hero-banner' aria-labelledby='settings-hero-heading'>
         <div className='settings-hero-banner__content'>
           <h2 id='settings-hero-heading' className='settings-hero-banner__title'>
-            Elix
-          </h2>
-          <p className='settings-hero-banner__text'>Second Opinion</p>
-          <div className='settings-hero-banner__badges'>
-            <span
+            Elix  <span
               className={`settings-hero-badge ${
                 dbConnected ? 'settings-hero-badge--connected' : 'settings-hero-badge--disconnected'
               }`}
@@ -32,6 +28,10 @@ export default function SettingsPage({
               )}
               {dbConnected ? 'Connected' : 'Not connected'}
             </span>
+          </h2>
+          <p className='settings-hero-banner__text'>  Second Opinion</p>
+          <div className='settings-hero-banner__badges'>
+           
             <span
               className={`settings-hero-badge ${
                 userEmail ? 'settings-hero-badge--account' : 'settings-hero-badge--guest'
@@ -90,12 +90,7 @@ export default function SettingsPage({
         </SectionCard>
       ) : null}
 
-      <SectionCard title='Health details'>
-        <p className='muted'>
-          Blood group, allergies, medications, emergency contacts, insurance, and language preferences are stored on
-          your patient record.
-        </p>
-      </SectionCard>
+   
     </div>
   );
 }

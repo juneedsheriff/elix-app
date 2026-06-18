@@ -1,26 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ClipboardList, FileText, Loader2, Stethoscope } from 'lucide-react';
-import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
-import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
-import DoctorCaseMeetingPanel from './DoctorCaseMeetingPanel';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardList, Loader2 } from 'lucide-react';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
-import DoctorRequestRespond from './DoctorRequestRespond';
-import { fetchDoctorOpinionRequests, fetchPatientOpinionRequests, isAwaitingDoctorReply, patientRequestStatusLabel } from '../../lib/opinionRequests';
-import { getMedicalRecordDownloadUrl } from '../../lib/records';
+import DoctorIncomingRequestsTable from './DoctorIncomingRequestsTable';
+import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
+import {
+  fetchDoctorOpinionRequests,
+  fetchPatientOpinionRequests,
+  isAwaitingDoctorReply,
+  patientRequestStatusLabel,
+  subscribeDoctorOpinionRequestUpdates
+} from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
-
-function formatRequestDate(iso: string): string {
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return date.toLocaleString();
-}
 
 function statusLabel(status: string, view: 'patient' | 'doctor', request?: OpinionRequest): string {
   if (view === 'patient' && request) {
@@ -29,6 +19,23 @@ function statusLabel(status: string, view: 'patient' | 'doctor', request?: Opini
   if (status === 'in_review') return 'In review';
   if (status === 'closed') return 'Closed';
   return 'Submitted';
+}
+
+function matchesDoctorSearch(request: OpinionRequest, query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+
+  const haystack = [
+    request.patient_name,
+    request.patient_email,
+    request.message,
+    statusLabel(request.status, 'doctor', request)
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(normalized);
 }
 
 type OpinionRequestsPanelProps = {
@@ -62,54 +69,74 @@ export default function OpinionRequestsPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [doctorSearch, setDoctorSearch] = useState('');
+  const hasLoadedOnceRef = useRef(false);
 
   const canLoad = view === 'patient' ? Boolean(patientAuthUserId) : Boolean(doctorId || doctorEmail);
+
+  const visibleRequests = useMemo(() => {
+    if (view !== 'doctor' || !doctorSearch.trim()) return requests;
+    return requests.filter((request) => matchesDoctorSearch(request, doctorSearch));
+  }, [doctorSearch, requests, view]);
 
   const doctorConsultationQueue =
     view === 'doctor' ? requests.filter(canDoctorGiveConsultation) : [];
   const doctorPendingCount = doctorConsultationQueue.filter(isAwaitingDoctorReply).length;
 
-  const load = useCallback(async () => {
-    if (!canLoad) {
-      setRequests([]);
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!canLoad) {
+        setRequests([]);
+        setLoading(false);
+        hasLoadedOnceRef.current = false;
+        return;
+      }
+
+      const silent = options?.silent ?? hasLoadedOnceRef.current;
+
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+
+      const result =
+        view === 'patient'
+          ? await fetchPatientOpinionRequests(patientAuthUserId!)
+          : await fetchDoctorOpinionRequests();
+
+      if (result.error) {
+        if (!silent) {
+          setError(result.error.message);
+          setRequests([]);
+        }
+      } else {
+        setRequests(result.data ?? []);
+        if (!silent) setError(null);
+      }
+
+      hasLoadedOnceRef.current = true;
       setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const result =
-      view === 'patient'
-        ? await fetchPatientOpinionRequests(patientAuthUserId!)
-        : await fetchDoctorOpinionRequests();
-
-    if (result.error) {
-      setError(result.error.message);
-      setRequests([]);
-    } else {
-      setRequests(result.data ?? []);
-    }
-    setLoading(false);
-  }, [canLoad, view, patientAuthUserId, doctorId, doctorEmail]);
+    },
+    [canLoad, view, patientAuthUserId, doctorId, doctorEmail]
+  );
 
   useEffect(() => {
+    hasLoadedOnceRef.current = false;
     void load();
   }, [load]);
 
-  const openRecord = async (storagePath: string | null) => {
-    if (!storagePath) {
-      setActionMessage('File path missing for this record.');
-      return;
-    }
-    const { data, error: urlError } = await getMedicalRecordDownloadUrl(storagePath);
-    if (urlError || !data?.signedUrl) {
-      setActionMessage(urlError?.message ?? 'Could not open file.');
-      return;
-    }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-  };
+  useEffect(() => {
+    if (view !== 'doctor' || !canLoad) return;
+    return subscribeDoctorOpinionRequestUpdates(() => void load({ silent: true }), { doctorId });
+  }, [view, canLoad, doctorId, load]);
+
+  const patchDoctorRequest = useCallback((updated: OpinionRequest) => {
+    setRequests((prev) => prev.map((request) => (request.id === updated.id ? updated : request)));
+  }, []);
+
+  const showOpenRecordError = useCallback((message: string) => {
+    setActionMessage(message);
+  }, []);
 
   return (
     <div className='screen-grid doctors-screen'>
@@ -154,12 +181,6 @@ export default function OpinionRequestsPanel({
           </p>
         ) : null}
 
-        {successMessage ? (
-          <p className='muted' role='status'>
-            {successMessage}
-          </p>
-        ) : null}
-
         {view === 'doctor' && !loading && !error && doctorConsultationQueue.length > 0 ? (
           <div className='case-review-consultation-banner'>
             <p className='case-review-consultation-banner__text'>
@@ -190,114 +211,26 @@ export default function OpinionRequestsPanel({
         ) : null}
 
         {!loading && !error && requests.length > 0 ? (
-          <ul className='list doctor-request-list'>
-            {requests.map((request) => (
-              <li key={request.id} className='doctor-request-card'>
-                <div className='doctor-request-head'>
-                  <strong>
-                    {view === 'patient'
-                      ? request.doctor_name ?? 'Doctor'
-                      : request.patient_name ?? 'Patient'}
-                  </strong>
-                  <span className={`tag status-${request.status}`}>{statusLabel(request.status, view, request)}</span>
-                </div>
-                <p className='doctor-request-names'>
-                  <span>
-                    <strong>Patient:</strong> {request.patient_name ?? '—'}
-                  </span>
-                  <span>
-                    <strong>Doctor:</strong> {request.doctor_name ?? '—'}
-                    {request.doctor_specialty ? ` (${request.doctor_specialty})` : ''}
-                  </span>
-                </p>
-                <p className='doctor-request-meta'>
-                  {view === 'doctor' && request.patient_email ? `${request.patient_email} • ` : ''}
-                  {formatRequestDate(request.created_at)}
-                  {request.records.length
-                    ? ` • ${request.records.length} file${request.records.length === 1 ? '' : 's'}`
-                    : ''}
-                </p>
-                <p className='doctor-request-message'>
-                  <strong>{view === 'doctor' ? 'Patient message:' : 'Your message:'}</strong> {request.message}
-                </p>
-
-                {view === 'doctor' ? <DoctorCaseMeetingPanel request={request} /> : null}
-
-                {view === 'patient' && request.doctor_response ? (
-                  <div className='doctor-response-block patient-view' role='region' aria-label='Doctor response'>
-                    <h5>
-                      <Stethoscope size={16} aria-hidden /> Doctor&apos;s opinion
-                    </h5>
-                    <p>{request.doctor_response}</p>
-                    {request.responded_at ? (
-                      <span className='muted'>Received {formatRequestDate(request.responded_at)}</span>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {view === 'patient' ? (
-                  <ConsultationPatientWorkflow
-                    request={request}
-                    onUpdated={() => void load()}
-                    onOpenRecord={(path) => void openRecord(path)}
-                    onMessage={(message, type) => {
-                      if (type === 'error') {
-                        setActionMessage(message);
-                        setSuccessMessage(null);
-                      } else {
-                        setSuccessMessage(message);
-                        setActionMessage(null);
-                      }
-                    }}
-                  />
-                ) : null}
-
-                {view === 'patient' &&
-                !request.consultation_stage &&
-                !request.doctor_response &&
-                request.status !== 'closed' ? (
-                  <p className='muted doctor-awaiting-response'>
-                    {!request.assigned_to && request.status === 'submitted'
-                      ? 'Waiting for admin review before coordination begins.'
-                      : 'Our patient service team is coordinating your request.'}
-                  </p>
-                ) : null}
-
-                {request.records.length > 0 ? (
-                  <ul className='record-select-list doctor-request-files'>
-                    {request.records.map((record) => (
-                      <li key={record.id}>
-                        <div className='record-select-item doctor-request-file-row'>
-                          <FileText size={18} aria-hidden />
-                          <span className='record-select-text'>
-                            <strong>{record.file_name}</strong>
-                            {record.summary ? <span className='muted'>{record.summary}</span> : null}
-                          </span>
-                          {record.storage_path ? (
-                            <button
-                              type='button'
-                              className='text-btn'
-                              onClick={() => void openRecord(record.storage_path)}
-                            >
-                              Open
-                            </button>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-
-                {view === 'doctor' && canDoctorGiveConsultation(request) ? (
-                  <DoctorRequestRespond
-                    request={request}
+          <>
+            {view === 'doctor' ? (
+              <div className='doctor-cases-desktop'>
+                <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
+                  <DoctorIncomingRequestsTable
+                    data={visibleRequests}
+                    isLoading={loading}
+                    search={doctorSearch}
+                    onSearchChange={setDoctorSearch}
+                    hasActiveFilters={Boolean(doctorSearch.trim())}
+                    onClearFilters={() => setDoctorSearch('')}
                     onNavigate={onNavigate}
                     returnScreen={doctorReturnScreen}
+                    onOpenError={showOpenRecordError}
+                    onRequestUpdated={patchDoctorRequest}
                   />
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : null}
       </section>
     </div>

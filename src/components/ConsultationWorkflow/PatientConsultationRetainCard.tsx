@@ -41,6 +41,19 @@ export function hasRetainedConsultationDetails(request: OpinionRequest): boolean
   );
 }
 
+export function isPatientConsultationComplete(
+  request: Pick<OpinionRequest, 'consultation_stage' | 'doctor_response'>
+): boolean {
+  return (
+    request.consultation_stage === 'completed' || Boolean(request.doctor_response?.trim())
+  );
+}
+
+/** Active visit on the dashboard — booked flow, doctor notes not submitted yet. */
+export function isUpcomingPatientConsultation(request: OpinionRequest): boolean {
+  return hasRetainedConsultationDetails(request) && !isPatientConsultationComplete(request);
+}
+
 function doctorInitials(name: string | null | undefined): string {
   if (!name?.trim()) return 'DR';
   const cleaned = name.replace(/^Dr\.?\s*/i, '').trim();

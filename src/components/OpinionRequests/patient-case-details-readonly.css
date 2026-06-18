@@ -1,0 +1,98 @@
+.patient-case-details-readonly {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.patient-case-details-readonly__section {
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text, #111827);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding-bottom: 0.35rem;
+}
+
+.patient-case-details-readonly__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+}
+
+.patient-case-details-readonly__field {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.patient-case-details-readonly__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.patient-case-details-readonly__value {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.patient-request-case-details-step__intro {
+  margin: 0 0 0.25rem;
+}
+
+.patient-case-details-update {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+
+.patient-case-details-update__summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--brand-cyan, #0891b2);
+  list-style: none;
+}
+
+.patient-case-details-update__summary::-webkit-details-marker {
+  display: none;
+}
+
+.patient-case-details-update[open] .patient-case-details-editor {
+  margin-top: 0.75rem;
+}
+
+.patient-case-details-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.patient-case-details-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.patient-case-details-editor__save,
+.patient-case-details-editor__review {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.patient-case-details-editor__reviewed {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .patient-case-details-readonly__grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,38 @@
+.doctor-cases-desktop {
+  display: none;
+  margin-top: 0.35rem;
+}
+
+.doctor-cases-table-shell {
+  min-height: 28rem;
+}
+
+.doctor-cases-table-toolbar__inner {
+  align-items: center;
+}
+
+.doctor-cases-table-toolbar__count {
+  align-self: center;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.doctor-request-list--mobile-cards {
+  display: grid;
+}
+
+@media (min-width: 768px) {
+  .doctor-cases-desktop {
+    display: block;
+  }
+
+  .doctor-request-list--mobile-cards {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .doctor-cases-desktop {
+    display: none;
+  }
+}

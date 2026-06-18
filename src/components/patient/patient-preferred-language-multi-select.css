@@ -1,0 +1,127 @@
+.patient-language-multi {
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.patient-language-multi__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.patient-language-multi__control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.65rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: text;
+}
+
+.patient-language-multi__control--open {
+  border-color: color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+}
+
+.patient-language-multi__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--brand-cyan);
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface-soft));
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 22%, var(--border));
+}
+
+.patient-language-multi__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.patient-language-multi__chip-remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-cyan) 16%, transparent);
+}
+
+.patient-language-multi__input {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  padding: 0.2rem 0.25rem;
+}
+
+.patient-language-multi__input:disabled {
+  cursor: not-allowed;
+}
+
+.patient-language-multi__input::placeholder {
+  color: var(--text-soft);
+}
+
+.patient-language-multi__suggestions {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  z-index: 90;
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(15, 47, 70, 0.12);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.patient-language-multi__option {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.84rem;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.patient-language-multi__option:hover,
+.patient-language-multi__option--active {
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface-soft));
+  color: var(--brand-cyan);
+}
+
+.patient-language-multi__hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-soft);
+}
+
+.patient-profile-edit__field--full .patient-language-multi {
+  width: 100%;
+}

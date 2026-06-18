@@ -1,0 +1,212 @@
+.consultation-hours-editor {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.consultation-hours-editor__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.consultation-hours-editor__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.consultation-hours-editor__hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.consultation-hours-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.consultation-hours-editor__copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.consultation-hours-editor__copy-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+  color: var(--brand-cyan);
+}
+
+.consultation-hours-editor__copy-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.consultation-hours-editor__panel {
+  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.consultation-hours-editor__row {
+  display: grid;
+  grid-template-columns: auto 5.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+}
+
+.consultation-hours-editor__row:last-child {
+  border-bottom: none;
+}
+
+.consultation-hours-editor__toggle {
+  display: flex;
+  align-items: center;
+  padding-top: 0.35rem;
+}
+
+.consultation-hours-editor__switch {
+  position: relative;
+  width: 2.5rem;
+  height: 1.45rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-soft) 28%, var(--surface-soft));
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.consultation-hours-editor__switch[aria-pressed='true'] {
+  background: var(--brand-cyan);
+}
+
+.consultation-hours-editor__switch-knob {
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 47, 70, 0.18);
+  transition: transform 0.15s ease;
+}
+
+.consultation-hours-editor__switch[aria-pressed='true'] .consultation-hours-editor__switch-knob {
+  transform: translateX(1.05rem);
+}
+
+.consultation-hours-editor__day-label {
+  padding-top: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.consultation-hours-editor__row--error {
+  border-color: color-mix(in srgb, #c62828 35%, var(--border));
+  background: color-mix(in srgb, #c62828 4%, var(--surface));
+}
+
+.consultation-hours-editor__time-select--error {
+  border-color: color-mix(in srgb, #c62828 55%, var(--border));
+}
+
+.consultation-hours-editor__day-error {
+  flex-basis: 100%;
+  width: 100%;
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: #c62828;
+}
+
+.consultation-hours-editor__slots {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.consultation-hours-editor__slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.consultation-hours-editor__time-select {
+  min-width: 6.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.consultation-hours-editor__time-sep {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.consultation-hours-editor__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.consultation-hours-editor__icon-btn:hover {
+  border-color: color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+  color: var(--brand-cyan);
+}
+
+.consultation-hours-editor__icon-btn--danger:hover {
+  border-color: color-mix(in srgb, #c62828 35%, var(--border));
+  color: #c62828;
+}
+
+.consultation-hours-editor__unavailable {
+  padding-top: 0.35rem;
+  font-size: 0.84rem;
+  color: var(--text-soft);
+}
+
+@media (max-width: 720px) {
+  .consultation-hours-editor__row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .consultation-hours-editor__day-label {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .consultation-hours-editor__slots,
+  .consultation-hours-editor__unavailable {
+    grid-column: 1 / -1;
+  }
+}

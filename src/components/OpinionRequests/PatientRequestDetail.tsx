@@ -1,7 +1,8 @@
-import { ArrowLeft, Clock, FileText, MessageSquare, Stethoscope } from 'lucide-react';
+import { ArrowLeft, Clock, FileText, Stethoscope } from 'lucide-react';
 import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
 import OpinionRequestAuditLink from './OpinionRequestAuditLink';
 import { isRecommendationOpinionRequest, patientRequestStatusLabel } from '../../lib/opinionRequests';
+import type { SavedPatientCaseDetailsPatch } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 function formatRequestDate(iso: string): string {
@@ -23,6 +24,7 @@ type PatientRequestDetailProps = {
   onBack: () => void;
   onOpenActivity: () => void;
   onUpdated: () => void;
+  onRequestPatch?: (patch: SavedPatientCaseDetailsPatch) => void;
   onOpenRecord: (storagePath: string | null) => void;
   onMessage: (message: string, type: 'error' | 'success') => void;
 };
@@ -33,6 +35,7 @@ export default function PatientRequestDetail({
   onBack,
   onOpenActivity,
   onUpdated,
+  onRequestPatch,
   onOpenRecord,
   onMessage
 }: PatientRequestDetailProps) {
@@ -50,12 +53,14 @@ export default function PatientRequestDetail({
         <div className='doctor-request-head'>
           <strong>{headline}</strong>
           <div className='patient-request-detail-badges'>
-            {request.records_verified_at ? (
-              <span className='patient-docs-verified-badge patient-docs-verified-badge--inline'>
-                Documents verified
-              </span>
-            ) : null}
-            <span className={`tag status-${request.status}`}>{statusText}</span>
+            <div className='patient-request-detail-badges__status'>
+              {request.records_verified_at ? (
+                <span className='patient-docs-verified-badge patient-docs-verified-badge--inline'>
+                  Documents verified
+                </span>
+              ) : null}
+              <span className={`tag status-${request.status}`}>{statusText}</span>
+            </div>
             <OpinionRequestAuditLink onOpen={onOpenActivity} />
           </div>
         </div>
@@ -119,14 +124,6 @@ export default function PatientRequestDetail({
               </li>
             ) : null}
           </ul>
-
-          <div className='patient-request-detail-summary__message'>
-            <div className='patient-request-detail-summary__message-head'>
-              <MessageSquare size={16} aria-hidden />
-              <span className='patient-request-detail-summary__label'>Your message</span>
-            </div>
-            <p className='patient-request-detail-summary__message-text'>{request.message}</p>
-          </div>
         </section>
 
         {/* {request.doctor_response ? (
@@ -145,6 +142,7 @@ export default function PatientRequestDetail({
           request={request}
           liveTick={liveTick}
           onUpdated={onUpdated}
+          onRequestPatch={onRequestPatch}
           onOpenRecord={(path) => {
             if (path) onOpenRecord(path);
           }}

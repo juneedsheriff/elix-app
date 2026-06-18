@@ -12,12 +12,14 @@ import OpinionRequestActivityPage from './OpinionRequestActivityPage';
 import RecommendationOpinionForm from './RecommendationOpinionForm';
 import SecondOpinionChoiceModal from './SecondOpinionChoiceModal';
 import {
+  fetchPatientOpinionRequestById,
   fetchPatientOpinionRequests,
   isPatientRequestCompleted,
   isRecommendationOpinionRequest,
   subscribePatientOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
+import { consumeReturnOpinionRequestId } from '../../lib/navigation/returnOpinionRequest';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import './patient-my-requests.css';
@@ -64,11 +66,13 @@ export default function PatientMyRequests({
 }: PatientMyRequestsProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedId = searchParams.get('id');
+  const selectedId = searchParams.get('id')?.trim() || null;
   const showActivity = searchParams.get('activity') === '1';
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
+  const [detailRequest, setDetailRequest] = useState<OpinionRequest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -141,12 +145,62 @@ export default function PatientMyRequests({
   }, [load]);
 
   useEffect(() => {
+    const returnId = consumeReturnOpinionRequestId();
+    if (!returnId) return;
+    setSearchParams(
+      (prev) => {
+        if (prev.get('id') === returnId) return prev;
+        const next = new URLSearchParams(prev);
+        next.set('id', returnId);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
+  useEffect(() => {
     if (searchParams.get('flow') !== 'recommendations') return;
     setShowRecommendationForm(true);
-    setSearchParams({}, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    next.delete('flow');
+    setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const selectedRequest = selectedId ? requests.find((request) => request.id === selectedId) : null;
+  const selectedRequest = useMemo(() => {
+    if (!selectedId) return null;
+    return requests.find((request) => request.id === selectedId) ?? detailRequest;
+  }, [selectedId, requests, detailRequest]);
+
+  useEffect(() => {
+    if (!selectedId || !canLoad || !patientAuthUserId) {
+      setDetailRequest(null);
+      setDetailLoading(false);
+      return;
+    }
+
+    if (requests.some((request) => request.id === selectedId)) {
+      setDetailRequest(null);
+      setDetailLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDetailLoading(true);
+
+    void fetchPatientOpinionRequestById(patientAuthUserId, selectedId).then((result) => {
+      if (cancelled) return;
+      setDetailLoading(false);
+      if (result.error) {
+        setDetailRequest(null);
+        return;
+      }
+      setDetailRequest(result.data);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, canLoad, patientAuthUserId, requests]);
 
   useEffect(() => {
     if (!canLoad || !patientAuthUserId) return;
@@ -158,6 +212,23 @@ export default function PatientMyRequests({
     setActionMessage(null);
     setSuccessMessage(null);
   };
+
+  const patchRequestCaseDetails = useCallback(
+    (requestId: string, patch: { patient_case_details: unknown; message?: string | null; requested_specialty?: string | null }) => {
+      const merge = (request: OpinionRequest): OpinionRequest => ({
+        ...request,
+        patient_case_details: patch.patient_case_details,
+        message: patch.message ?? request.message,
+        requested_specialty: patch.requested_specialty ?? request.requested_specialty
+      });
+
+      setRequests((prev) =>
+        prev.map((request) => (request.id === requestId ? merge(request) : request))
+      );
+      setDetailRequest((prev) => (prev?.id === requestId ? merge(prev) : prev));
+    },
+    []
+  );
 
   const openActivity = (requestId: string) => {
     setSearchParams({ id: requestId, activity: '1' });
@@ -172,6 +243,7 @@ export default function PatientMyRequests({
   };
 
   const closeDetail = () => {
+    setDetailRequest(null);
     setSearchParams({});
   };
 
@@ -214,9 +286,9 @@ export default function PatientMyRequests({
       <div className='screen-grid doctors-screen patient-my-requests'>
         <RecommendationOpinionForm
           onBack={() => setShowRecommendationForm(false)}
-          onSubmitted={(requestId) => {
-            void load({ silent: true });
+          onSubmitted={async (requestId) => {
             setShowRecommendationForm(false);
+            await load({ silent: true });
             openDetail(requestId);
           }}
         />
@@ -225,9 +297,9 @@ export default function PatientMyRequests({
   }
 
   if (selectedId) {
-    if (loading && !hasLoadedOnceRef.current) {
+    if (!selectedRequest && (loading || detailLoading)) {
       return (
-        <div className='screen-grid doctors-screen'>
+        <div className='screen-grid doctors-screen patient-request-detail-view'>
           <section className='section-card'>
             <p className='doctor-status' aria-live='polite'>
               <Loader2 size={18} className='spin' aria-hidden /> Loading request…
@@ -287,6 +359,7 @@ export default function PatientMyRequests({
             onBack={closeDetail}
             onOpenActivity={() => openActivity(selectedRequest.id)}
             onUpdated={() => void load({ silent: true })}
+            onRequestPatch={(patch) => patchRequestCaseDetails(selectedRequest.id, patch)}
             onOpenRecord={(path) => void openRecord(path)}
             onMessage={handleMessage}
           />

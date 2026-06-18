@@ -151,13 +151,30 @@ export function validateAdminDoctorInput(input: AdminDoctorUpdateInput): string 
   return null;
 }
 
+function parseIntervals(raw: unknown): ConsultationHoursInterval[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const intervals = raw
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      start: typeof item.start === 'string' ? item.start : '09:00',
+      end: typeof item.end === 'string' ? item.end : '17:00'
+    }))
+    .filter((item) => item.start && item.end);
+  return intervals.length ? intervals : undefined;
+}
+
 function parseDay(raw: unknown): ConsultationHoursDay {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_DAY };
   const d = raw as Record<string, unknown>;
+  const enabled = Boolean(d.enabled);
+  const start = typeof d.start === 'string' ? d.start : '09:00';
+  const end = typeof d.end === 'string' ? d.end : '17:00';
+  const intervals = parseIntervals(d.intervals);
   return {
-    enabled: Boolean(d.enabled),
-    start: typeof d.start === 'string' ? d.start : '09:00',
-    end: typeof d.end === 'string' ? d.end : '17:00'
+    enabled,
+    start: intervals?.[0]?.start ?? start,
+    end: intervals?.[0]?.end ?? end,
+    intervals: intervals ?? (start && end ? [{ start, end }] : undefined)
   };
 }
 

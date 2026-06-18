@@ -9,6 +9,11 @@ export type OpinionRequestAuditAction =
   | 'request_forwarded_to_doctor'
   | 'request_deleted'
   | 'records_verified'
+  | 'case_details_reviewed'
+  | 'case_details_updated'
+  | 'records_rejected'
+  | 'patient_proceeded_without_records'
+  | 'pse_proceeded_without_records'
   | 'doctors_recommended'
   | 'recommendations_shared'
   | 'doctor_selected'
@@ -36,6 +41,11 @@ export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditActi
   request_forwarded_to_doctor: 'Request forwarded to doctor',
   request_deleted: 'Request deleted',
   records_verified: 'Medical records verified',
+  case_details_reviewed: 'Patient case details reviewed',
+  case_details_updated: 'Patient case details updated',
+  records_rejected: 'Medical records rejected — patient notified',
+  patient_proceeded_without_records: 'Patient chose to proceed without medical records',
+  pse_proceeded_without_records: 'Care team proceeded without attached medical records',
   doctors_recommended: 'Doctors recommended to patient',
   recommendations_shared: 'Doctor recommendations shared with patient',
   doctor_selected: 'Doctor selected',

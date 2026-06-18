@@ -171,7 +171,6 @@ export default function RecommendDoctorsSection({
         onApproved={onPatientSelectionApproved}
       />
 
-      <Paper radius='md' p='md' withBorder className='doctors-mgmt-detail-block doctors-mgmt-recommend__actions'>
       {patientSubmittedSelection ? (
         <PatientSelectionReview
           request={request}
@@ -182,6 +181,8 @@ export default function RecommendDoctorsSection({
         />
       ) : null}
 
+      {canCoordinate ? (
+      <Paper radius='md' p='md' withBorder className='doctors-mgmt-detail-block doctors-mgmt-recommend__actions'>
       <Group justify='space-between' align='flex-start' wrap='wrap' gap='sm' mb='sm'>
         <Stack gap={4}>
           <Text size='sm' fw={700}>
@@ -253,6 +254,7 @@ export default function RecommendDoctorsSection({
         </Button>
       </Group>
     </Paper>
+      ) : null}
     </Stack>
   );
 }

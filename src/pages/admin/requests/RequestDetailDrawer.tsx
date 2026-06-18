@@ -76,6 +76,8 @@ type RequestDetailDrawerProps = {
 
   onWorkflowUpdated: () => void;
 
+  onRequestPatch?: (patch: Partial<OpinionRequest> & { id: string }) => void;
+
   onError: (message: string) => void;
 
   onSuccess: (message: string) => void;
@@ -109,6 +111,8 @@ export default function RequestDetailDrawer({
   onOpenRecord,
 
   onWorkflowUpdated,
+
+  onRequestPatch,
 
   onError,
 
@@ -171,7 +175,7 @@ export default function RequestDetailDrawer({
 
   const canCoordinate = staffIsPse && !isClosed;
 
-  const showWorkflowWizard = canCoordinate;
+  const showWorkflowWizard = staffIsPse;
 
   const needsAssignmentForAdmin = staffIsAdmin && !staffIsPse && !isAssigned && !isClosed;
 
@@ -467,25 +471,17 @@ export default function RequestDetailDrawer({
               </div>
 
               <Select
-
                 placeholder='Select executive…'
-
                 data={executiveSelectData}
-
                 value={assignSelectValue}
-
                 onChange={(value) => onAssigneeChange(value ?? '')}
-
                 searchable
-
+                clearable={false}
+                allowDeselect={false}
                 radius='md'
-
                 size='md'
-
                 disabled={isAssigned || busy}
-
                 classNames={{ input: 'request-detail-drawer__select-input' }}
-
               />
 
               {canAssign ? (
@@ -541,6 +537,8 @@ export default function RequestDetailDrawer({
                 onOpenRecord={onOpenRecord}
 
                 onUpdated={onWorkflowUpdated}
+
+                onRequestPatch={onRequestPatch}
 
                 onError={onError}
 

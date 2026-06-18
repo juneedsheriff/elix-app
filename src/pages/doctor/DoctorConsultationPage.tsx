@@ -3,6 +3,8 @@ import { ArrowLeft, FileUp, Loader2, Eraser } from 'lucide-react';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
 import ConsultationSummaryPdfView from '../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
+import DoctorPatientCaseDetailsSections from '../../components/OpinionRequests/DoctorPatientCaseDetailsSections';
+import '../../components/OpinionRequests/doctor-patient-case-details-sections.css';
 import {
   CONSULTATION_SUMMARY_FIELDS,
   consultationSummaryToFormValues,
@@ -23,8 +25,10 @@ import {
   consultationNotesPdfValidationError,
   fetchConsultationSummary,
   fetchDoctorOpinionRequests,
+  fetchStaffOpinionRequestById,
   saveDoctorConsultation,
-  saveDoctorConsultationUpload
+  saveDoctorConsultationUpload,
+  subscribeOpinionRequestLiveUpdates
 } from '../../lib/opinionRequests';
 import { hasConsultationSummary } from '../../lib/consultationWizard';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
@@ -98,6 +102,13 @@ export default function DoctorConsultationPage({
     consultationRequestIdRef.current = null;
   }, [onNavigate, returnScreen, stopVoice]);
 
+  const goToCasesAfterSubmit = useCallback(() => {
+    stopVoice();
+    onNavigate?.('case-review');
+    clearDoctorConsultationRequestId();
+    consultationRequestIdRef.current = null;
+  }, [onNavigate, stopVoice]);
+
   const switchMode = useCallback(
     (nextMode: ConsultationMode) => {
       if (nextMode === 'upload') {
@@ -165,6 +176,23 @@ export default function DoctorConsultationPage({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!request?.id) return;
+
+    let cancelled = false;
+
+    const refreshRequest = async () => {
+      const { data } = await fetchStaffOpinionRequestById(request.id);
+      if (!cancelled && data) {
+        setRequest(data);
+      }
+    };
+
+    return subscribeOpinionRequestLiveUpdates(request.id, () => {
+      void refreshRequest();
+    });
+  }, [request?.id]);
+
   const handleFillSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!request) return;
@@ -198,7 +226,7 @@ export default function DoctorConsultationPage({
       prescription: values.prescription.trim() || null
     };
 
-    const { data: savedSummary, error: submitError } = await saveDoctorConsultation(
+    const { error: submitError } = await saveDoctorConsultation(
       request.id,
       request,
       payload,
@@ -210,10 +238,7 @@ export default function DoctorConsultationPage({
       setError(submitError.message);
       return;
     }
-    if (savedSummary) setSummary(savedSummary);
-    setSuccessMessage('Consultation notes submitted successfully.');
-    setError(null);
-    void load();
+    goToCasesAfterSubmit();
   };
 
   const handleUploadSubmit = async () => {
@@ -233,7 +258,7 @@ export default function DoctorConsultationPage({
     setSubmitting(true);
     setError(null);
 
-    const { data: savedSummary, error: submitError } = await saveDoctorConsultationUpload(
+    const { error: submitError } = await saveDoctorConsultationUpload(
       request.id,
       request,
       uploadFile,
@@ -245,13 +270,7 @@ export default function DoctorConsultationPage({
       setError(submitError.message);
       return;
     }
-    if (savedSummary) setSummary(savedSummary);
-    setUploadFile(null);
-    setUploadNote('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    setSuccessMessage('Consultation notes uploaded successfully.');
-    setError(null);
-    void load();
+    goToCasesAfterSubmit();
   };
 
   const handleFileChange = (file: File | null) => {
@@ -322,7 +341,17 @@ export default function DoctorConsultationPage({
       ) : null}
 
       {!loading && request ? (
-        <>
+        <div className='doctor-consultation-page__workspace'>
+          <aside className='doctor-consultation-page__case-context' aria-label='Patient case details'>
+            <h3 className='doctor-consultation-page__case-context-title'>Patient case details</h3>
+            <DoctorPatientCaseDetailsSections
+              request={request}
+              onOpenError={setError}
+              lightboxModalZIndex={500}
+            />
+          </aside>
+
+          <div className='doctor-consultation-page__main'>
           {hasConsultationSummary(summary) && summary ? (
             <ConsultationSummaryPdfView summary={summary} request={request} />
           ) : null}
@@ -542,7 +571,8 @@ export default function DoctorConsultationPage({
               </footer>
             </div>
           )}
-        </>
+          </div>
+        </div>
       ) : null}
     </div>
   );
