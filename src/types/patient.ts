@@ -37,6 +37,20 @@ export type PatientUpsertInput = {
 export type PatientProfileUpdateInput = {
   full_name: string;
   phone?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  blood_group?: string | null;
+  country?: string | null;
+  city?: string | null;
+  address?: string | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  allergies?: string | null;
+  current_medications?: string | null;
+  insurance_provider?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  preferred_language?: string;
 };
 
 export type PatientOnboardingInput = {

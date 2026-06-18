@@ -1,7 +1,14 @@
+export type ConsultationHoursInterval = {
+  start: string;
+  end: string;
+};
+
 export type ConsultationHoursDay = {
   enabled: boolean;
   start: string;
   end: string;
+  /** Optional split shifts (Calendly-style). First interval mirrors start/end when omitted. */
+  intervals?: ConsultationHoursInterval[];
 };
 
 export type ConsultationHours = {

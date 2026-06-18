@@ -96,6 +96,12 @@ export type OpinionRequest = {
   pse_scheduling_message: string | null;
   schedule_confirmed_at: string | null;
   records_verified_at: string | null;
+  case_details_reviewed_at?: string | null;
+  records_rejected_at?: string | null;
+  records_rejection_reason?: string | null;
+  patient_proceeded_without_records_at?: string | null;
+  pse_proceeded_without_records_at?: string | null;
+  patient_case_details?: unknown | null;
   invoice_pdf_storage_path: string | null;
   invoice_generated_at: string | null;
   invoice_number: string | null;

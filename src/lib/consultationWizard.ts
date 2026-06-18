@@ -24,19 +24,20 @@ export type WizardStepDef = {
 
 export const PSE_WIZARD_STEPS: WizardStepDef[] = [
   { id: 1, title: 'Request received', subtitle: 'Patient submitted a second opinion request' },
-  { id: 2, title: 'Verify records', subtitle: 'Review uploaded medical documents' },
+  { id: 2, title: 'Patient case details', subtitle: "Review the patient's submitted case information" },
+  { id: 3, title: 'Verify records', subtitle: 'Review uploaded medical documents' },
   {
-    id: 3,
+    id: 4,
     title: 'Recommend doctors',
     subtitle: 'Share doctors, review patient choice, confirm availability'
   },
-  { id: 4, title: 'Send payment link', subtitle: 'After patient confirms schedule' },
-  { id: 5, title: 'Schedule appointment', subtitle: 'Set date, time, and meeting link' },
-  { id: 6, title: 'Consultation notes', subtitle: 'View doctor consultation summary' }
+  { id: 5, title: 'Send payment link', subtitle: 'After patient confirms schedule' },
+  { id: 6, title: 'Schedule appointment', subtitle: 'Set date, time, and meeting link' },
+  { id: 7, title: 'Consultation notes', subtitle: 'View doctor consultation summary' }
 ];
 
 export const PATIENT_WIZARD_STEPS: WizardStepDef[] = [
-  { id: 1, title: 'Request second opinion', subtitle: 'Your request was submitted to our team' },
+  { id: 1, title: 'Request second opinion', subtitle: 'Review your submitted case details' },
   { id: 2, title: 'Document verification', subtitle: 'We verify your uploaded records' },
   { id: 3, title: 'Recommended doctors', subtitle: 'Choose from doctors curated for you' },
   { id: 4, title: 'Payment', subtitle: 'Complete payment to continue' },
@@ -56,6 +57,26 @@ function wizardStepCount(audience: WizardAudience) {
 
 function isRecordsVerified(request: OpinionRequest) {
   return Boolean(request.records_verified_at);
+}
+
+export function hasPatientProceededWithoutRecords(request: OpinionRequest) {
+  return Boolean(request.patient_proceeded_without_records_at);
+}
+
+function isPseRecordsStepComplete(request: OpinionRequest) {
+  return isRecordsVerified(request) || Boolean(request.pse_proceeded_without_records_at);
+}
+
+function isPatientDocumentStepComplete(request: OpinionRequest, recommendationsCount: number) {
+  return (
+    isRecordsVerified(request) ||
+    hasPatientProceededWithoutRecords(request) ||
+    isDoctorsShared(request, recommendationsCount)
+  );
+}
+
+function isCaseDetailsReviewed(request: OpinionRequest) {
+  return Boolean(request.case_details_reviewed_at);
 }
 
 function isDoctorsShared(request: OpinionRequest, recommendationsCount: number) {
@@ -198,15 +219,17 @@ function isStepComplete(index: number, ctx: WizardProgressContext, audience: Wiz
       case 0:
         return true;
       case 1:
-        return isRecordsVerified(request);
+        return isCaseDetailsReviewed(request);
       case 2:
-        return isScheduleConfirmed(request);
+        return isPseRecordsStepComplete(request);
       case 3:
-        return isPaymentConfirmed(request);
+        return isScheduleConfirmed(request);
       case 4:
-        return isScheduledWithLink(request);
+        return isPaymentConfirmed(request);
       case 5:
-        return hasSummary || request.consultation_stage === 'completed';
+        return isScheduledWithLink(request);
+      case 6:
+        return isConsultationNotesComplete(ctx);
       default:
         return false;
     }
@@ -216,7 +239,7 @@ function isStepComplete(index: number, ctx: WizardProgressContext, audience: Wiz
     case 0:
       return true;
     case 1:
-      return isRecordsVerified(request) || isDoctorsShared(request, recommendationsCount);
+      return isPatientDocumentStepComplete(request, recommendationsCount);
     case 2:
       return isScheduleConfirmed(request);
     case 3:
@@ -228,7 +251,7 @@ function isStepComplete(index: number, ctx: WizardProgressContext, audience: Wiz
         (isPaymentConfirmed(request) && isScheduledWithLink(request))
       );
     case 5:
-      return hasSummary || request.consultation_stage === 'completed';
+      return isPatientConsultationNotesComplete(ctx);
     default:
       return false;
   }
@@ -253,10 +276,13 @@ export function getSuggestedActiveStep(ctx: WizardProgressContext, audience: Wiz
   if (audience === 'pse') {
     const stage = ctx.request.consultation_stage;
     if (stage === 'availability_submitted' || stage === 'doctor_selected' || stage === 'schedule_proposed') {
-      suggested = Math.max(suggested, 2);
+      suggested = Math.max(suggested, 3);
     }
     if (stage === 'schedule_confirmed') {
-      suggested = Math.max(suggested, 3);
+      suggested = Math.max(suggested, 4);
+    }
+    if (isConsultationNotesComplete(ctx)) {
+      suggested = lastIndex;
     }
   }
 
@@ -273,7 +299,7 @@ export function getSuggestedActiveStep(ctx: WizardProgressContext, audience: Wiz
   }
 
   if (audience === 'patient') {
-    if (ctx.hasSummary || ctx.request.consultation_stage === 'completed') {
+    if (isPatientConsultationNotesComplete(ctx)) {
       suggested = 5;
     } else if (isPatientAppointmentPhase(ctx.request)) {
       suggested = 4;
@@ -300,8 +326,7 @@ export function getWizardSteps(
     let state: WizardStepState = 'upcoming';
     if (isStepComplete(index, ctx, audience)) {
       state = 'complete';
-    }
-    if (index === activeIndex) {
+    } else if (index === activeIndex) {
       state = 'current';
     }
     return { ...step, state };
@@ -324,7 +349,7 @@ export function canPatientNavigateToStep(targetIndex: number, ctx: WizardProgres
     return true;
   }
   if (targetIndex === 4 && isPatientAppointmentPhase(ctx.request)) return true;
-  if (targetIndex === 5 && ctx.hasSummary) return true;
+  if (targetIndex === 5 && isPatientConsultationNotesComplete(ctx)) return true;
   return false;
 }
 
@@ -448,9 +473,11 @@ export function resolveWizardStepOnUpdate(
     const ctx = options.progressCtx;
 
     if (state.requestId !== requestId || state.step === null) {
-      const step = ctx
-        ? initialPatientWizardStep(requestId, suggestedStep, maxNav, ctx)
-        : clampWizardStep(suggestedStep, maxNav);
+      const stored = readPatientWizardStoredStep(requestId);
+      const step =
+        stored != null
+          ? clampWizardStep(stored, maxNav)
+          : 0;
       writePatientWizardStoredStep(requestId, step);
       return { requestId, step, lastSuggested: suggestedStep };
     }
@@ -564,4 +591,20 @@ export function hasConsultationSummary(summary: ConsultationSummary | null | und
       summary.assessment_plan?.trim() ||
       summary.prescription?.trim()
   );
+}
+
+/** Consultation notes step — doctor has submitted notes or the case is closed. */
+export function isConsultationNotesComplete(ctx: WizardProgressContext): boolean {
+  const { request, hasSummary } = ctx;
+  return (
+    hasSummary ||
+    request.consultation_stage === 'completed' ||
+    request.status === 'closed' ||
+    Boolean(request.doctor_response?.trim())
+  );
+}
+
+/** Patient step 6 — doctor has submitted consultation notes. */
+export function isPatientConsultationNotesComplete(ctx: WizardProgressContext): boolean {
+  return isConsultationNotesComplete(ctx);
 }

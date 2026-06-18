@@ -1156,7 +1156,30 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.5rem;
+  width: 100%;
+}
+
+.patient-request-detail-badges__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.patient-request-detail-view .patient-request-detail-badges .tag,
+.patient-request-detail-view .patient-request-detail-badges .patient-docs-verified-badge {
+  min-height: 1.75rem;
+  box-sizing: border-box;
+}
+
+.patient-request-detail-view .patient-request-detail-badges .pmr-audit-btn {
+  flex-shrink: 0;
+  min-height: 1.75rem;
+  box-sizing: border-box;
 }
 
 .pmr-audit-btn {

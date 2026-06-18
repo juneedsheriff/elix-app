@@ -95,6 +95,12 @@ const workflowFieldsInvoice = `
 const workflowFields = `
   ${workflowFieldsCore},
   records_verified_at,
+  case_details_reviewed_at,
+  records_rejected_at,
+  records_rejection_reason,
+  patient_proceeded_without_records_at,
+  pse_proceeded_without_records_at,
+  patient_case_details,
   ${workflowFieldsInvoice},
   ${workflowFieldsExtended}
 `;
@@ -452,6 +458,7 @@ export function patientRequestStatusLabel(
     | 'consultation_stage'
     | 'payment_status'
     | 'records_verified_at'
+    | 'patient_proceeded_without_records_at'
     | 'doctor_id'
   >
 ): string {
@@ -468,6 +475,7 @@ export function patientRequestStatusLabel(
   if (request.consultation_stage === 'recommended') return 'Choose a doctor';
   if (request.records_verified_at && !request.doctor_id) return 'Awaiting doctor recommendations';
   if (request.records_verified_at) return 'Documents verified';
+  if (request.patient_proceeded_without_records_at) return 'Proceeding without documents';
   if (request.status === 'submitted' && !request.assigned_to) return 'Pending admin review';
   if (request.status === 'submitted' && request.assigned_to) return 'Being coordinated by our team';
   if (request.status === 'in_review') return 'Consultation in progress';
@@ -503,6 +511,43 @@ function isMissingResponseColumnsError(error: { message?: string } | null) {
 function isMissingRecordsVerifiedColumnError(error: { message?: string } | null) {
   const msg = error?.message?.toLowerCase() ?? '';
   return msg.includes('records_verified_at');
+}
+
+function isMissingCaseDetailsReviewedColumnError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('case_details_reviewed_at');
+}
+
+function isMissingRecordsRejectedColumnError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('records_rejected_at') || msg.includes('records_rejection_reason');
+}
+
+function isMissingProceedWithoutRecordsColumnError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('patient_proceeded_without_records_at') ||
+    msg.includes('pse_proceeded_without_records_at')
+  );
+}
+
+function isMissingPatientCaseDetailsColumnError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('patient_case_details');
+}
+
+function stripPatientCaseDetailsFromSelect(select: string) {
+  return select
+    .replace(/,?\s*patient_case_details\s*/g, '')
+    .replace(/,?\s*case_details_reviewed_at\s*/g, '')
+    .replace(/,?\s*records_rejected_at\s*/g, '')
+    .replace(/,?\s*records_rejection_reason\s*/g, '');
+}
+
+function stripProceededWithoutRecordsFromSelect(select: string) {
+  return select
+    .replace(/,?\s*patient_proceeded_without_records_at\s*/g, '')
+    .replace(/,?\s*pse_proceeded_without_records_at\s*/g, '');
 }
 
 function isMissingDoctorSelectionModeError(error: { message?: string } | null) {
@@ -590,6 +635,12 @@ type RequestListRow = {
   invoice_tax_amount?: number | string | null;
   invoice_total?: number | string | null;
   records_verified_at?: string | null;
+  case_details_reviewed_at?: string | null;
+  records_rejected_at?: string | null;
+  records_rejection_reason?: string | null;
+  patient_proceeded_without_records_at?: string | null;
+  pse_proceeded_without_records_at?: string | null;
+  patient_case_details?: unknown | null;
   doctor_response: string | null;
   responded_at: string | null;
   assigned_to: string | null;
@@ -611,6 +662,7 @@ export type CreateOpinionRequestInput = {
   patientName?: string | null;
   doctorName?: string | null;
   consultationDurationMinutes?: number;
+  caseDetails?: Record<string, unknown> | null;
 };
 
 export type CreateRecommendationOpinionRequestInput = {
@@ -620,6 +672,7 @@ export type CreateRecommendationOpinionRequestInput = {
   patientName?: string | null;
   requestedSpecialty: string;
   consultationDurationMinutes?: number;
+  caseDetails?: Record<string, unknown> | null;
 };
 
 /** Resolve doctors.id — never persist auth.users id in opinion_requests.doctor_id */
@@ -679,6 +732,7 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
     patient_name: patientName,
     status: 'submitted' as const,
     doctor_selection_mode: 'self_select' as const,
+    patient_case_details: input.caseDetails ?? null,
     ...pricingFields
   };
 
@@ -786,6 +840,7 @@ export async function createRecommendationOpinionRequest(input: CreateRecommenda
     status: 'submitted' as const,
     doctor_selection_mode: 'needs_recommendation' as const,
     requested_specialty: requestedSpecialty,
+    patient_case_details: input.caseDetails ?? null,
     ...pricingFields
   };
 
@@ -952,6 +1007,12 @@ function mapRequestRow(
       row.invoice_tax_amount == null ? null : Number(row.invoice_tax_amount),
     invoice_total: row.invoice_total == null ? null : Number(row.invoice_total),
     records_verified_at: row.records_verified_at ?? null,
+    case_details_reviewed_at: row.case_details_reviewed_at ?? null,
+    records_rejected_at: row.records_rejected_at ?? null,
+    records_rejection_reason: row.records_rejection_reason ?? null,
+    patient_proceeded_without_records_at: row.patient_proceeded_without_records_at ?? null,
+    pse_proceeded_without_records_at: row.pse_proceeded_without_records_at ?? null,
+    patient_case_details: row.patient_case_details ?? null,
     records
   };
 }
@@ -1030,6 +1091,12 @@ type WorkflowFieldRow = Pick<
   | 'pse_scheduling_message'
   | 'schedule_confirmed_at'
   | 'records_verified_at'
+  | 'case_details_reviewed_at'
+  | 'records_rejected_at'
+  | 'records_rejection_reason'
+  | 'patient_proceeded_without_records_at'
+  | 'pse_proceeded_without_records_at'
+  | 'patient_case_details'
   | 'invoice_pdf_storage_path'
   | 'invoice_generated_at'
   | 'invoice_number'
@@ -1085,7 +1152,18 @@ function mergeWorkflowFields(request: OpinionRequest, row: WorkflowFieldRow): Op
     invoice_tax_amount:
       row.invoice_tax_amount == null ? request.invoice_tax_amount : Number(row.invoice_tax_amount),
     invoice_total: row.invoice_total == null ? request.invoice_total : Number(row.invoice_total),
-    records_verified_at: row.records_verified_at ?? request.records_verified_at
+    records_verified_at: row.records_verified_at ?? request.records_verified_at,
+    case_details_reviewed_at: row.case_details_reviewed_at ?? request.case_details_reviewed_at,
+    records_rejected_at: row.records_rejected_at ?? request.records_rejected_at,
+    records_rejection_reason: row.records_rejection_reason ?? request.records_rejection_reason,
+    patient_proceeded_without_records_at:
+      row.patient_proceeded_without_records_at ?? request.patient_proceeded_without_records_at,
+    pse_proceeded_without_records_at:
+      row.pse_proceeded_without_records_at ?? request.pse_proceeded_without_records_at,
+    patient_case_details:
+      row.patient_case_details !== undefined && row.patient_case_details !== null
+        ? row.patient_case_details
+        : request.patient_case_details
   };
 }
 
@@ -1269,6 +1347,22 @@ async function fetchPatientOpinionRequestRows(
     lastError = result.error;
   }
 
+  if (isMissingPatientCaseDetailsColumnError(lastError)) {
+    result = await buildQuery(stripPatientCaseDetailsFromSelect(requestListSelectPatient));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingProceedWithoutRecordsColumnError(lastError)) {
+    result = await buildQuery(stripProceededWithoutRecordsFromSelect(requestListSelectPatient));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
   if (isMissingWorkflowColumnsError(lastError)) {
     result = await buildQuery(
       `
@@ -1331,6 +1425,22 @@ async function fetchOpinionRequestRows(
 
   if (isMissingRecordsVerifiedColumnError(lastError)) {
     result = await buildQuery(stripRecordsVerifiedFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingPatientCaseDetailsColumnError(lastError)) {
+    result = await buildQuery(stripPatientCaseDetailsFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingProceedWithoutRecordsColumnError(lastError)) {
+    result = await buildQuery(stripProceededWithoutRecordsFromSelect(requestListSelectWithResponse));
     if (!result.error) {
       return { rows: result.data, error: null, responsesEnabled: true };
     }
@@ -1465,6 +1575,29 @@ async function attachRequestRecords(requests: OpinionRequest[]): Promise<Opinion
   });
 }
 
+async function enrichRequestsWithConsultationSummaries(
+  requests: OpinionRequest[]
+): Promise<OpinionRequest[]> {
+  if (!requests.length) return requests;
+
+  const requestIds = requests.map((request) => request.id);
+  const { data, error } = await supabase
+    .from('consultation_summaries')
+    .select(CONSULTATION_SUMMARY_SELECT)
+    .in('request_id', requestIds)
+    .returns<ConsultationSummary[]>();
+
+  if (error || !data?.length) return requests;
+
+  const summaryByRequestId = new Map(data.map((summary) => [summary.request_id, summary]));
+
+  return requests.map((request) => {
+    const summary = summaryByRequestId.get(request.id);
+    if (!summary) return request;
+    return { ...request, consultation_summary: summary };
+  });
+}
+
 export async function fetchPatientOpinionRequests(patientAuthUserId: string): Promise<FetchOpinionRequestsResult> {
   let { rows, error, responsesEnabled } = await fetchPatientOpinionRequestRows(patientAuthUserId);
 
@@ -1494,6 +1627,148 @@ export async function fetchPatientOpinionRequests(patientAuthUserId: string): Pr
   };
 }
 
+async function mapPatientOpinionRequestRows(rows: RequestListRow[]): Promise<OpinionRequest[]> {
+  const mapped = rows.map((row) => mapRequestRow(row, new Map()));
+  const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
+  return attachRequestRecords(withWorkflow);
+}
+
+export async function fetchPatientOpinionRequestById(
+  patientAuthUserId: string,
+  requestId: string
+): Promise<{ data: OpinionRequest | null; error: { message: string } | null }> {
+  const selects = [
+    requestListSelectPatient,
+    stripDoctorSelectionModeFromSelect(requestListSelectPatient),
+    stripRequestedSpecialtyFromSelect(requestListSelectPatient),
+    stripRecordsVerifiedFromSelect(requestListSelectPatient),
+    stripPatientCaseDetailsFromSelect(requestListSelectPatient),
+    stripProceededWithoutRecordsFromSelect(requestListSelectPatient),
+    `
+      id,
+      message,
+      status,
+      created_at,
+      patient_id,
+      patient_name,
+      doctor_id,
+      doctor_name,
+      doctor_response,
+      responded_at,
+      assigned_to,
+      assigned_at,
+      coordination_notes,
+      doctors (id, full_name, specialty)
+    `
+  ];
+
+  let lastError: { message: string; code?: string } | null = null;
+
+  for (const select of selects) {
+    const { data, error } = await supabase
+      .from('opinion_requests')
+      .select(select)
+      .eq('patient_id', patientAuthUserId)
+      .eq('id', requestId)
+      .maybeSingle<RequestListRow>();
+
+    if (!error && data) {
+      const [mapped] = await mapPatientOpinionRequestRows([data]);
+      return { data: mapped ?? null, error: null };
+    }
+
+    if (error) {
+      lastError = error;
+      if (error.code === 'PGRST116') {
+        return { data: null, error: { message: 'Request not found.' } };
+      }
+      const missingColumn =
+        isMissingDoctorSelectionModeError(error) ||
+        isMissingRequestedSpecialtyError(error) ||
+        isMissingRecordsVerifiedColumnError(error) ||
+        isMissingPatientCaseDetailsColumnError(error) ||
+        isMissingProceedWithoutRecordsColumnError(error) ||
+        isMissingWorkflowColumnsError(error);
+      if (missingColumn) continue;
+      return { data: null, error: { message: error.message } };
+    }
+
+    return { data: null, error: { message: 'Request not found.' } };
+  }
+
+  return {
+    data: null,
+    error: { message: lastError?.message ?? 'Request not found.' }
+  };
+}
+
+async function mapStaffOpinionRequestRow(row: RequestListRow): Promise<OpinionRequest | null> {
+  const authUserIds = row.patient_id ? [row.patient_id] : [];
+  const patientMap = await loadPatientEmailMap(authUserIds);
+  const mapped = mapRequestRow(row, patientMap);
+  const [withWorkflow] = await enrichRequestsWithWorkflowFields([mapped]);
+  const [withRecords] = await attachRequestRecords([withWorkflow]);
+  const [enriched] = await enrichRequestsWithAssigneeNames(withRecords);
+  return enriched ?? null;
+}
+
+/** Loads one staff-visible request with records and workflow fields (for live drawer refresh). */
+export async function fetchStaffOpinionRequestById(
+  requestId: string
+): Promise<{ data: OpinionRequest | null; error: { message: string } | null }> {
+  const selects = [
+    requestListSelectWithResponse,
+    stripDoctorSelectionModeFromSelect(requestListSelectWithResponse),
+    stripRequestedSpecialtyFromSelect(requestListSelectWithResponse),
+    stripRecordsVerifiedFromSelect(requestListSelectWithResponse),
+    stripPatientCaseDetailsFromSelect(requestListSelectWithResponse),
+    stripProceededWithoutRecordsFromSelect(requestListSelectWithResponse),
+    stripExtendedWorkflowFromSelect(requestListSelectWithResponse),
+    stripRecordsVerifiedFromSelect(stripExtendedWorkflowFromSelect(requestListSelectWithResponse)),
+    requestListSelectWithResponseLegacy,
+    requestListSelectWithResponseNoAssign,
+    requestListSelectBase
+  ];
+
+  let lastError: { message: string; code?: string } | null = null;
+
+  for (const select of selects) {
+    const { data, error } = await supabase
+      .from('opinion_requests')
+      .select(select)
+      .eq('id', requestId)
+      .maybeSingle<RequestListRow>();
+
+    if (!error && data) {
+      const mapped = await mapStaffOpinionRequestRow(data);
+      return { data: mapped, error: null };
+    }
+
+    if (error) {
+      lastError = error;
+      if (error.code === 'PGRST116') {
+        return { data: null, error: { message: 'Request not found.' } };
+      }
+      const missingColumn =
+        isMissingDoctorSelectionModeError(error) ||
+        isMissingRequestedSpecialtyError(error) ||
+        isMissingRecordsVerifiedColumnError(error) ||
+        isMissingPatientCaseDetailsColumnError(error) ||
+        isMissingProceedWithoutRecordsColumnError(error) ||
+        isMissingWorkflowColumnsError(error);
+      if (missingColumn) continue;
+      return { data: null, error: { message: error.message } };
+    }
+
+    return { data: null, error: { message: 'Request not found.' } };
+  }
+
+  return {
+    data: null,
+    error: { message: lastError?.message ?? 'Request not found.' }
+  };
+}
+
 /** Loads requests visible to the signed-in doctor (RLS policy opinion_requests_select_doctor). */
 export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequestsResult> {
   const { rows, error, responsesEnabled } = await fetchOpinionRequestRows();
@@ -1512,7 +1787,8 @@ export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequests
     const patientMap = await loadPatientEmailMap(authUserIds);
     const mapped = (rows ?? []).map((row) => mapRequestRow(row, patientMap));
     const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
-    const data = await attachRequestRecords(withWorkflow);
+    const withRecords = await attachRequestRecords(withWorkflow);
+    const data = await enrichRequestsWithConsultationSummaries(withRecords);
     return {
       data,
       error: null,
@@ -1645,6 +1921,119 @@ export async function countOpinionRequestsForPatient(patientAuthUserId: string) 
   return { count: count ?? 0, error: null };
 }
 
+/** Pending open opinion requests linked to a doctor (admin). */
+async function fetchPendingOpinionRequestsForDoctorForAdmin(doctorId: string) {
+  const byId = new Map<
+    string,
+    { id: string; doctor_id: string | null; selected_doctor_id: string | null }
+  >();
+
+  const { data: directRows, error: directError } = await supabase
+    .from('opinion_requests')
+    .select('id, doctor_id, selected_doctor_id')
+    .neq('status', 'closed')
+    .or(`doctor_id.eq.${doctorId},selected_doctor_id.eq.${doctorId}`);
+
+  if (directError) return { requests: [], error: directError };
+  directRows?.forEach((row) => byId.set(row.id, row));
+
+  const { data: recommendationRows, error: recommendationError } = await supabase
+    .from('opinion_request_recommendations')
+    .select('request_id')
+    .eq('doctor_id', doctorId);
+
+  if (recommendationError) return { requests: [...byId.values()], error: recommendationError };
+
+  const recommendedRequestIds = [
+    ...new Set(
+      (recommendationRows ?? [])
+        .map((row) => row.request_id)
+        .filter((requestId): requestId is string => Boolean(requestId) && !byId.has(requestId))
+    )
+  ];
+
+  if (recommendedRequestIds.length > 0) {
+    const { data: recommendedRequests, error: recommendedRequestsError } = await supabase
+      .from('opinion_requests')
+      .select('id, doctor_id, selected_doctor_id')
+      .neq('status', 'closed')
+      .in('id', recommendedRequestIds);
+
+    if (recommendedRequestsError) {
+      return { requests: [...byId.values()], error: recommendedRequestsError };
+    }
+    recommendedRequests?.forEach((row) => byId.set(row.id, row));
+  }
+
+  return { requests: [...byId.values()], error: null };
+}
+
+/** Count open (non-closed) opinion requests linked to a doctor (admin). */
+export async function countPendingOpinionRequestsForDoctorForAdmin(doctorId: string) {
+  const { requests, error } = await fetchPendingOpinionRequestsForDoctorForAdmin(doctorId);
+  if (error) return { count: 0, error };
+  return { count: requests.length, error: null };
+}
+
+/** Route a doctor's open cases to a PSE before admin deletes the doctor profile. */
+export async function reassignPendingOpinionRequestsToPseForAdmin(
+  fromDoctorId: string,
+  pseAdminId: string,
+  input?: { removedDoctorName?: string | null }
+) {
+  const trimmedPseId = pseAdminId.trim();
+  if (!trimmedPseId) {
+    return { reassignedCount: 0, error: { message: 'Select a patient service executive.' } };
+  }
+
+  const { requests, error: fetchError } = await fetchPendingOpinionRequestsForDoctorForAdmin(fromDoctorId);
+  if (fetchError) return { reassignedCount: 0, error: fetchError };
+  if (requests.length === 0) return { reassignedCount: 0, error: null };
+
+  const removedDoctorName = input?.removedDoctorName?.trim() || 'The assigned doctor';
+  const coordinationNote = `${removedDoctorName} was removed from the platform. Please assign a replacement specialist and continue coordination.`;
+
+  const { error: deleteRecommendationsError } = await supabase
+    .from('opinion_request_recommendations')
+    .delete()
+    .eq('doctor_id', fromDoctorId);
+
+  if (deleteRecommendationsError) {
+    return { reassignedCount: 0, error: deleteRecommendationsError };
+  }
+
+  let reassignedCount = 0;
+
+  for (const request of requests) {
+    const patch: Record<string, unknown> = {
+      status: 'submitted',
+      coordination_notes: coordinationNote
+    };
+
+    if (request.doctor_id === fromDoctorId) {
+      patch.doctor_id = null;
+      patch.doctor_name = null;
+    }
+    if (request.selected_doctor_id === fromDoctorId) {
+      patch.selected_doctor_id = null;
+    }
+
+    const { error: updateError } = await supabase
+      .from('opinion_requests')
+      .update(patch)
+      .eq('id', request.id);
+
+    if (updateError) return { reassignedCount, error: updateError };
+
+    const { error: assignError } = await assignOpinionRequest(request.id, trimmedPseId);
+    if (assignError) return { reassignedCount, error: assignError };
+
+    reassignedCount += 1;
+  }
+
+  return { reassignedCount: requests.length, error: null };
+}
+
 /** Delete all opinion requests for a patient (admin only). */
 export async function deleteAllOpinionRequestsForPatientForAdmin(patientAuthUserId: string) {
   const { data: rpcCount, error: rpcError } = await supabase.rpc(
@@ -1723,6 +2112,280 @@ export async function pseMarkRecordsVerified(requestId: string) {
   if (error) return { data: null, error };
   await logRequestAudit(requestId, 'records_verified', 'pse', {
     metadata: { records_verified_at: verifiedAt }
+  });
+  return { data, error: null };
+}
+
+export async function pseMarkCaseDetailsReviewed(requestId: string) {
+  const reviewedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({ case_details_reviewed_at: reviewedAt })
+    .eq('id', requestId)
+    .select('id, case_details_reviewed_at')
+    .single();
+
+  if (error && isMissingCaseDetailsReviewedColumnError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Case details review requires a DB migration. Add column case_details_reviewed_at (timestamptz) to the opinion_requests table.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'case_details_reviewed', 'pse', {
+    metadata: { reviewed_at: reviewedAt }
+  });
+  return { data, error: null };
+}
+
+export async function pseRejectRecords(requestId: string, reason: string) {
+  const rejectedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      records_rejected_at: rejectedAt,
+      records_rejection_reason: reason.trim()
+    })
+    .eq('id', requestId)
+    .select('id, records_rejected_at')
+    .single();
+
+  if (error && isMissingRecordsRejectedColumnError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Records rejection requires a DB migration. Add columns records_rejected_at (timestamptz) and records_rejection_reason (text) to opinion_requests.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'records_rejected', 'pse', {
+    metadata: { reason, rejected_at: rejectedAt }
+  });
+  return { data, error: null };
+}
+
+export async function patientProceedWithoutRecords(requestId: string) {
+  const proceededAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      patient_proceeded_without_records_at: proceededAt,
+      records_rejected_at: null,
+      records_rejection_reason: null
+    })
+    .eq('id', requestId)
+    .select('id, patient_proceeded_without_records_at')
+    .single();
+
+  if (error && isMissingProceedWithoutRecordsColumnError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Proceed without records requires migration 042. Run npm run db:apply-proceeded-without-records or apply supabase/migrations/042_proceeded_without_records.sql in the Supabase SQL Editor.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'patient_proceeded_without_records', 'patient', {
+    metadata: { proceeded_at: proceededAt }
+  });
+  notifyOpinionRequestLiveChange(requestId);
+  return { data, error: null };
+}
+
+export async function patientAttachRecordsToRequest(requestId: string, recordIds: string[]) {
+  const uniqueIds = [...new Set(recordIds.map((id) => id.trim()).filter(Boolean))];
+  if (!uniqueIds.length) {
+    return {
+      data: null,
+      error: { message: 'Select or upload at least one record to attach.' }
+    };
+  }
+
+  const { data: existingLinks, error: existingError } = await supabase
+    .from('opinion_request_records')
+    .select('record_id')
+    .eq('request_id', requestId);
+
+  if (existingError) return { data: null, error: existingError };
+
+  const existingIds = new Set((existingLinks ?? []).map((link) => link.record_id));
+  const newIds = uniqueIds.filter((id) => !existingIds.has(id));
+
+  if (!newIds.length) {
+    return {
+      data: null,
+      error: { message: 'These records are already attached to this request.' }
+    };
+  }
+
+  const links = newIds.map((recordId) => ({
+    request_id: requestId,
+    record_id: recordId
+  }));
+  const { error: linkError } = await supabase.from('opinion_request_records').insert(links);
+
+  if (linkError) {
+    const hint =
+      linkError.message?.includes('foreign key') || linkError.message?.includes('record_id')
+        ? ' Run supabase/migrations/020_opinion_request_files_access.sql in the Supabase SQL Editor.'
+        : '';
+    return { data: null, error: { message: `${linkError.message}${hint}` } };
+  }
+
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      patient_proceeded_without_records_at: null,
+      records_rejected_at: null,
+      records_rejection_reason: null
+    })
+    .eq('id', requestId)
+    .select('id')
+    .single();
+
+  if (error && isMissingProceedWithoutRecordsColumnError(error)) {
+    const { error: fallbackError } = await supabase
+      .from('opinion_requests')
+      .update({
+        records_rejected_at: null,
+        records_rejection_reason: null
+      })
+      .eq('id', requestId);
+    if (fallbackError) return { data: null, error: fallbackError };
+  } else if (error) {
+    return { data: null, error };
+  }
+
+  await logRequestAudit(requestId, 'patient_records_attached', 'patient', {
+    metadata: { record_ids: newIds, count: newIds.length }
+  });
+  notifyOpinionRequestLiveChange(requestId);
+  return { data: { attachedCount: newIds.length, id: data?.id ?? requestId }, error: null };
+}
+
+export function canPatientManageRequestRecords(
+  request: Pick<OpinionRequest, 'records_verified_at' | 'status'>
+): boolean {
+  return !request.records_verified_at && request.status !== 'closed';
+}
+
+export async function patientDetachRecordFromRequest(requestId: string, recordId: string) {
+  const trimmedId = recordId.trim();
+  if (!trimmedId) {
+    return { data: null, error: { message: 'Record id is required.' } };
+  }
+
+  const { error } = await supabase
+    .from('opinion_request_records')
+    .delete()
+    .eq('request_id', requestId)
+    .eq('record_id', trimmedId);
+
+  if (error) {
+    const hint = error.message?.toLowerCase().includes('policy')
+      ? ' Detaching records requires migration 043. Apply supabase/migrations/043_patient_detach_request_records.sql in the Supabase SQL Editor.'
+      : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+
+  await logRequestAudit(requestId, 'patient_record_detached', 'patient', {
+    metadata: { record_id: trimmedId }
+  });
+  notifyOpinionRequestLiveChange(requestId);
+  return { data: { recordId: trimmedId }, error: null };
+}
+
+export async function pseProceedWithoutRecords(requestId: string) {
+  const proceededAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({ pse_proceeded_without_records_at: proceededAt })
+    .eq('id', requestId)
+    .select('id, pse_proceeded_without_records_at')
+    .single();
+
+  if (error && isMissingProceedWithoutRecordsColumnError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Proceed without records requires migration 042. Run npm run db:apply-proceeded-without-records or apply supabase/migrations/042_proceeded_without_records.sql in the Supabase SQL Editor.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'pse_proceeded_without_records', 'pse', {
+    metadata: { proceeded_at: proceededAt }
+  });
+  notifyOpinionRequestLiveChange(requestId);
+  return { data, error: null };
+}
+
+export async function updatePatientCaseDetails(
+  requestId: string,
+  caseDetails: Record<string, unknown>,
+  options?: {
+    actorRole?: 'patient' | 'pse';
+    syncMessage?: boolean;
+    requestedSpecialty?: string | null;
+  }
+) {
+  const actorRole = options?.actorRole ?? 'patient';
+  const primaryHealthConcern =
+    typeof caseDetails.primaryHealthConcern === 'string' ? caseDetails.primaryHealthConcern.trim() : '';
+
+  const payload: Record<string, unknown> = {
+    patient_case_details: caseDetails
+  };
+
+  if (options?.syncMessage && primaryHealthConcern) {
+    payload.message = primaryHealthConcern;
+  }
+
+  if (options?.requestedSpecialty?.trim()) {
+    payload.requested_specialty = options.requestedSpecialty.trim();
+  }
+
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', requestId)
+    .select('id, patient_case_details, message, requested_specialty')
+    .single();
+
+  if (error && isMissingPatientCaseDetailsColumnError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Patient case details require migration 041. Run supabase/migrations/041_patient_case_details.sql in the Supabase SQL Editor.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  if (!data) {
+    return {
+      data: null,
+      error: { message: 'Case details could not be saved. Check your connection and try again.' }
+    };
+  }
+  await logRequestAudit(requestId, 'case_details_updated', actorRole);
+  notifyOpinionRequestLiveChange(requestId, 'case_details_updated', {
+    patient_case_details: data.patient_case_details,
+    message: data.message,
+    requested_specialty: data.requested_specialty
   });
   return { data, error: null };
 }
@@ -2875,11 +3538,64 @@ const PAYMENT_WORKFLOW_REALTIME_FIELDS = new Set([
   'invoice_total'
 ]);
 
+const CASE_DETAILS_REALTIME_FIELDS = new Set([
+  'patient_case_details',
+  'case_details_reviewed_at',
+  'message',
+  'requested_specialty'
+]);
+
 function isPaymentWorkflowRealtimePayload(payload: unknown): boolean {
   if (!payload || typeof payload !== 'object') return false;
   const row = (payload as { new?: Record<string, unknown> | null }).new;
   if (!row) return false;
   return Object.keys(row).some((key) => PAYMENT_WORKFLOW_REALTIME_FIELDS.has(key));
+}
+
+function isCaseDetailsRealtimePayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const row = (payload as { new?: Record<string, unknown> | null }).new;
+  if (!row) return false;
+  return Object.keys(row).some((key) => CASE_DETAILS_REALTIME_FIELDS.has(key));
+}
+
+function opinionRequestLiveChannelName(requestId: string) {
+  return `opinion-request-live:${requestId}`;
+}
+
+export type OpinionRequestLiveCaseDetailsHint = {
+  type: 'case_details';
+  patient_case_details?: unknown | null;
+  message?: string | null;
+  requested_specialty?: string | null;
+};
+
+export type SavedPatientCaseDetailsPatch = {
+  patient_case_details: unknown;
+  message?: string | null;
+  requested_specialty?: string | null;
+};
+
+/** Push an immediate refresh to open request detail views (PSE + patient). */
+export function notifyOpinionRequestLiveChange(
+  requestId: string,
+  event: 'case_details_updated' | 'request_refresh' = 'request_refresh',
+  payload?: Record<string, unknown>
+) {
+  const channel = supabase.channel(opinionRequestLiveChannelName(requestId), {
+    config: { broadcast: { ack: false } }
+  });
+  void channel.subscribe((status) => {
+    if (status !== 'SUBSCRIBED') return;
+    void channel.send({
+      type: 'broadcast',
+      event,
+      payload: { requestId, at: Date.now(), ...payload }
+    });
+    window.setTimeout(() => {
+      void supabase.removeChannel(channel);
+    }, 1000);
+  });
 }
 
 function createDebouncedLiveRefresh(onChange: () => void, debounceMs: number) {
@@ -2890,8 +3606,13 @@ function createDebouncedLiveRefresh(onChange: () => void, debounceMs: number) {
     onChange();
   };
 
-  const scheduleRefresh = (payload?: unknown) => {
-    if (isPaymentWorkflowRealtimePayload(payload)) {
+  const scheduleRefresh = (payload?: unknown, options?: { immediate?: boolean }) => {
+    const immediate =
+      options?.immediate ||
+      isPaymentWorkflowRealtimePayload(payload) ||
+      isCaseDetailsRealtimePayload(payload);
+
+    if (immediate) {
       if (debounceTimer) clearTimeout(debounceTimer);
       if (followUpTimer) clearTimeout(followUpTimer);
       refresh();
@@ -2916,12 +3637,24 @@ function createDebouncedLiveRefresh(onChange: () => void, debounceMs: number) {
 /** Live updates for a single request detail view (recommendations, stage, summary). */
 export function subscribeOpinionRequestLiveUpdates(
   requestId: string,
-  onChange: () => void
+  onChange: (hint?: OpinionRequestLiveCaseDetailsHint) => void
 ): () => void {
-  const { scheduleRefresh, cancel } = createDebouncedLiveRefresh(onChange, 400);
+  const { scheduleRefresh, cancel } = createDebouncedLiveRefresh(() => onChange(), 400);
+
+  const applyCaseDetailsHint = (payload: Record<string, unknown> | undefined) => {
+    onChange({
+      type: 'case_details',
+      patient_case_details: payload?.patient_case_details ?? null,
+      message: typeof payload?.message === 'string' ? payload.message : null,
+      requested_specialty:
+        typeof payload?.requested_specialty === 'string' ? payload.requested_specialty : null
+    });
+  };
 
   const channel = supabase
-    .channel(`opinion-request-live:${requestId}`)
+    .channel(opinionRequestLiveChannelName(requestId), {
+      config: { broadcast: { ack: false } }
+    })
     .on(
       'postgres_changes',
       {
@@ -2930,7 +3663,20 @@ export function subscribeOpinionRequestLiveUpdates(
         table: 'opinion_requests',
         filter: `id=eq.${requestId}`
       },
-      (payload) => scheduleRefresh(payload)
+      (payload) => {
+        const row = (payload as { new?: Record<string, unknown> | null }).new;
+        if (row && isCaseDetailsRealtimePayload(payload)) {
+          applyCaseDetailsHint(row);
+        }
+        scheduleRefresh(payload);
+      }
+    )
+    .on('broadcast', { event: 'case_details_updated' }, ({ payload }) => {
+      applyCaseDetailsHint(payload as Record<string, unknown> | undefined);
+      scheduleRefresh(undefined, { immediate: true });
+    })
+    .on('broadcast', { event: 'request_refresh' }, () =>
+      scheduleRefresh(undefined, { immediate: true })
     )
     .on(
       'postgres_changes',
@@ -3014,9 +3760,16 @@ export function subscribeStaffOpinionRequestUpdates(
     ? `staff-opinion-requests:${assigneeId}`
     : 'staff-opinion-requests:all';
 
-  const matchesAssignee = (row: { assigned_to?: string | null } | null | undefined) => {
+  const matchesAssignee = (
+    payload: { new?: { assigned_to?: string | null } | null; old?: { assigned_to?: string | null } | null }
+  ) => {
     if (!assigneeId) return true;
-    return row?.assigned_to === assigneeId;
+    const row = payload.new ?? payload.old;
+    if (!row) return true;
+    if (row.assigned_to === assigneeId) return true;
+    // Partial UPDATE payloads may omit assigned_to — still refresh assigned PSE queues.
+    if (row.assigned_to === undefined) return true;
+    return false;
   };
 
   const channel = supabase
@@ -3025,14 +3778,56 @@ export function subscribeStaffOpinionRequestUpdates(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'opinion_requests' },
       (payload) => {
-        const row = (payload.new ?? payload.old) as { assigned_to?: string | null } | null;
-        if (matchesAssignee(row)) scheduleRefresh(payload);
+        if (matchesAssignee(payload)) scheduleRefresh(payload);
       }
     )
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'opinion_request_recommendations' },
       () => scheduleRefresh()
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'consultation_summaries' },
+      () => scheduleRefresh()
+    )
+    .subscribe();
+
+  return () => {
+    cancel();
+    void supabase.removeChannel(channel);
+  };
+}
+
+/** Realtime updates for a doctor's assigned request queue and open case detail views. */
+export function subscribeDoctorOpinionRequestUpdates(
+  onChange: () => void,
+  options?: { doctorId?: string | null }
+): () => void {
+  const { scheduleRefresh, cancel } = createDebouncedLiveRefresh(onChange, 400);
+  const doctorId = options?.doctorId?.trim() || null;
+  const channelName = doctorId ? `doctor-opinion-requests:${doctorId}` : 'doctor-opinion-requests';
+
+  const requestChangeConfig = doctorId
+    ? {
+        event: '*' as const,
+        schema: 'public',
+        table: 'opinion_requests',
+        filter: `doctor_id=eq.${doctorId}`
+      }
+    : {
+        event: '*' as const,
+        schema: 'public',
+        table: 'opinion_requests'
+      };
+
+  const channel = supabase
+    .channel(channelName)
+    .on('postgres_changes', requestChangeConfig, (payload) => scheduleRefresh(payload))
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'opinion_request_records' },
+      () => scheduleRefresh(undefined, { immediate: true })
     )
     .on(
       'postgres_changes',

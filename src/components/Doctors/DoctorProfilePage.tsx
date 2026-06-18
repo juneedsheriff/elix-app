@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { fetchDoctorById } from '../../lib/doctors';
+import {
+  clearPendingOpinionRequest,
+  getPendingOpinionRequest
+} from '../../lib/navigation/pendingOpinionRequest';
 import type { Doctor } from '../../types/doctor';
 import DoctorProfilePanel from './DoctorProfilePanel';
 import GetOpinionForm from './GetOpinionForm';
@@ -39,6 +43,15 @@ export default function DoctorProfilePage({ doctorId, onBack }: DoctorProfilePag
     setView('profile');
     void loadProfile(doctorId);
   }, [doctorId, loadProfile]);
+
+  useEffect(() => {
+    if (!doctor) return;
+    const pending = getPendingOpinionRequest();
+    if (pending?.flow === 'doctor-opinion' && pending.doctorId === doctor.id) {
+      setView('opinion');
+      clearPendingOpinionRequest();
+    }
+  }, [doctor]);
 
   if (view === 'opinion' && doctor) {
     return (

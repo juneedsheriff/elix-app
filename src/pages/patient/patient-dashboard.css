@@ -398,7 +398,7 @@
 }
 
 .pd-consultations {
-  padding: 0 1.15rem;
+  padding: 0 1.15rem 1.15rem;
 }
 
 .pd-consultations__head {
@@ -423,9 +423,73 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.pd-consultations__item {
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .pd-consultations__list {
+    grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+    gap: 0.85rem;
+  }
+}
+
+.pd-consultations .patient-consultation-retain--card {
+  height: 100%;
+}
+
+.pd-consultations .patient-consultation-retain--card .pmr-card__button {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  height: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+.pd-consultations .pmr-card__top {
+  align-items: flex-start;
+  padding: 0.85rem 0.9rem 0.55rem;
+}
+
+.pd-consultations .pmr-card__identity {
+  min-width: 0;
+}
+
+.pd-consultations .pmr-card__badges {
+  padding: 0 0.9rem 0.55rem;
+  justify-content: flex-start;
+}
+
+.pd-consultations .pmr-card__details {
+  margin-top: auto;
+}
+
+.pd-consultations .patient-consultation-retain__footer {
+  margin-top: auto;
+}
+
+@media (max-width: 420px) {
+  .pd-consultations {
+    padding-inline: 0.85rem;
+  }
+
+  .pd-consultations .pmr-card__top {
+    gap: 0.55rem;
+    padding-inline: 0.75rem;
+  }
+
+  .pd-consultations .pmr-card__badges {
+    padding-inline: 0.75rem;
+  }
+
+  .pd-consultations .pmr-pill {
+    font-size: 0.6rem;
+  }
 }
 
 .pd-recent__list {

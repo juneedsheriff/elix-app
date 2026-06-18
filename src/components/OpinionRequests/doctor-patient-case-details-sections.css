@@ -1,0 +1,45 @@
+.doctor-patient-case-details-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.doctor-patient-case-details-sections__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.doctor-patient-case-details-sections__section + .doctor-patient-case-details-sections__section {
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--border);
+}
+
+.doctor-patient-case-details-sections__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.doctor-patient-case-details-sections__section-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.doctor-patient-case-details-sections__records-count {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-cyan) 8%, var(--surface-soft));
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 18%, var(--border));
+}
+
+.doctor-patient-case-details-sections .patient-case-details-readonly {
+  margin-top: 0;
+}

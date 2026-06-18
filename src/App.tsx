@@ -260,7 +260,10 @@ function App() {
   const handleLoginModeChange = (mode: LoginMode) => {
     if (mode === loginMode) return;
     setLoginMode(mode);
-    clearAuthForm();
+    setEmail('');
+    setPassword('');
+    setAuthError(null);
+    setAuthSuccess(null);
   };
 
   const handleSignIn = async () => {
@@ -271,7 +274,9 @@ function App() {
       return;
     }
     setAuthBusy(true);
-    const { error, doctor, patient } = await signIn(email.trim(), password);
+    const { error, doctor, patient } = await signIn(email.trim(), password, {
+      patientLoginOnly: loginMode === 'patient'
+    });
     setAuthBusy(false);
     if (error) {
       setAuthError(error.message);
@@ -280,11 +285,6 @@ function App() {
     if (loginMode === 'doctor' && !doctor) {
       await signOut();
       setAuthError('No doctor account found for this email. Use a doctor @elixapp.health address.');
-      return;
-    }
-    if (loginMode === 'patient' && doctor) {
-      setAuthError('This is a doctor account. Switch to the Doctor tab to sign in.');
-      await signOut();
       return;
     }
     const nextRole = doctor ? 'doctor' : 'patient';

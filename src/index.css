@@ -1559,6 +1559,29 @@ select {
   font-size: 0.8rem;
 }
 
+.medical-records-choice {
+  display: grid;
+  gap: 1rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.medical-records-choice__question {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.medical-records-choice__actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.opinion-fieldset-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
 .opinion-message-label {
   display: grid;
   gap: 0.45rem;
@@ -1755,9 +1778,69 @@ select {
   font: inherit;
 }
 
-.patient-profile-edit__field input:disabled {
+.patient-profile-edit__field select,
+.patient-profile-edit__field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.patient-profile-edit__field textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+  line-height: 1.45;
+}
+
+.patient-profile-edit__field input:disabled,
+.patient-profile-edit__field select:disabled,
+.patient-profile-edit__field textarea:disabled {
   opacity: 0.72;
   cursor: not-allowed;
+}
+
+.patient-profile-edit__section-title {
+  margin: 0.85rem 0 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.patient-profile-edit__section-title:first-child {
+  margin-top: 0;
+}
+
+.patient-profile-edit__details-grid {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.85rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.patient-profile-edit__detail-row {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.patient-profile-edit__detail-row dt {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.patient-profile-edit__detail-row dd {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text);
+  word-break: break-word;
 }
 
 .patient-profile-edit__actions {
@@ -1931,18 +2014,18 @@ select {
 }
 
 .patient-request-detail-view .doctor-request-head {
-  flex-wrap: wrap;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
 }
 
 .patient-request-detail-view .doctor-request-head strong {
-  flex: 1 1 auto;
   min-width: 0;
   font-size: 1rem;
   line-height: 1.3;
 }
 
-.patient-request-detail-view .doctor-request-head .tag {
+.patient-request-detail-view .patient-request-detail-badges .tag {
   flex-shrink: 0;
   max-width: 100%;
   white-space: normal;
@@ -2023,17 +2106,12 @@ select {
   width: 100%;
 }
 
-.patient-request-row-badges,
-.patient-request-detail-badges {
+.patient-request-row-badges {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-}
-
-.patient-request-row-badges {
   justify-content: flex-start;
+  gap: 0.35rem;
 }
 
 @media (min-width: 360px) {
@@ -2216,6 +2294,57 @@ select {
 .case-review-meeting-panel__url:hover {
   color: #4285f4;
   text-decoration: underline;
+}
+
+.doctor-consultation-page__workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.doctor-consultation-page__case-context {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 4px 20px rgba(15, 47, 70, 0.06);
+  max-height: calc(100dvh - 7rem);
+  overflow-y: auto;
+  position: sticky;
+  top: 0.75rem;
+}
+
+.doctor-consultation-page__case-context-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.doctor-consultation-page__case-context .patient-case-details-readonly__grid {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.doctor-consultation-page__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .doctor-consultation-page__workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-consultation-page__case-context {
+    position: static;
+    max-height: none;
+  }
 }
 
 .doctor-consultation-page {

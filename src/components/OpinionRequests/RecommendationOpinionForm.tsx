@@ -1,16 +1,31 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, FileText, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
+import { appScreenPath } from '../../lib/navigation/appRoutes';
+import {
+  clearPendingOpinionRequest,
+  savePendingOpinionRequest
+} from '../../lib/navigation/pendingOpinionRequest';
 import ConsultationDurationSelect from '../ConsultationWorkflow/ConsultationDurationSelect';
+import MedicalRecordsChoicePrompt from './MedicalRecordsChoicePrompt';
+import PatientCaseDetailsForm from './PatientCaseDetailsForm';
 import {
   preferredDurationTiers,
   STANDARD_CONSULTATION_DURATIONS
 } from '../../lib/consultationTiers';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
+import {
+  emptyPatientCaseDetails,
+  serializePatientCaseDetails,
+  validatePatientCaseDetails
+} from '../../lib/patientCaseDetails';
 import { createRecommendationOpinionRequest } from '../../lib/opinionRequests';
 import { fetchUserMedicalRecords } from '../../lib/records';
-import { truncateFileName } from '../../lib/truncateLabel';
+import MedicalRecordSelectList from '../Records/MedicalRecordSelectList';
 import type { MedicalRecord } from '../../types/medicalRecord';
+import type { PatientCaseDetails } from '../../types/patientCaseDetails';
+import './patient-case-details-form.css';
 
 type RecommendationOpinionFormProps = {
   onBack: () => void;
@@ -18,6 +33,7 @@ type RecommendationOpinionFormProps = {
 };
 
 export default function RecommendationOpinionForm({ onBack, onSubmitted }: RecommendationOpinionFormProps) {
+  const navigate = useNavigate();
   const { user, patientProfile } = useSupabase();
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
@@ -25,14 +41,14 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [specialtiesLoading, setSpecialtiesLoading] = useState(true);
   const [specialtiesError, setSpecialtiesError] = useState<string | null>(null);
-  const [selectedSpecialty, setSelectedSpecialty] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState('');
+  const [caseDetails, setCaseDetails] = useState<PatientCaseDetails>(() => emptyPatientCaseDetails());
   const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<number>(
     STANDARD_CONSULTATION_DURATIONS[1]
   );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [proceedWithoutRecords, setProceedWithoutRecords] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -67,6 +83,7 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       setRecordsLoading(true);
       setRecordsError(null);
       setSelectedIds(new Set());
+      setProceedWithoutRecords(false);
 
       if (!user?.id) {
         if (!cancelled) {
@@ -107,24 +124,26 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
     event.preventDefault();
     setSubmitError(null);
 
-    if (!selectedSpecialty) {
-      setSubmitError('Select a specialty so our team can recommend the right specialists.');
+    const validationError = validatePatientCaseDetails(caseDetails, {
+      requireConsent: true,
+      requireSpecialty: true,
+      submitOnly: true
+    });
+    if (validationError) {
+      setSubmitError(validationError);
       return;
     }
-
-    const trimmed = message.trim();
-    if (!trimmed) {
-      setSubmitError('Please describe your case and what you need from a second opinion.');
-      return;
-    }
-    if (selectedIds.size === 0) {
-      setSubmitError('Select at least one medical record to share.');
+    if (records.length === 0 && !proceedWithoutRecords) {
       return;
     }
     if (!consultationDurationMinutes) {
       setSubmitError('Choose how long you need for the consultation.');
       return;
     }
+
+    const serialized = serializePatientCaseDetails(caseDetails);
+    const message = '';
+    const selectedSpecialty = caseDetails.specialtyRequired.trim();
 
     setSubmitting(true);
     const patientName =
@@ -134,12 +153,13 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       null;
 
     const { data, error } = await createRecommendationOpinionRequest({
-      message: trimmed,
+      message,
       recordIds: [...selectedIds],
       patientId: user?.id ?? null,
       patientName,
       requestedSpecialty: selectedSpecialty,
-      consultationDurationMinutes
+      consultationDurationMinutes,
+      caseDetails: serialized
     });
     setSubmitting(false);
 
@@ -149,10 +169,19 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
     }
 
     setSubmitted(true);
+    clearPendingOpinionRequest();
     if (data?.id) {
       onSubmitted(data.id);
     }
   };
+
+  const handleUploadRecords = () => {
+    savePendingOpinionRequest({ flow: 'recommendation-opinion' });
+    navigate(appScreenPath('upload-records'));
+  };
+
+  const awaitingRecordsChoice =
+    Boolean(user?.id) && !recordsLoading && !recordsError && records.length === 0 && !proceedWithoutRecords;
 
   if (submitted) {
     return (
@@ -161,7 +190,7 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
           <CheckCircle2 size={40} aria-hidden />
           <h3>Request submitted</h3>
           <p className='muted'>
-            Your second opinion request for <strong>{selectedSpecialty}</strong> was submitted. Our patient
+            Your second opinion request for <strong>{caseDetails.specialtyRequired}</strong> was submitted. Our patient
             service team will review your records and recommend suitable specialists for your case.
           </p>
           <button type='button' className='secondary-btn wide' onClick={onBack}>
@@ -186,50 +215,63 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       </div>
 
       <form className='opinion-form' onSubmit={(e) => void handleSubmit(e)}>
-        <label className='opinion-message-label'>
-          Specialty
-          {specialtiesLoading ? (
-            <p className='doctor-status' style={{ marginTop: '0.5rem' }}>
-              <Loader2 size={18} className='spin' aria-hidden /> Loading specialties…
-            </p>
-          ) : null}
-
-          {specialtiesError ? (
-            <p className='auth-error' role='alert' style={{ marginTop: '0.5rem' }}>
-              {specialtiesError}
-            </p>
-          ) : null}
-
-          {!specialtiesLoading && !specialtiesError ? (
-            <select
-              className='opinion-select'
-              value={selectedSpecialty}
-              onChange={(e) => setSelectedSpecialty(e.target.value)}
-              required
-              aria-required='true'
-            >
-              <option value=''>Select a specialty…</option>
-              {specialties.map((specialty) => (
-                <option key={specialty} value={specialty}>
-                  {specialty}
-                </option>
-              ))}
-            </select>
-          ) : null}
-        </label>
-
+        {!awaitingRecordsChoice ? (
+          <>
         <ConsultationDurationSelect
           tiers={preferredDurationTiers()}
           value={consultationDurationMinutes}
           onChange={setConsultationDurationMinutes}
-          disabled={submitting}
+          disabled={submitting || specialtiesLoading}
           label='Preferred consultation duration'
           hint='Choose how long you need with the specialist. Exact pricing will be shown when doctors are recommended for your case.'
           showFees={false}
         />
 
+        {specialtiesError ? (
+          <p className='auth-error' role='alert'>
+            {specialtiesError}
+          </p>
+        ) : null}
+
+        <label className='opinion-message-label'>
+          Specialty required
+          <select
+            className='opinion-select'
+            value={caseDetails.specialtyRequired}
+            onChange={(event) =>
+              setCaseDetails((prev) => ({ ...prev, specialtyRequired: event.target.value }))
+            }
+            disabled={submitting || specialtiesLoading || specialties.length === 0}
+          >
+            <option value=''>Select a specialty…</option>
+            {specialties.map((specialty) => (
+              <option key={specialty} value={specialty}>
+                {specialty}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <PatientCaseDetailsForm
+          value={caseDetails}
+          onChange={setCaseDetails}
+          specialties={specialties}
+          specialtyMode='patient_select'
+          showCaseSections={false}
+          showPreferences
+          showConsent
+          disabled={submitting || specialtiesLoading || specialties.length === 0}
+        />
+          </>
+        ) : null}
+
         <fieldset className='opinion-fieldset'>
-          <legend>Select medical records</legend>
+          <legend>Select medical records (optional)</legend>
+          {records.length > 0 ? (
+            <p className='muted opinion-fieldset-hint'>
+              Share any records you would like our team to review, or continue without selecting any.
+            </p>
+          ) : null}
           {recordsLoading ? (
             <p className='doctor-status'>
               <Loader2 size={18} className='spin' aria-hidden /> Loading your records…
@@ -246,43 +288,31 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
             <p className='muted'>Sign in as a patient to see and share your uploaded records.</p>
           ) : null}
 
-          {!recordsLoading && !recordsError && user?.id && records.length === 0 ? (
-            <p className='muted'>You have not uploaded any records yet. Add files under Upload Records first.</p>
+          {awaitingRecordsChoice ? (
+            <MedicalRecordsChoicePrompt
+              onUpload={handleUploadRecords}
+              onProceedWithout={() => {
+                setProceedWithoutRecords(true);
+                setSubmitError(null);
+              }}
+              disabled={submitting}
+            />
           ) : null}
 
-          <ul className='record-select-list'>
-            {records.map((record) => (
-              <li key={record.id}>
-                <label className='record-select-item'>
-                  <input
-                    type='checkbox'
-                    checked={selectedIds.has(record.id)}
-                    onChange={() => toggleRecord(record.id)}
-                  />
-                  <FileText size={20} aria-hidden />
-                  <span className='record-select-text'>
-                    <strong title={record.file_name}>{truncateFileName(record.file_name)}</strong>
-                    {record.summary ? <span className='muted'>{record.summary}</span> : null}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
+          {proceedWithoutRecords && records.length === 0 ? (
+            <p className='muted'>Continuing without medical records. You can upload files later if needed.</p>
+          ) : null}
+
+          <MedicalRecordSelectList
+            records={records}
+            selectedIds={selectedIds}
+            onToggle={toggleRecord}
+            disabled={submitting}
+          />
         </fieldset>
 
-        <label className='opinion-message-label'>
-          Case details
-          <textarea
-            className='opinion-message'
-            rows={5}
-            placeholder='Describe your symptoms, diagnosis questions, treatment history, and what you need from this second opinion…'
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            required
-            aria-required='true'
-          />
-        </label>
-
+        {!awaitingRecordsChoice ? (
+          <>
         {submitError ? (
           <p className='auth-error' role='alert'>
             {submitError}
@@ -296,6 +326,8 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
         >
           {submitting ? 'Submitting…' : 'Submit request for recommendations'}
         </button>
+          </>
+        ) : null}
       </form>
     </section>
   );

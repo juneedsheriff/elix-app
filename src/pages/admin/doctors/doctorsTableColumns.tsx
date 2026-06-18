@@ -16,7 +16,8 @@ import {
   IconEye,
   IconMail,
   IconPencil,
-  IconPhone
+  IconPhone,
+  IconTrash
 } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import { formatConsultationFeeUsd } from '../../../lib/doctors';
@@ -33,6 +34,7 @@ import {
 
 type UseDoctorsTableColumnsOptions = {
   canEdit: boolean;
+  onDeleteDoctor?: (doctor: Doctor) => void;
 };
 
 function displayCell(value: string | null | undefined) {
@@ -40,7 +42,7 @@ function displayCell(value: string | null | undefined) {
   return v ? v : '—';
 }
 
-export function useDoctorsTableColumns({ canEdit }: UseDoctorsTableColumnsOptions) {
+export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<Doctor>[]>(
     () => [
       {
@@ -210,8 +212,8 @@ export function useDoctorsTableColumns({ canEdit }: UseDoctorsTableColumnsOption
       {
         id: 'actions',
         header: '',
-        size: 120,
-        minSize: 100,
+        size: 150,
+        minSize: 130,
         enableSorting: false,
         enableColumnFilter: false,
         enableGlobalFilter: false,
@@ -234,6 +236,21 @@ export function useDoctorsTableColumns({ canEdit }: UseDoctorsTableColumnsOption
                   {canEdit ? <IconPencil size={18} /> : <IconEye size={18} />}
                 </ActionIcon>
               </Tooltip>
+              {canEdit && onDeleteDoctor ? (
+                <Tooltip label='Delete doctor'>
+                  <ActionIcon
+                    variant='subtle'
+                    color='red'
+                    radius='md'
+                    size='lg'
+                    className='doctors-mgmt-action'
+                    aria-label={`Delete ${doctor.full_name}`}
+                    onClick={() => onDeleteDoctor(doctor)}
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              ) : null}
               <Menu position='bottom-end' withinPortal shadow='md' radius='md'>
                 <Menu.Target>
                   <ActionIcon
@@ -269,6 +286,15 @@ export function useDoctorsTableColumns({ canEdit }: UseDoctorsTableColumnsOption
                       Call doctor
                     </Menu.Item>
                   ) : null}
+                  {canEdit && onDeleteDoctor ? (
+                    <Menu.Item
+                      color='red'
+                      leftSection={<IconTrash size={16} />}
+                      onClick={() => onDeleteDoctor(doctor)}
+                    >
+                      Delete doctor
+                    </Menu.Item>
+                  ) : null}
                 </Menu.Dropdown>
               </Menu>
             </Group>
@@ -276,6 +302,6 @@ export function useDoctorsTableColumns({ canEdit }: UseDoctorsTableColumnsOption
         }
       }
     ],
-    [canEdit]
+    [canEdit, onDeleteDoctor]
   );
 }

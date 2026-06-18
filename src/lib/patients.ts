@@ -143,6 +143,11 @@ export function joinPatientFullName(firstName: string, lastName: string): string
   return [firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim();
 }
 
+function trimOrNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
 /** Patient updates their own profile (RLS: patients_update_own). */
 export async function updatePatientProfileForUser(
   authUserId: string,
@@ -153,25 +158,55 @@ export async function updatePatientProfileForUser(
     return { data: null, error: { message: 'Enter your first name.' } };
   }
 
+  const payload = {
+    full_name,
+    phone: trimOrNull(input.phone),
+    date_of_birth: trimOrNull(input.date_of_birth),
+    gender: trimOrNull(input.gender),
+    blood_group: trimOrNull(input.blood_group),
+    country: trimOrNull(input.country),
+    city: trimOrNull(input.city),
+    address: trimOrNull(input.address),
+    height_cm: input.height_cm ?? null,
+    weight_kg: input.weight_kg ?? null,
+    allergies: trimOrNull(input.allergies),
+    current_medications: trimOrNull(input.current_medications),
+    insurance_provider: trimOrNull(input.insurance_provider),
+    emergency_contact_name: trimOrNull(input.emergency_contact_name),
+    emergency_contact_phone: trimOrNull(input.emergency_contact_phone),
+    preferred_language: trimOrNull(input.preferred_language) ?? 'en',
+    updated_at: new Date().toISOString()
+  };
+
   let { data, error } = await supabase
     .from('patients')
-    .update({
-      full_name,
-      phone: input.phone?.trim() || null,
-      updated_at: new Date().toISOString()
-    })
+    .update(payload)
     .eq('auth_user_id', authUserId)
-    .select(patientColumnsWithElix)
+    .select(patientColumnsExtended)
     .single<Patient>();
 
+  if (
+    error?.message.includes('address') ||
+    error?.message.includes('profile_completed_at') ||
+    error?.message.includes('height_cm') ||
+    error?.message.includes('weight_kg')
+  ) {
+    const { address: _address, height_cm: _height, weight_kg: _weight, ...fallbackPayload } = payload;
+    const fallback = await supabase
+      .from('patients')
+      .update(fallbackPayload)
+      .eq('auth_user_id', authUserId)
+      .select(patientColumnsWithElix)
+      .single<Patient>();
+    data = fallback.data;
+    error = fallback.error;
+  }
+
   if (error?.message.includes('elix_id')) {
+    const { address: _address, height_cm: _height, weight_kg: _weight, ...legacyPayload } = payload;
     const legacy = await supabase
       .from('patients')
-      .update({
-        full_name,
-        phone: input.phone?.trim() || null,
-        updated_at: new Date().toISOString()
-      })
+      .update(legacyPayload)
       .eq('auth_user_id', authUserId)
       .select(patientColumnsLegacy)
       .single<Patient>();
@@ -180,7 +215,7 @@ export async function updatePatientProfileForUser(
   }
 
   if (error) return { data: null, error };
-  return { data: withFallbackElixId(data), error: null };
+  return { data: withFallbackElixId(normalizePatientRow(data)), error: null };
 }
 
 /** Save post-verification onboarding answers from the chat wizard. */

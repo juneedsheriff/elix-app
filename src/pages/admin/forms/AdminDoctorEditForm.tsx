@@ -581,7 +581,6 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
             </label>
           </div>
 
-          <h3 className='elixhealth-form-section-title'>Consultation hours</h3>
           <ConsultationHoursEditor
             value={form.consultation_hours}
             onChange={(consultation_hours) => setField('consultation_hours', consultation_hours)}

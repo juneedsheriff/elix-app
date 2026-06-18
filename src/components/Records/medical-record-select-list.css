@@ -1,0 +1,152 @@
+.mrs-select {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mrs-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  overflow: visible;
+}
+
+.mrs-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background: var(--surface-soft);
+}
+
+.mrs-search svg {
+  flex-shrink: 0;
+  color: var(--text-soft);
+}
+
+.mrs-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  outline: none;
+  padding: 0;
+}
+
+.mrs-search input::placeholder {
+  color: color-mix(in srgb, var(--text-soft) 80%, transparent);
+}
+
+.mrs-search input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mrs-filter-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.mrs-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.mrs-filter-btn:hover:not(:disabled),
+.mrs-filter-btn--open {
+  border-color: color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+  color: var(--brand-cyan);
+}
+
+.mrs-filter-btn--active {
+  border-color: color-mix(in srgb, var(--brand-cyan) 40%, var(--border));
+  color: var(--brand-cyan);
+  background: color-mix(in srgb, var(--brand-cyan) 8%, var(--surface-soft));
+}
+
+.mrs-filter-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mrs-filter-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 11.5rem;
+  width: max-content;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(15, 47, 70, 0.12);
+}
+
+.mrs-filter-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mrs-filter-menu button:hover,
+.mrs-filter-menu button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface-soft));
+  color: var(--brand-cyan);
+}
+
+.mrs-filter-menu--categories {
+  min-width: 17.5rem;
+  max-width: min(20rem, calc(100vw - 1.5rem));
+  max-height: min(20rem, calc(100vh - 6rem));
+  overflow-y: auto;
+}
+
+.mrs-filter-menu--categories button {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.mrs-count {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.mrs-empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.mrs-category-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--brand-cyan) 70%, var(--text));
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface-soft));
+}

@@ -15,13 +15,15 @@ type ImageLightboxGalleryProps = {
   loading?: boolean;
   error?: string | null;
   className?: string;
+  modalZIndex?: number;
 };
 
 export default function ImageLightboxGallery({
   images,
   loading = false,
   error = null,
-  className = ''
+  className = '',
+  modalZIndex = 500
 }: ImageLightboxGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const active = activeIndex !== null ? images[activeIndex] : null;
@@ -96,13 +98,35 @@ export default function ImageLightboxGallery({
       <Modal
         opened={activeIndex !== null && Boolean(active)}
         onClose={close}
-        fullScreen
+        centered
         withCloseButton={false}
         padding={0}
-        classNames={{ content: 'image-lightbox-modal', body: 'image-lightbox-modal__body' }}
+        classNames={{
+          root: 'image-lightbox-modal-root',
+          inner: 'image-lightbox-modal-inner',
+          content: 'image-lightbox-modal',
+          body: 'image-lightbox-modal__body'
+        }}
+        styles={{
+          inner: {
+            width: '90vw',
+            maxWidth: '90vw'
+          },
+          content: {
+            width: '90vw',
+            maxWidth: '90vw',
+            height: '90vh',
+            maxHeight: '90vh'
+          },
+          body: {
+            width: '100%',
+            height: '100%',
+            maxHeight: '90vh'
+          }
+        }}
         overlayProps={{ backgroundOpacity: 0.85, blur: 2 }}
         transitionProps={{ transition: 'fade', duration: 150 }}
-        zIndex={500}
+        zIndex={modalZIndex}
       >
         {active ? (
           <>

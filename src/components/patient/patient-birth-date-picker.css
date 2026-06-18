@@ -1,0 +1,152 @@
+.patient-birth-date-picker {
+  position: relative;
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.patient-birth-date-picker__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.patient-birth-date-picker__control {
+  position: relative;
+}
+
+.patient-birth-date-picker__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.patient-birth-date-picker__trigger:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.patient-birth-date-picker__trigger svg {
+  flex-shrink: 0;
+  color: var(--brand-cyan);
+}
+
+.patient-birth-date-picker__placeholder {
+  color: var(--text-soft);
+}
+
+.patient-birth-date-picker__native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.patient-birth-date-picker__popover {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 90;
+  width: min(18rem, calc(100vw - 2rem));
+  padding: 0.65rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(15, 47, 70, 0.14);
+}
+
+.patient-birth-date-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.patient-birth-date-picker__month {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.patient-birth-date-picker__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.patient-birth-date-picker__nav:hover {
+  color: var(--brand-cyan);
+}
+
+.patient-birth-date-picker__weekdays,
+.patient-birth-date-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+}
+
+.patient-birth-date-picker__weekdays {
+  margin-bottom: 0.25rem;
+}
+
+.patient-birth-date-picker__weekdays span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.patient-birth-date-picker__day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.patient-birth-date-picker__day:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface-soft));
+}
+
+.patient-birth-date-picker__day--outside {
+  color: color-mix(in srgb, var(--text-soft) 70%, transparent);
+}
+
+.patient-birth-date-picker__day--selected {
+  color: #fff;
+  background: var(--brand-cyan);
+}
+
+.patient-birth-date-picker__day--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

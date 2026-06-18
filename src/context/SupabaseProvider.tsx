@@ -32,6 +32,11 @@ import type { Patient, PatientUpsertInput } from '../types/patient';
 
 type AppRole = 'patient' | 'doctor' | 'admin' | null;
 
+export type SignInOptions = {
+  /** Patient portal login: require an existing patient profile; reject other roles. */
+  patientLoginOnly?: boolean;
+};
+
 type SupabaseContextValue = {
   configured: boolean;
   loading: boolean;
@@ -44,7 +49,8 @@ type SupabaseContextValue = {
   isPatient: boolean;
   signIn: (
     email: string,
-    password: string
+    password: string,
+    options?: SignInOptions
   ) => Promise<{ error: AuthError | null; doctor: Doctor | null; patient: Patient | null }>;
   signUp: (
     email: string,
@@ -211,7 +217,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string, options?: SignInOptions) => {
     if (!isSupabaseConfigured) {
       return {
         error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
@@ -227,7 +233,20 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     const admin = user ? (await fetchAdminByAuthUserId(user.id)).data : null;
     let patient = user && !admin ? await resolvePatientForUser(user) : null;
 
-    if (user && !doctor && !patient && !admin) {
+    if (options?.patientLoginOnly) {
+      if (doctor || admin || !patient) {
+        await supabase.auth.signOut();
+        return {
+          error: {
+            message: 'No registration found.',
+            name: 'AuthError',
+            status: 403
+          } as AuthError,
+          doctor: null,
+          patient: null
+        };
+      }
+    } else if (user && !doctor && !patient && !admin) {
       const ensured = await ensurePatientProfile(user);
       patient = ensured.data;
       if (!patient && ensured.error) {
@@ -246,7 +265,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
     setSession(data.session);
     setDoctorProfile(doctor);
-    setPatientProfile(patient);
+    setPatientProfile(admin ? null : patient);
     return { error: null, doctor, patient };
   }, []);
 
