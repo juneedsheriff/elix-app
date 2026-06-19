@@ -4,6 +4,7 @@ import {
   ActionIcon,
   Avatar,
   Badge,
+  Button,
   Group,
   Menu,
   Paper,
@@ -22,6 +23,7 @@ import {
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import { formatConsultationFeeUsd } from '../../../lib/doctors';
 import type { Doctor } from '../../../types/doctor';
+import type { DoctorWorkspaceLink } from '../../../types/clinicDoctorRequest';
 import { doctorEditUrl } from '../elixHealthRoutes';
 import {
   doctorClinicName,
@@ -34,6 +36,11 @@ import {
 
 type UseDoctorsTableColumnsOptions = {
   canEdit: boolean;
+  isAdmin?: boolean;
+  grantedDoctorIds?: Set<string>;
+  workspaceLinksByDoctorId?: Map<string, DoctorWorkspaceLink[]>;
+  onRemoveFromClinic?: (doctor: Doctor, link: DoctorWorkspaceLink) => void;
+  removingLinkKey?: string | null;
   onDeleteDoctor?: (doctor: Doctor) => void;
 };
 
@@ -42,9 +49,18 @@ function displayCell(value: string | null | undefined) {
   return v ? v : '—';
 }
 
-export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTableColumnsOptions) {
+export function useDoctorsTableColumns({
+  canEdit,
+  isAdmin,
+  grantedDoctorIds,
+  workspaceLinksByDoctorId,
+  onRemoveFromClinic,
+  removingLinkKey,
+  onDeleteDoctor
+}: UseDoctorsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<Doctor>[]>(
-    () => [
+    () => {
+      const columns: MRT_ColumnDef<Doctor>[] = [
       {
         accessorKey: 'full_name',
         header: 'Doctor',
@@ -52,6 +68,7 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
         minSize: 220,
         Cell: ({ row }) => {
           const doctor = row.original;
+          const isPlatformGranted = grantedDoctorIds?.has(doctor.id) ?? false;
           return (
             <Group gap='sm' wrap='nowrap' className='doctors-mgmt-doctor-cell'>
               <Avatar
@@ -73,15 +90,22 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
                 {doctorInitials(doctor.full_name)}
               </Avatar>
               <Stack gap={2} className='doctors-mgmt-doctor-cell__text'>
-                <Text
-                  component={Link}
-                  to={doctorEditUrl(doctor.id)}
-                  fw={700}
-                  size='sm'
-                  className='doctors-mgmt-link'
-                >
-                  {doctor.full_name}
-                </Text>
+                <Group gap={6} wrap='wrap'>
+                  <Text
+                    component={Link}
+                    to={doctorEditUrl(doctor.id)}
+                    fw={700}
+                    size='sm'
+                    className='doctors-mgmt-link'
+                  >
+                    {doctor.full_name}
+                  </Text>
+                  {isPlatformGranted ? (
+                    <Badge size='xs' color='blue' variant='light' radius='sm'>
+                      Platform
+                    </Badge>
+                  ) : null}
+                </Group>
                 <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
                   {doctor.email}
                 </Text>
@@ -132,6 +156,65 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
           );
         }
       },
+      ...(isAdmin
+        ? [
+            {
+              id: 'pseWorkspace',
+              header: 'PSE clinic',
+              size: 220,
+              minSize: 180,
+              enableSorting: false,
+              Cell: ({ row }: { row: { original: Doctor } }) => {
+                const links = workspaceLinksByDoctorId?.get(row.original.id) ?? [];
+                if (!links.length) {
+                  return (
+                    <Text size='sm' c='dimmed' className='doctors-mgmt-muted'>
+                      —
+                    </Text>
+                  );
+                }
+
+                return (
+                  <Stack gap={6}>
+                    {links.map((link) => {
+                      const linkKey = `${link.doctorId}:${link.clinicId}:${link.linkType}`;
+                      const isRemoving = removingLinkKey === linkKey;
+                      return (
+                        <Group key={linkKey} gap={6} wrap='wrap' align='center'>
+                          <Stack gap={0}>
+                            <Text size='sm' fw={600}>
+                              {link.clinicName}
+                            </Text>
+                            <Badge
+                              size='xs'
+                              variant='light'
+                              color={link.linkType === 'granted' ? 'blue' : 'teal'}
+                              radius='sm'
+                            >
+                              {link.linkType === 'granted' ? 'Platform grant' : 'Clinic doctor'}
+                            </Badge>
+                          </Stack>
+                          {onRemoveFromClinic ? (
+                            <Button
+                              size='compact-xs'
+                              variant='light'
+                              color='red'
+                              radius='md'
+                              loading={isRemoving}
+                              onClick={() => onRemoveFromClinic(row.original, link)}
+                            >
+                              Remove
+                            </Button>
+                          ) : null}
+                        </Group>
+                      );
+                    })}
+                  </Stack>
+                );
+              }
+            } satisfies MRT_ColumnDef<Doctor>
+          ]
+        : []),
       {
         accessorKey: 'gender',
         header: 'Gender',
@@ -219,10 +302,12 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
         enableGlobalFilter: false,
         Cell: ({ row }) => {
           const doctor = row.original;
+          const isPlatformGranted = grantedDoctorIds?.has(doctor.id) ?? false;
+          const canManageDoctor = canEdit && !isPlatformGranted;
           const editPath = doctorEditUrl(doctor.id);
           return (
             <Group gap={4} wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>
-              <Tooltip label={canEdit ? 'Edit profile' : 'View profile'}>
+              <Tooltip label={canManageDoctor ? 'Edit profile' : 'View profile'}>
                 <ActionIcon
                   component={Link}
                   to={editPath}
@@ -231,12 +316,12 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
                   radius='md'
                   size='lg'
                   className='doctors-mgmt-action'
-                  aria-label={canEdit ? 'Edit doctor' : 'View doctor'}
+                  aria-label={canManageDoctor ? 'Edit doctor' : 'View doctor'}
                 >
-                  {canEdit ? <IconPencil size={18} /> : <IconEye size={18} />}
+                  {canManageDoctor ? <IconPencil size={18} /> : <IconEye size={18} />}
                 </ActionIcon>
               </Tooltip>
-              {canEdit && onDeleteDoctor ? (
+              {canManageDoctor && onDeleteDoctor ? (
                 <Tooltip label='Delete doctor'>
                   <ActionIcon
                     variant='subtle'
@@ -266,7 +351,7 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item component={Link} to={editPath} leftSection={<IconEye size={16} />}>
-                    {canEdit ? 'Open editor' : 'View profile'}
+                    {canManageDoctor ? 'Open editor' : 'View profile'}
                   </Menu.Item>
                   {doctor.email ? (
                     <Menu.Item
@@ -286,7 +371,7 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
                       Call doctor
                     </Menu.Item>
                   ) : null}
-                  {canEdit && onDeleteDoctor ? (
+                  {canManageDoctor && onDeleteDoctor ? (
                     <Menu.Item
                       color='red'
                       leftSection={<IconTrash size={16} />}
@@ -301,7 +386,10 @@ export function useDoctorsTableColumns({ canEdit, onDeleteDoctor }: UseDoctorsTa
           );
         }
       }
-    ],
-    [canEdit, onDeleteDoctor]
+    ];
+
+      return columns;
+    },
+    [canEdit, grantedDoctorIds, isAdmin, onDeleteDoctor, onRemoveFromClinic, removingLinkKey, workspaceLinksByDoctorId]
   );
 }

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconDownload, IconFilter, IconRefresh } from '@tabler/icons-react';
+import { IconDownload, IconFilter, IconPlus, IconRefresh } from '@tabler/icons-react';
 
 type RequestsPageHeaderProps = {
   title: string;
@@ -9,6 +9,8 @@ type RequestsPageHeaderProps = {
   onExport: () => void;
   onRefresh: () => void;
   refreshing?: boolean;
+  canAddRequest?: boolean;
+  onAddRequest?: () => void;
 };
 
 function RequestsPageHeader({
@@ -17,7 +19,9 @@ function RequestsPageHeader({
   onOpenFilters,
   onExport,
   onRefresh,
-  refreshing
+  refreshing,
+  canAddRequest,
+  onAddRequest
 }: RequestsPageHeaderProps) {
   return (
     <header className='doctors-mgmt-header'>
@@ -61,6 +65,17 @@ function RequestsPageHeader({
         >
           Refresh
         </Button>
+
+        {canAddRequest && onAddRequest ? (
+          <Button
+            radius='md'
+            className='doctors-mgmt-header__primary'
+            leftSection={<IconPlus size={18} />}
+            onClick={onAddRequest}
+          >
+            Add request
+          </Button>
+        ) : null}
       </Group>
     </header>
   );

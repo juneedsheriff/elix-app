@@ -173,7 +173,9 @@ async function resolveStaffAuditActor(
 
   if (admin) {
     const staffRole: OpinionRequestAuditActorRole =
-      admin.role === 'patient_service_executive' ? 'pse' : 'administrator';
+      admin.role === 'patient_service_executive' || admin.role === 'patient_service_executive_clinic'
+        ? 'pse'
+        : 'administrator';
     return {
       actorUserId: user.id,
       actorRole:

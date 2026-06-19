@@ -62,7 +62,8 @@ export const DOCTOR_PROFILE_COLUMNS = [
   'deleted_at',
   'auth_user_id',
   'login_disabled',
-  'created_at'
+  'created_at',
+  'clinic_id'
 ].join(', ');
 
 const WEEKDAYS = [

@@ -1,0 +1,74 @@
+.patient-appointment-datetime-picker {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.patient-appointment-datetime-picker__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.patient-appointment-datetime-picker__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+@media (max-width: 520px) {
+  .patient-appointment-datetime-picker__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.patient-appointment-datetime-picker__time {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.patient-appointment-datetime-picker__time-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.patient-appointment-datetime-picker__time-icon {
+  position: absolute;
+  left: 0.65rem;
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.patient-appointment-datetime-picker__time-select {
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.65rem 0.55rem 2.15rem;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%),
+    linear-gradient(135deg, #6b7280 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% + 1px),
+    calc(100% - 12px) calc(50% + 1px);
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+
+.patient-appointment-datetime-picker__time-select:disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.patient-appointment-datetime-picker__time-select:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 1px;
+  border-color: #2563eb;
+}

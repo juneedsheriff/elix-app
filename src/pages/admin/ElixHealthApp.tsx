@@ -17,6 +17,7 @@ import ElixHealthOverviewPage from './ElixHealthOverviewPage';
 import ElixHealthPatientEditPage from './ElixHealthPatientEditPage';
 import ElixHealthPatientsPage from './ElixHealthPatientsPage';
 import ElixHealthRequestsPage from './ElixHealthRequestsPage';
+import ElixHealthMyProfilePage from './ElixHealthMyProfilePage';
 import ElixHealthStaffPage from './ElixHealthStaffPage';
 import { AdministratorOnly } from './AdministratorOnly';
 import ElixPreloader from '../../components/ui/ElixPreloader';
@@ -134,22 +135,16 @@ export default function ElixHealthApp() {
         }
       />
       <Route
-        element={<ElixHealthAdminGuard admin={admin} onSignOut={() => void handleStaffSignOut()} />}
+        element={<ElixHealthAdminGuard admin={admin} onStaffUpdated={setAdmin} onSignOut={() => void handleStaffSignOut()} />}
       >
         <Route index element={<ElixHealthOverviewPage />} />
         <Route path='doctors' element={<ElixHealthDoctorsPage />} />
-        <Route
-          path='doctor/new'
-          element={
-            <AdministratorOnly>
-              <ElixHealthDoctorCreatePage />
-            </AdministratorOnly>
-          }
-        />
+        <Route path='doctor/new' element={<ElixHealthDoctorCreatePage />} />
         <Route path='doctor' element={<ElixHealthDoctorEditPage />} />
         <Route path='patients' element={<ElixHealthPatientsPage />} />
         <Route path='patient' element={<ElixHealthPatientEditPage />} />
         <Route path='requests' element={<ElixHealthRequestsPage />} />
+        <Route path='profile' element={<ElixHealthMyProfilePage />} />
         <Route path='staff' element={<AdministratorOnly><ElixHealthStaffPage /></AdministratorOnly>} />
       </Route>
       <Route

@@ -56,6 +56,7 @@ import {
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import PatientCaseDetailsEditor from '../OpinionRequests/PatientCaseDetailsEditor';
 import MedicalRecordsChoicePrompt from '../OpinionRequests/MedicalRecordsChoicePrompt';
+import PatientAppointmentDateTimePicker from '../patient/PatientAppointmentDateTimePicker';
 import {
   buildPatientAvailabilityPayload,
   formatPatientAvailability,
@@ -379,7 +380,8 @@ export default function PatientConsultationWizard({
     });
     setBusy(true);
     const { error } = await patientSelectDoctorWithAvailability(request.id, pickingDoctorId, payload, {
-      consultationDurationMinutes: request.consultation_duration_minutes
+      consultationDurationMinutes: request.consultation_duration_minutes,
+      recommendation: pickingDoctor ?? undefined
     });
     setBusy(false);
     if (error) {
@@ -680,16 +682,11 @@ export default function PatientConsultationWizard({
                         ) : null}
                         {isActive ? (
                           <div className='patient-doctor-choice__schedule'>
-                            <label className='patient-schedule-field'>
-                              <span className='patient-schedule-field__label'>Preferred date &amp; time</span>
-                              <input
-                                type='datetime-local'
-                                className='patient-schedule-field__input'
-                                value={preferredAt}
-                                onChange={(e) => setPreferredAt(e.target.value)}
-                                disabled={busy}
-                              />
-                            </label>
+                            <PatientAppointmentDateTimePicker
+                              value={preferredAt}
+                              onChange={setPreferredAt}
+                              disabled={busy}
+                            />
                             <label className='patient-schedule-field'>
                               <span className='patient-schedule-field__label'>
                                 Additional notes (optional)

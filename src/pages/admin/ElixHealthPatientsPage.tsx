@@ -5,7 +5,7 @@ import {
   countOpinionRequestsForPatient,
   deleteAllOpinionRequestsForPatientForAdmin
 } from '../../lib/opinionRequests';
-import { canEditProfiles, isAdministrator } from '../../lib/staffPermissions';
+import { canCreatePatients, canEditProfiles, isAdministrator } from '../../lib/staffPermissions';
 import type { Patient } from '../../types/patient';
 import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
 import PatientsDataTable from './patients/PatientsDataTable';
@@ -22,6 +22,7 @@ import {
 } from './patients/patientsUtils';
 import { usePatientsTableColumns } from './patients/patientsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import AdminPatientCreateForm from './forms/AdminPatientCreateForm';
 import './doctors/doctors-management.css';
 
 const DEFAULT_FILTERS: PatientQuickFilters = {
@@ -39,6 +40,7 @@ function matchesSearch(patient: Patient, query: string) {
     patient.phone,
     patient.city,
     patient.country,
+    patient.pse_clinic_name,
     patient.gender,
     patient.blood_group
   ]
@@ -50,8 +52,9 @@ function matchesSearch(patient: Patient, query: string) {
 }
 
 export default function ElixHealthPatientsPage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const canEdit = canEditProfiles(staff);
+  const canAddPatient = canCreatePatients(staff);
   const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -174,9 +177,13 @@ export default function ElixHealthPatientsPage() {
   }, [filteredPatients]);
 
   if (error) {
+    const hint = error.toLowerCase().includes('infinite recursion')
+      ? ' Run npm run db:apply-doctors-rls-fix (migrations 057 + 058).'
+      : '';
     return (
       <Alert color='red' radius='md' title='Could not load patients' className='doctors-mgmt'>
         {error}
+        {hint}
       </Alert>
     );
   }
@@ -189,7 +196,7 @@ export default function ElixHealthPatientsPage() {
     <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
       <PatientsPageHeader
         totalCount={patients.length}
-        canEdit={canEdit}
+        canEdit={canEdit || canAddPatient}
         onOpenFilters={() => setDrawerOpen(true)}
         onExport={handleExport}
         onAddPatient={() => setAddModalOpen(true)}
@@ -305,15 +312,27 @@ export default function ElixHealthPatientsPage() {
         centered
         classNames={{ content: 'doctors-mgmt-modal' }}
       >
-        <Stack gap='sm'>
-          <Text size='sm' c='dimmed'>
-            New patient profiles are created through registration or your onboarding workflow.
-            Once a record exists, you can manage profile and login settings from this console.
-          </Text>
-          <Text size='sm'>
-            To edit an existing patient, use the table actions or open a name from the list.
-          </Text>
-        </Stack>
+        {canAddPatient && staff.clinic_id ? (
+          <AdminPatientCreateForm
+            clinicId={staff.clinic_id}
+            onCancel={() => setAddModalOpen(false)}
+            onCreated={() => {
+              setAddModalOpen(false);
+              setSuccessMessage('Patient created.');
+              void load();
+            }}
+          />
+        ) : (
+          <Stack gap='sm'>
+            <Text size='sm' c='dimmed'>
+              New patient profiles are created through registration or your onboarding workflow.
+              Once a record exists, you can manage profile and login settings from this console.
+            </Text>
+            <Text size='sm'>
+              To edit an existing patient, use the table actions or open a name from the list.
+            </Text>
+          </Stack>
+        )}
       </Modal>
     </div>
   );

@@ -8,6 +8,7 @@ export const ELIX_HEALTH_PATHS = {
   patients: '/elixhealth/patients',
   patient: '/elixhealth/patient',
   staff: '/elixhealth/staff',
+  profile: '/elixhealth/profile',
   requests: '/elixhealth/requests',
   workspace: '/elixhealth/workspace',
   workspaceCases: '/elixhealth/workspace/cases',
@@ -59,6 +60,7 @@ export function navIdFromPathname(pathname: string): ElixHealthNavId {
     return 'patients';
   }
   if (pathname === '/elixhealth/staff') return 'staff';
+  if (pathname === '/elixhealth/profile') return 'profile';
   if (pathname === '/elixhealth/requests') return 'requests';
   return 'overview';
 }
@@ -80,6 +82,7 @@ export function pageTitleFromPathname(pathname: string, search: string): string 
   if (pathname === '/elixhealth/doctors') return 'Doctors';
   if (pathname === '/elixhealth/patients') return 'Patients';
   if (pathname === '/elixhealth/staff') return 'Staff';
+  if (pathname === '/elixhealth/profile') return 'My profile';
   if (pathname === '/elixhealth/requests') return 'Opinion requests';
   return 'Dashboard';
 }

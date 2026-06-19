@@ -37,6 +37,7 @@ function StaffTable({
           <tr>
             <th>Name</th>
             <th>Email</th>
+            <th>Clinic</th>
             <th>Status</th>
             <th>Auth linked</th>
             <th>Created</th>
@@ -48,6 +49,7 @@ function StaffTable({
             <tr key={member.id}>
               <td>{member.full_name}</td>
               <td>{member.email}</td>
+              <td>{member.clinic_name ?? '—'}</td>
               <td>
                 <span className={member.is_active ? 'elixhealth-badge elixhealth-badge--ok' : 'elixhealth-badge'}>
                   {member.is_active ? 'Active' : 'Inactive'}
@@ -93,7 +95,7 @@ function StaffTable({
 }
 
 export default function ElixHealthStaffPage() {
-  const currentStaff = useElixHealthStaff();
+  const { staff: currentStaff } = useElixHealthStaff();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -126,6 +128,10 @@ export default function ElixHealthStaffPage() {
   );
   const executives = useMemo(
     () => staff.filter((member) => member.role === 'patient_service_executive'),
+    [staff]
+  );
+  const clinicExecutives = useMemo(
+    () => staff.filter((member) => member.role === 'patient_service_executive_clinic'),
     [staff]
   );
 
@@ -225,7 +231,29 @@ export default function ElixHealthStaffPage() {
         />
       </SectionCard>
 
-      
+      <SectionCard
+        title='Patient Service Executives (clinic)'
+        subtitle={`${clinicExecutives.length} isolated clinic account${clinicExecutives.length === 1 ? '' : 's'}`}
+      >
+        <p className='muted elixhealth-staff-note'>
+          <UserCog size={16} className='inline-icon' aria-hidden /> Clinic executives manage isolated patients and doctors for their workspace. Administrators can view all clinic data on the Patients and Doctors pages.
+        </p>
+        {clinicExecutives.length === 0 ? (
+          <p className='muted elixhealth-staff-note'>
+            If a clinic account was created before migration 045, it may appear under Patient Service
+            Executives above. Re-add the same email with role &quot;Patient Service Executive (clinic)&quot; or
+            run <code>supabase/repair-clinic-pse-account.sql</code> in Supabase SQL Editor.
+          </p>
+        ) : null}
+
+        <StaffTable
+          members={clinicExecutives}
+          showActions={isAdministrator(currentStaff)}
+          busyId={busyId}
+          onEdit={openEditModal}
+          onToggleActive={(member) => void handleToggleActive(member)}
+        />
+      </SectionCard>
 
       <StaffFormModal
         open={modalOpen}

@@ -24,6 +24,9 @@ export type Patient = {
   login_disabled?: boolean;
   created_at: string;
   updated_at: string;
+  /** PSE clinic workspace when managed by clinic PSE */
+  clinic_id?: string | null;
+  pse_clinic_name?: string | null;
 };
 
 export type PatientUpsertInput = {

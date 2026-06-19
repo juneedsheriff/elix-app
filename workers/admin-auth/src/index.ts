@@ -82,6 +82,24 @@ async function getUserIdFromToken(token: string, env: Env): Promise<string | nul
   return user.id ?? null;
 }
 
+async function verifyStaffAuthUserId(request: Request, env: Env): Promise<{ userId: string; staffId: string } | null> {
+  const auth = request.headers.get('Authorization');
+  if (!auth?.startsWith('Bearer ')) return null;
+  const token = auth.slice(7);
+  const userId = await getUserIdFromToken(token, env);
+  if (!userId) return null;
+
+  const { data, error } = await userClient(env, token)
+    .from('admins')
+    .select('id')
+    .eq('auth_user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return { userId, staffId: data.id as string };
+}
+
 async function verifyAdmin(request: Request, env: Env): Promise<string | null> {
   const auth = request.headers.get('Authorization');
   if (!auth?.startsWith('Bearer ')) return null;
@@ -131,7 +149,9 @@ type CreateStaffBody = {
   full_name: string;
   email: string;
   password?: string;
-  role?: 'administrator' | 'patient_service_executive';
+  role?: 'administrator' | 'patient_service_executive' | 'patient_service_executive_clinic';
+  clinic_name?: string;
+  clinic_id?: string;
 };
 
 type ManageStaffBody = {
@@ -140,17 +160,50 @@ type ManageStaffBody = {
   password?: string;
   full_name?: string;
   email?: string;
+  clinic_id?: string;
+  clinic_name?: string;
 };
 
 async function loadStaffMember(staffId: string, env: Env): Promise<StaffRow | null> {
   const { data, error } = await serviceClient(env)
     .from('admins')
-    .select('id, auth_user_id, email, full_name, role, is_active')
+    .select('id, auth_user_id, email, full_name, role, is_active, clinic_id')
     .eq('id', staffId)
     .maybeSingle();
 
   if (error || !data) return null;
-  return data as StaffRow;
+  return data as StaffRow & { clinic_id?: string | null };
+}
+
+async function resolveClinicWorkspaceId(
+  admin: SupabaseClient,
+  input: { clinic_id?: string; clinic_name?: string }
+): Promise<{ clinicId: string | null; error?: string }> {
+  const clinicId = input.clinic_id?.trim();
+  if (clinicId) {
+    const { data, error } = await admin.from('pse_clinics').select('id').eq('id', clinicId).maybeSingle();
+    if (error) return { clinicId: null, error: error.message };
+    if (!data) return { clinicId: null, error: 'Clinic workspace not found.' };
+    return { clinicId };
+  }
+
+  const clinicName = input.clinic_name?.trim() ?? '';
+  if (!clinicName) {
+    return { clinicId: null, error: 'Select a clinic workspace or enter a new clinic name.' };
+  }
+
+  const { data: existing, error: existingError } = await admin
+    .from('pse_clinics')
+    .select('id')
+    .ilike('name', clinicName)
+    .maybeSingle();
+
+  if (existingError) return { clinicId: null, error: existingError.message };
+  if (existing?.id) return { clinicId: existing.id as string };
+
+  const { data, error } = await admin.from('pse_clinics').insert({ name: clinicName }).select('id').single();
+  if (error) return { clinicId: null, error: error.message };
+  return { clinicId: data.id as string };
 }
 
 async function resolveProfileAuthUserId(
@@ -183,33 +236,59 @@ async function resolveProfileAuthUserId(
   return { authUserId, fullName: null };
 }
 
+function resolveStaffRole(value: unknown): CreateStaffBody['role'] {
+  if (value === 'administrator') return 'administrator';
+  if (value === 'patient_service_executive_clinic') return 'patient_service_executive_clinic';
+  return 'patient_service_executive';
+}
+
+function staffAuthMetadataRole(role: NonNullable<CreateStaffBody['role']>): string {
+  if (role === 'administrator') return 'admin';
+  if (role === 'patient_service_executive_clinic') return 'patient_service_executive_clinic';
+  return 'patient_service_executive';
+}
+
+function staffRoleConflictMessage(existingRole: string, requestedRole: string): string | null {
+  if (existingRole === requestedRole) {
+    if (requestedRole === 'patient_service_executive_clinic') {
+      return 'This email is already a clinic Patient Service Executive.';
+    }
+    if (requestedRole === 'patient_service_executive') {
+      return 'This email is already a Patient Service Executive.';
+    }
+    return 'This email is already an administrator.';
+  }
+
+  if (
+    existingRole === 'patient_service_executive' &&
+    requestedRole === 'patient_service_executive_clinic'
+  ) {
+    return null;
+  }
+
+  return `This email belongs to a ${existingRole.replaceAll('_', ' ')} account.`;
+}
+
 async function createStaffMember(body: CreateStaffBody, env: Env) {
   const email = body.email.trim().toLowerCase();
   const fullName = body.full_name.trim();
   const password = body.password?.trim() ?? '';
-  const role = body.role === 'administrator' ? 'administrator' : 'patient_service_executive';
+  const role = resolveStaffRole(body.role);
+  const clinicName = body.clinic_name?.trim() ?? '';
+  const clinicIdInput = body.clinic_id?.trim() ?? '';
 
   if (!fullName) return { error: 'Full name is required.' };
   if (!email) return { error: 'Email is required.' };
+  if (role === 'patient_service_executive_clinic' && !clinicIdInput && !clinicName) {
+    return { error: 'Select a clinic workspace or enter a new clinic name.' };
+  }
 
   const admin = serviceClient(env);
   const { data: existingRow } = await admin.from('admins').select('id, role, auth_user_id').ilike('email', email).maybeSingle();
 
-  if (existingRow?.role === role) {
-    return {
-      error:
-        role === 'patient_service_executive'
-          ? 'This email is already a Patient Service Executive.'
-          : 'This email is already an administrator.'
-    };
-  }
-
-  if (existingRow?.role === 'administrator' && role === 'patient_service_executive') {
-    return { error: 'This email belongs to an administrator account.' };
-  }
-
-  if (existingRow?.role === 'patient_service_executive' && role === 'administrator') {
-    return { error: 'This email belongs to a Patient Service Executive account.' };
+  if (existingRow?.role) {
+    const conflict = staffRoleConflictMessage(existingRow.role, role);
+    if (conflict) return { error: conflict };
   }
 
   let authUserId = existingRow?.auth_user_id ?? null;
@@ -223,7 +302,7 @@ async function createStaffMember(body: CreateStaffBody, env: Env) {
     return { error: 'Password is required when creating a new login (at least 6 characters).' };
   }
 
-  const metadataRole = role === 'administrator' ? 'admin' : 'patient_service_executive';
+  const metadataRole = staffAuthMetadataRole(role);
 
   if (!authUserId) {
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
@@ -264,52 +343,73 @@ async function createStaffMember(body: CreateStaffBody, env: Env) {
     user_metadata: {
       ...existingMetadata,
       full_name: fullName,
-      staff_role: role
+      staff_role: role,
+      role: metadataRole
     }
   };
-
-  if (!existingMetadata.role) {
-    authPatch.user_metadata.role = metadataRole;
-  }
 
   if (password) authPatch.password = password;
 
   const { error: authUpdateError } = await admin.auth.admin.updateUserById(authUserId, authPatch);
   if (authUpdateError) return { error: authUpdateError.message };
 
+  let clinicId: string | null = null;
+  if (role === 'patient_service_executive_clinic') {
+    const resolved = await resolveClinicWorkspaceId(admin, {
+      clinic_id: clinicIdInput || undefined,
+      clinic_name: clinicIdInput ? undefined : clinicName
+    });
+    if (resolved.error || !resolved.clinicId) {
+      return { error: resolved.error ?? 'Could not resolve clinic workspace.' };
+    }
+    clinicId = resolved.clinicId;
+  }
+
   const rowPayload = {
     auth_user_id: authUserId,
     email,
     full_name: fullName,
     role,
+    clinic_id: clinicId,
     is_active: true,
     updated_at: new Date().toISOString()
   };
+
+  const staffColumns = 'id, auth_user_id, email, full_name, role, clinic_id, is_active, created_at, updated_at';
 
   if (existingRow) {
     const { data, error } = await admin
       .from('admins')
       .update(rowPayload)
       .eq('id', existingRow.id)
-      .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+      .select(staffColumns)
       .single();
     if (error) return { error: error.message };
     return { staff: data };
   }
 
-  const { data, error } = await admin
-    .from('admins')
-    .insert(rowPayload)
-    .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
-    .single();
+  const { data, error } = await admin.from('admins').insert(rowPayload).select(staffColumns).single();
   if (error) return { error: error.message };
   return { staff: data };
 }
 
-async function manageStaffMember(body: ManageStaffBody, env: Env) {
+async function manageStaffMember(
+  body: ManageStaffBody,
+  env: Env,
+  options?: { selfService?: boolean }
+) {
   const staff = await loadStaffMember(body.staffId, env);
   if (!staff) return { error: 'Staff member not found.' };
-  if (staff.role !== 'patient_service_executive') {
+
+  const isPse =
+    staff.role === 'patient_service_executive' || staff.role === 'patient_service_executive_clinic';
+  const isProfileUpdate = body.action === 'update';
+
+  if (options?.selfService) {
+    if (!isProfileUpdate) {
+      return { error: 'You can only update your own profile.' };
+    }
+  } else if (!isPse && !(isProfileUpdate && staff.role === 'administrator')) {
     return { error: 'Only Patient Service Executive accounts can be managed here.' };
   }
 
@@ -380,7 +480,7 @@ async function manageStaffMember(body: ManageStaffBody, env: Env) {
         password?: string;
         user_metadata: { full_name: string; role: string };
       } = {
-        user_metadata: { full_name: fullName, role: 'patient_service_executive' }
+        user_metadata: { full_name: fullName, role: staffAuthMetadataRole(staff.role as CreateStaffBody['role']) }
       };
       if (email !== staff.email.toLowerCase()) authPatch.email = email;
       if (password) authPatch.password = password;
@@ -389,15 +489,37 @@ async function manageStaffMember(body: ManageStaffBody, env: Env) {
       if (authError) return { error: authError.message };
     }
 
+    const adminUpdate: {
+      full_name: string;
+      email: string;
+      updated_at: string;
+      clinic_id?: string | null;
+    } = {
+      full_name: fullName,
+      email,
+      updated_at: new Date().toISOString()
+    };
+
+    if (
+      !options?.selfService &&
+      staff.role === 'patient_service_executive_clinic' &&
+      (body.clinic_id?.trim() || body.clinic_name?.trim())
+    ) {
+      const resolved = await resolveClinicWorkspaceId(admin, {
+        clinic_id: body.clinic_id,
+        clinic_name: body.clinic_name
+      });
+      if (resolved.error || !resolved.clinicId) {
+        return { error: resolved.error ?? 'Could not resolve clinic workspace.' };
+      }
+      adminUpdate.clinic_id = resolved.clinicId;
+    }
+
     const { data, error } = await admin
       .from('admins')
-      .update({
-        full_name: fullName,
-        email,
-        updated_at: new Date().toISOString()
-      })
+      .update(adminUpdate)
       .eq('id', staff.id)
-      .select('id, auth_user_id, email, full_name, role, is_active, created_at, updated_at')
+      .select('id, auth_user_id, email, full_name, role, clinic_id, is_active, created_at, updated_at')
       .single();
 
     if (error) return { error: error.message };
@@ -626,12 +748,12 @@ export default {
     }
 
     if (request.method === 'POST' && (pathname === '/staff' || pathname === '/staff/manage')) {
-      const administratorId = await verifyAdministrator(request, env);
-      if (!administratorId) {
-        return json({ error: 'Unauthorized. Sign in as an administrator.' }, 403, origin, env);
-      }
-
       if (pathname === '/staff') {
+        const administratorId = await verifyAdministrator(request, env);
+        if (!administratorId) {
+          return json({ error: 'Unauthorized. Sign in as an administrator.' }, 403, origin, env);
+        }
+
         let body: CreateStaffBody;
         try {
           body = (await request.json()) as CreateStaffBody;
@@ -655,7 +777,27 @@ export default {
         return json({ error: 'staffId and action are required.' }, 400, origin, env);
       }
 
-      const result = await manageStaffMember(body, env);
+      const administratorId = await verifyAdministrator(request, env);
+      if (administratorId) {
+        const result = await manageStaffMember(body, env);
+        if (result.error) return json({ error: result.error }, 400, origin, env);
+        return json({ ok: true, staff: result.staff }, 200, origin, env);
+      }
+
+      const caller = await verifyStaffAuthUserId(request, env);
+      if (!caller) {
+        return json({ error: 'Unauthorized. Sign in as an active admin.' }, 401, origin, env);
+      }
+
+      if (caller.staffId !== body.staffId) {
+        return json({ error: 'You can only update your own profile.' }, 403, origin, env);
+      }
+
+      if (body.action !== 'update') {
+        return json({ error: 'You can only update your own profile.' }, 403, origin, env);
+      }
+
+      const result = await manageStaffMember(body, env, { selfService: true });
       if (result.error) return json({ error: result.error }, 400, origin, env);
       return json({ ok: true, staff: result.staff }, 200, origin, env);
     }

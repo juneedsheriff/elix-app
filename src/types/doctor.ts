@@ -88,6 +88,9 @@ export type Doctor = {
   auth_user_id?: string | null;
   login_disabled?: boolean;
   created_at?: string;
+  /** PSE clinic workspace when created by clinic PSE */
+  clinic_id?: string | null;
+  pse_clinic_name?: string | null;
 };
 
 export type AdminDoctorUpdateInput = {

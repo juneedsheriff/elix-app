@@ -44,7 +44,7 @@ import RequestWorkflowWizard from './RequestWorkflowWizard';
 
 import { formatRequestDate, patientInitials, requestStatusColor } from './requestsUtils';
 
-import { isAdministrator, isPatientServiceExecutive } from '../../../lib/staffPermissions';
+import { isAdministrator, isAnyPatientServiceExecutive, isClinicPatientServiceExecutive, isPatientServiceExecutive } from '../../../lib/staffPermissions';
 
 
 
@@ -126,10 +126,11 @@ export default function RequestDetailDrawer({
     setShowActivity(false);
   }, [request?.id, opened]);
 
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
 
-  const staffIsPse = isPatientServiceExecutive(staff);
-
+  const staffIsPse = isAnyPatientServiceExecutive(staff);
+  const staffIsPlatformPse = isPatientServiceExecutive(staff);
+  const staffIsClinicPse = isClinicPatientServiceExecutive(staff);
   const staffIsAdmin = isAdministrator(staff);
 
 
@@ -140,11 +141,14 @@ export default function RequestDetailDrawer({
 
   const isClosed = request.status === 'closed';
 
-  const isAssigned = Boolean(request.assigned_to);
+  const isAssignedToMe = Boolean(request.assigned_to && request.assigned_to === staff.id);
 
   const canAssign = isAdmin && isPendingAdminAssignment(request);
 
-  const showAssignSection = isAdmin && !isClosed;
+  const showAssignSection = canAssign && !isClosed;
+
+  const isClinicClaimPending =
+    staffIsClinicPse && isPendingAdminAssignment(request) && !isClosed;
 
   const assignedExecutiveName =
 
@@ -173,13 +177,17 @@ export default function RequestDetailDrawer({
 
   const assignSelectValue = assigneeId || request.assigned_to || null;
 
-  const canCoordinate = staffIsPse && !isClosed;
+  const canCoordinate =
+    staffIsPse &&
+    !isClosed &&
+    (staffIsPlatformPse || isAssignedToMe);
+  const showWorkflowWizard = canCoordinate;
 
-  const showWorkflowWizard = staffIsPse;
+  const needsAssignmentForAdmin =
+    staffIsAdmin && !staffIsPse && !request.assigned_to && !isClosed;
 
-  const needsAssignmentForAdmin = staffIsAdmin && !staffIsPse && !isAssigned && !isClosed;
-
-  const adminViewingAssigned = staffIsAdmin && !staffIsPse && isAssigned && !isClosed;
+  const adminViewingAssigned =
+    staffIsAdmin && !staffIsPse && Boolean(request.assigned_to) && !isClosed;
 
   const statusColor = requestStatusColor(request);
 
@@ -436,6 +444,59 @@ export default function RequestDetailDrawer({
 
 
 
+          {isClinicClaimPending && busy ? (
+            <section className='request-detail-drawer__notice request-detail-drawer__notice--success'>
+              <ThemeIcon
+                size={36}
+                radius='md'
+                variant='light'
+                color='teal'
+                className='request-detail-drawer__notice-icon'
+              >
+                <IconUserCheck size={20} stroke={1.75} />
+              </ThemeIcon>
+              <div className='request-detail-drawer__notice-copy'>
+                <Text fw={600} size='sm'>
+                  Assigning to you
+                </Text>
+                <Text size='sm' c='dimmed'>
+                  Opening the coordination steps for this request…
+                </Text>
+              </div>
+            </section>
+          ) : null}
+
+          {isClinicClaimPending && !busy ? (
+            <section className='request-detail-drawer__assign-card'>
+              <div className='request-detail-drawer__assign-head'>
+                <ThemeIcon size={40} radius='md' variant='light' color='cyan'>
+                  <IconUserCheck size={22} stroke={1.75} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600} size='sm'>
+                    Start coordination
+                  </Text>
+                  <Text size='xs' c='dimmed'>
+                    Claim this request to begin the coordination workflow.
+                  </Text>
+                </div>
+              </div>
+
+              <Button
+                radius='md'
+                size='md'
+                fullWidth
+                className='doctors-mgmt-header__primary request-detail-drawer__assign-btn'
+                disabled={busy || !assigneeId}
+                loading={busy}
+                onClick={onAssign}
+                rightSection={<IconArrowRight size={18} stroke={1.75} />}
+              >
+                Assign to me
+              </Button>
+            </section>
+          ) : null}
+
           {showAssignSection ? (
 
             <section className='request-detail-drawer__assign-card'>
@@ -458,7 +519,7 @@ export default function RequestDetailDrawer({
 
                   <Text size='xs' c='dimmed'>
 
-                    {isAssigned
+                    {request.assigned_to
 
                       ? 'Assigned executive for this request.'
 
@@ -480,7 +541,7 @@ export default function RequestDetailDrawer({
                 allowDeselect={false}
                 radius='md'
                 size='md'
-                disabled={isAssigned || busy}
+                disabled={Boolean(request.assigned_to) || busy}
                 classNames={{ input: 'request-detail-drawer__select-input' }}
               />
 

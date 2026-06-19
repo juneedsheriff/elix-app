@@ -19,6 +19,7 @@ type CreateTab = 'profile' | 'clinic';
 type AdminDoctorCreateFormProps = {
   onCreated: (doctor: Doctor) => void;
   onCancel: () => void;
+  clinicId?: string | null;
 };
 
 const TABS: { id: CreateTab; label: string }[] = [
@@ -26,7 +27,7 @@ const TABS: { id: CreateTab; label: string }[] = [
   { id: 'clinic', label: 'Clinic details' }
 ];
 
-export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoctorCreateFormProps) {
+export default function AdminDoctorCreateForm({ onCreated, onCancel, clinicId = null }: AdminDoctorCreateFormProps) {
   const [activeTab, setActiveTab] = useState<CreateTab>('profile');
   const [form, setForm] = useState<AdminDoctorUpdateInput>(() => emptyAdminDoctorInput());
   const [busy, setBusy] = useState(false);
@@ -46,7 +47,7 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
 
     setBusy(true);
     setError(null);
-    const { data, error: createError } = await createDoctorForAdmin(form);
+    const { data, error: createError } = await createDoctorForAdmin(form, { clinicId });
     setBusy(false);
 
     if (createError || !data) {

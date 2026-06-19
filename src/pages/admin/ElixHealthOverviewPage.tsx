@@ -9,7 +9,7 @@ import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 export default function ElixHealthOverviewPage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,9 +69,12 @@ export default function ElixHealthOverviewPage() {
   }
 
   if (error) {
+    const hint = error.toLowerCase().includes('infinite recursion')
+      ? ' Run npm run db:apply-doctors-rls-fix (migration 057).'
+      : ' Check that required Supabase migrations are applied.';
     return (
       <p className='auth-error' role='alert'>
-        {error}. Ensure migrations 012 and 013 are applied in Supabase.
+        {error}.{hint}
       </p>
     );
   }
