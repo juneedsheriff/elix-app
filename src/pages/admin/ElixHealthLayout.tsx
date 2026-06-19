@@ -9,6 +9,7 @@ import {
   Shield,
   Stethoscope,
   UserCircle,
+  UserCog,
   Users,
   X
 } from 'lucide-react';
@@ -30,7 +31,8 @@ const NAV_META: Record<ElixHealthNavId, { path: string; icon: typeof Users; labe
   doctors: { path: ELIX_HEALTH_PATHS.doctors, icon: Stethoscope },
   patients: { path: ELIX_HEALTH_PATHS.patients, icon: UserCircle },
   requests: { path: ELIX_HEALTH_PATHS.requests, icon: ClipboardList },
-  staff: { path: ELIX_HEALTH_PATHS.staff, icon: Shield }
+  staff: { path: ELIX_HEALTH_PATHS.staff, icon: Shield },
+  profile: { path: ELIX_HEALTH_PATHS.profile, icon: UserCog }
 };
 
 const NAV_LABELS: Record<ElixHealthNavId, string> = {
@@ -38,7 +40,8 @@ const NAV_LABELS: Record<ElixHealthNavId, string> = {
   doctors: 'Doctors',
   patients: 'Patients',
   requests: 'Requests',
-  staff: 'Staff'
+  staff: 'Staff',
+  profile: 'My profile'
 };
 
 function navItemsForAdmin(admin: Admin): NavItem[] {
@@ -144,7 +147,12 @@ export default function ElixHealthLayout({
         </nav>
 
         <div className='elixhealth-sidebar-footer'>
-          <div className='elixhealth-sidebar-user-card' title={admin.email}>
+          <button
+            type='button'
+            className='elixhealth-sidebar-user-card elixhealth-sidebar-user-card--button'
+            title={admin.email}
+            onClick={() => handleNav(ELIX_HEALTH_PATHS.profile)}
+          >
             <span className='elixhealth-sidebar-avatar' aria-hidden>
               {admin.full_name.charAt(0).toUpperCase()}
             </span>
@@ -152,7 +160,7 @@ export default function ElixHealthLayout({
               <strong>{admin.full_name}</strong>
               <span>{admin.email}</span>
             </div>
-          </div>
+          </button>
           <button type='button' className='elixhealth-sidebar-signout' onClick={onSignOut}>
             <LogOut size={16} aria-hidden />
             Sign out

@@ -9,7 +9,7 @@ import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 export default function ElixHealthOverviewPage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

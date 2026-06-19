@@ -94,6 +94,7 @@ export async function createStaffMember(input: {
   password?: string;
   role?: 'administrator' | 'patient_service_executive' | 'patient_service_executive_clinic';
   clinic_name?: string;
+  clinic_id?: string;
 }) {
   return adminAuthFetch<{ ok: boolean; staff: StaffMemberPayload }>('/staff', {
     method: 'POST',
@@ -112,7 +113,13 @@ export async function createPatientServiceExecutive(input: {
 export async function manageStaffMember(
   staffId: string,
   action: 'activate' | 'deactivate' | 'set_password' | 'update',
-  options?: { password?: string; full_name?: string; email?: string }
+  options?: {
+    password?: string;
+    full_name?: string;
+    email?: string;
+    clinic_id?: string;
+    clinic_name?: string;
+  }
 ) {
   return adminAuthFetch<{ ok: boolean; staff: StaffMemberPayload }>('/staff/manage', {
     method: 'POST',
@@ -122,7 +129,13 @@ export async function manageStaffMember(
 
 export async function updateStaffMember(
   staffId: string,
-  input: { full_name: string; email: string; password?: string }
+  input: {
+    full_name: string;
+    email: string;
+    password?: string;
+    clinic_id?: string;
+    clinic_name?: string;
+  }
 ) {
   return manageStaffMember(staffId, 'update', input);
 }

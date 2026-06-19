@@ -3465,6 +3465,19 @@ body:has(.elixhealth-app),
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.elixhealth-sidebar-user-card--button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.elixhealth-sidebar-user-card--button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 .elixhealth-sidebar-avatar {
   width: 38px;
   height: 38px;

@@ -95,7 +95,7 @@ function StaffTable({
 }
 
 export default function ElixHealthStaffPage() {
-  const currentStaff = useElixHealthStaff();
+  const { staff: currentStaff } = useElixHealthStaff();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);

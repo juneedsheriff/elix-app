@@ -53,7 +53,7 @@ function matchesSearch(request: OpinionRequest, query: string) {
 }
 
 export default function ElixHealthRequestsPage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const isAdmin = isAdministrator(staff);
   const isPse = isAnyPatientServiceExecutive(staff);
   const isClinicPse = isClinicPatientServiceExecutive(staff);

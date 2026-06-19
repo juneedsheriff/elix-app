@@ -67,7 +67,7 @@ function matchesSearch(doctor: Doctor, query: string) {
 
 export default function ElixHealthDoctorsPage() {
   const navigate = useNavigate();
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const isAdmin = isAdministrator(staff);
   const canEdit = canEditProfiles(staff);
   const canAddDoctor = canCreateDoctors(staff);

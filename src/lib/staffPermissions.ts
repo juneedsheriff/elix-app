@@ -22,13 +22,20 @@ export function adminRoleLabel(role: AdminRole): string {
   return 'Administrator';
 }
 
-export type ElixHealthNavId = 'overview' | 'doctors' | 'patients' | 'requests' | 'staff';
+export type ElixHealthNavId = 'overview' | 'doctors' | 'patients' | 'requests' | 'staff' | 'profile';
 
 export function navItemsForRole(role: AdminRole): ElixHealthNavId[] {
   if (isAnyPatientServiceExecutive({ role })) {
-    return ['overview', 'requests', 'doctors', 'patients'];
+    return ['overview', 'requests', 'doctors', 'patients', 'profile'];
+  }
+  if (isAdministrator({ role })) {
+    return ['overview', 'doctors', 'patients', 'requests', 'staff', 'profile'];
   }
   return ['overview', 'doctors', 'patients', 'requests', 'staff'];
+}
+
+export function canManageStaffProfiles(admin: Pick<Admin, 'role'>): boolean {
+  return isAdministrator(admin);
 }
 
 export function requestsNavLabel(role: AdminRole): string {

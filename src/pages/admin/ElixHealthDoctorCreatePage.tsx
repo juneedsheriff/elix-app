@@ -7,7 +7,7 @@ import { doctorEditUrl, ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 export default function ElixHealthDoctorCreatePage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const navigate = useNavigate();
   const canEdit = canCreateDoctors(staff);
 

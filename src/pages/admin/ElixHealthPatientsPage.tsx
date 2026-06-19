@@ -52,7 +52,7 @@ function matchesSearch(patient: Patient, query: string) {
 }
 
 export default function ElixHealthPatientsPage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const canEdit = canEditProfiles(staff);
   const canAddPatient = canCreatePatients(staff);
   const isAdmin = isAdministrator(staff);

@@ -10,7 +10,7 @@ import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 export default function ElixHealthPatientEditPage() {
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
   const readOnly = !canEditProfiles(staff);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

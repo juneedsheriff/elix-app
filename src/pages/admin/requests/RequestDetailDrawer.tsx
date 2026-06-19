@@ -126,7 +126,7 @@ export default function RequestDetailDrawer({
     setShowActivity(false);
   }, [request?.id, opened]);
 
-  const staff = useElixHealthStaff();
+  const { staff } = useElixHealthStaff();
 
   const staffIsPse = isAnyPatientServiceExecutive(staff);
   const staffIsPlatformPse = isPatientServiceExecutive(staff);
