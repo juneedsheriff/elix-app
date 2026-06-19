@@ -1,5 +1,13 @@
 import { X } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode
+} from 'react';
 import { filterPreferredLanguageSuggestions, normalizePreferredLanguagePart } from '../../lib/patientProfileOptions';
 import './patient-preferred-language-multi-select.css';
 
@@ -7,7 +15,7 @@ type PreferredLanguageMultiSelectProps = {
   value: string[];
   onChange: (value: string[]) => void;
   disabled?: boolean;
-  label?: string;
+  label?: ReactNode;
 };
 
 export default function PreferredLanguageMultiSelect({

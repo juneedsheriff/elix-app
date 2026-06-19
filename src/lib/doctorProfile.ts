@@ -11,6 +11,7 @@ import {
   defaultConsultationTiers,
   normalizeConsultationTiersInput,
   parseConsultationTiers,
+  preferredDurationTiers,
   primaryConsultationFeeFromTiers
 } from './consultationTiers';
 
@@ -120,7 +121,7 @@ export function emptyAdminDoctorInput(): AdminDoctorUpdateInput {
     scheduler_effect_from: null,
     scheduler_time_interval: 30,
     consultation_fee: 0,
-    consultation_tiers: defaultConsultationTiers(),
+    consultation_tiers: preferredDurationTiers(),
     consultation_currency: 'USD',
     elix_patient_priority: false,
     scheduler_color: '#09abc0',
@@ -128,7 +129,7 @@ export function emptyAdminDoctorInput(): AdminDoctorUpdateInput {
     time_settings: {},
     years_experience: 0,
     rating: 4.5,
-    languages: 'English',
+    languages: '',
     image_url: DEFAULT_DOCTOR_IMAGE_PLACEHOLDER
   };
 }
@@ -136,11 +137,11 @@ export function emptyAdminDoctorInput(): AdminDoctorUpdateInput {
 export function validateAdminDoctorInput(input: AdminDoctorUpdateInput): string | null {
   if (!input.full_name.trim()) return 'Enter the doctor’s full name.';
   if (!input.email.trim()) return 'Enter an email address.';
-  if (!input.mobile_no.trim()) return 'Enter a mobile number.';
-  if (!input.specialty.trim()) return 'Enter a specialty.';
-  if (!input.clinic_name.trim()) return 'Enter a clinic name.';
-  if (!input.clinic_country.trim()) return 'Enter a clinic country.';
-  if (!input.languages.trim()) return 'Enter languages.';
+  if (!input.medical_license_no?.trim()) return 'Enter a medical license number.';
+  if (!input.qualification?.trim()) return 'Enter a qualification.';
+  if (!input.specialty.trim()) return 'Select a specialty.';
+  if (!input.languages.trim()) return 'Select at least one language.';
+  if (!input.gender?.trim()) return 'Select a gender.';
   const image = input.image_url.trim();
   if (!image) return 'Add a profile photo (URL or upload).';
   if (image.startsWith('data:image/')) {

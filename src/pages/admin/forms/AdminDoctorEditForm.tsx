@@ -7,11 +7,14 @@ import {
   consultationCurrencySymbol,
   normalizeConsultationCurrency
 } from '../../../lib/consultationCurrency';
-import { doctorToAdminInput } from '../../../lib/doctorProfile';
+import { doctorToAdminInput, validateAdminDoctorInput } from '../../../lib/doctorProfile';
+import { parsePreferredLanguages } from '../../../lib/patientProfileOptions';
+import PreferredLanguageMultiSelect from '../../../components/patient/PreferredLanguageMultiSelect';
 import type { AdminDoctorUpdateInput, Doctor } from '../../../types/doctor';
 import ConsultationHoursEditor from './ConsultationHoursEditor';
 import AdminAccountAccessPanel from './AdminAccountAccessPanel';
 import AdminDoctorProfileImageSection from './AdminDoctorProfileImageSection';
+import { FieldLabel, RequiredMark, specialtyOptionsForValue } from './adminDoctorFormUi';
 
 type DoctorEditTab = 'profile' | 'clinic' | 'scheduler' | 'login';
 
@@ -65,6 +68,12 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    const validationError = validateAdminDoctorInput(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     const { data, error: saveError } = await updateDoctorForAdmin(doctor.id, form);
@@ -159,14 +168,13 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
             onChange={(url) => setField('image_url', url)}
             disabled={busy || manageBusy}
             readOnly={readOnly}
+            required={!readOnly}
           />
-
-         
 
           <h3 className='elixhealth-form-section-title'>Personal</h3>
           <div className='elixhealth-form-grid'>
             <label className='elixhealth-field'>
-              <span>Full name</span>
+              <FieldLabel required>Full name</FieldLabel>
               <input
                 type='text'
                 value={form.full_name}
@@ -175,9 +183,11 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
               />
             </label>
             <label className='elixhealth-field'>
-              <span>Gender</span>
-              <select value={form.gender ?? ''} onChange={(e) => setField('gender', e.target.value || null)}>
-                <option value=''>—</option>
+              <FieldLabel required>Gender</FieldLabel>
+              <select value={form.gender ?? ''} onChange={(e) => setField('gender', e.target.value || null)} required>
+                <option value='' disabled>
+                  Please select
+                </option>
                 <option value='Male'>Male</option>
                 <option value='Female'>Female</option>
                 <option value='Other'>Other</option>
@@ -189,11 +199,10 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 type='tel'
                 value={form.mobile_no}
                 onChange={(e) => setField('mobile_no', e.target.value)}
-                required
               />
             </label>
             <label className='elixhealth-field'>
-              <span>Email ID</span>
+              <FieldLabel required>Email ID</FieldLabel>
               <input
                 type='email'
                 value={form.email}
@@ -206,19 +215,21 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
           <h3 className='elixhealth-form-section-title'>Professional details</h3>
           <div className='elixhealth-form-grid'>
             <label className='elixhealth-field'>
-              <span>Medical license no.</span>
+              <FieldLabel required>Medical license no.</FieldLabel>
               <input
                 type='text'
                 value={form.medical_license_no ?? ''}
                 onChange={(e) => setField('medical_license_no', e.target.value || null)}
+                required
               />
             </label>
             <label className='elixhealth-field'>
-              <span>Qualification</span>
+              <FieldLabel required>Qualification</FieldLabel>
               <input
                 type='text'
                 value={form.qualification ?? ''}
                 onChange={(e) => setField('qualification', e.target.value || null)}
+                required
               />
             </label>
             <label className='elixhealth-field'>
@@ -230,13 +241,21 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
               />
             </label>
             <label className='elixhealth-field'>
-              <span>Specialty</span>
-              <input
-                type='text'
+              <FieldLabel required>Specialty</FieldLabel>
+              <select
                 value={form.specialty}
                 onChange={(e) => setField('specialty', e.target.value)}
                 required
-              />
+              >
+                <option value='' disabled>
+                  Please select
+                </option>
+                {specialtyOptionsForValue(form.specialty).map((specialty) => (
+                  <option key={specialty} value={specialty}>
+                    {specialty}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className='elixhealth-field'>
               <span>Specialization</span>
@@ -246,35 +265,19 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 onChange={(e) => setField('specialization', e.target.value || null)}
               />
             </label>
-            <label className='elixhealth-field'>
-              <span>Years of experience</span>
-              <input
-                type='number'
-                min={0}
-                value={form.years_experience}
-                onChange={(e) => setField('years_experience', Number(e.target.value))}
+            <div className='elixhealth-field elixhealth-field--full'>
+              <PreferredLanguageMultiSelect
+                label={
+                  <>
+                    Languages
+                    <RequiredMark />
+                  </>
+                }
+                value={parsePreferredLanguages(form.languages)}
+                onChange={(languages) => setField('languages', languages.join(', '))}
+                disabled={busy || manageBusy || readOnly}
               />
-            </label>
-            <label className='elixhealth-field'>
-              <span>Rating (0–5)</span>
-              <input
-                type='number'
-                min={0}
-                max={5}
-                step={0.1}
-                value={form.rating}
-                onChange={(e) => setField('rating', Number(e.target.value))}
-              />
-            </label>
-            <label className='elixhealth-field'>
-              <span>Languages</span>
-              <input
-                type='text'
-                value={form.languages}
-                onChange={(e) => setField('languages', e.target.value)}
-                required
-              />
-            </label>
+            </div>
           </div>
 
           <h3 className='elixhealth-form-section-title'>Profile details</h3>
@@ -357,7 +360,6 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 type='text'
                 value={form.clinic_name}
                 onChange={(e) => setField('clinic_name', e.target.value)}
-                required
               />
             </label>
             <label className='elixhealth-field'>
@@ -368,6 +370,44 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 onChange={(e) => setField('clinic_specialization', e.target.value || null)}
               />
             </label>
+            <label className='elixhealth-field'>
+              <span>Consultation currency</span>
+              <select
+                value={form.consultation_currency}
+                onChange={(e) =>
+                  setField('consultation_currency', normalizeConsultationCurrency(e.target.value))
+                }
+              >
+                {CONSULTATION_CURRENCY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {form.consultation_tiers.map((tier) => (
+              <label key={tier.duration_minutes} className='elixhealth-field'>
+                <span>
+                  {tier.duration_minutes === 60 ? '1 hour' : `${tier.duration_minutes} min`} consultation
+                  fee ({consultationCurrencySymbol(form.consultation_currency)})
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={tier.fee_usd}
+                  onChange={(e) =>
+                    setField(
+                      'consultation_tiers',
+                      form.consultation_tiers.map((item) =>
+                        item.duration_minutes === tier.duration_minutes
+                          ? { ...item, fee_usd: Number(e.target.value) }
+                          : item
+                      )
+                    )
+                  }
+                />
+              </label>
+            ))}
             <label className='elixhealth-field elixhealth-field--full'>
               <span>About clinic</span>
               <textarea
@@ -395,7 +435,6 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 type='text'
                 value={form.clinic_country}
                 onChange={(e) => setField('clinic_country', e.target.value)}
-                required
               />
             </label>
             <label className='elixhealth-field'>
@@ -466,45 +505,6 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 }
               />
             </label>
-            <label className='elixhealth-field'>
-              <span>Consultation currency</span>
-              <select
-                value={form.consultation_currency}
-                onChange={(e) =>
-                  setField('consultation_currency', normalizeConsultationCurrency(e.target.value))
-                }
-              >
-                {CONSULTATION_CURRENCY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {form.consultation_tiers.map((tier) => (
-              <label key={tier.duration_minutes} className='elixhealth-field'>
-                <span>
-                  {tier.duration_minutes === 60 ? '1 hour' : `${tier.duration_minutes} min`} consultation
-                  fee ({consultationCurrencySymbol(form.consultation_currency)})
-                </span>
-                <input
-                  type='number'
-                  min={0}
-                  value={tier.fee_usd}
-                  onChange={(e) =>
-                    setField(
-                      'consultation_tiers',
-                      form.consultation_tiers.map((item) =>
-                        item.duration_minutes === tier.duration_minutes
-                          ? { ...item, fee_usd: Number(e.target.value) }
-                          : item
-                      )
-                    )
-                  }
-                  required
-                />
-              </label>
-            ))}
             <label className='elixhealth-field'>
               <span>Calendar color</span>
               <input

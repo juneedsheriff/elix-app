@@ -4507,6 +4507,11 @@ body:has(.elixhealth-app),
   font-size: 0.78rem;
 }
 
+.elixhealth-required {
+  color: #dc2626;
+  font-weight: 700;
+}
+
 .elixhealth-field input,
 .elixhealth-field textarea {
   border: 1px solid var(--border);
