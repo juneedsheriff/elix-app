@@ -199,6 +199,11 @@ export default function DoctorConsultationPage({
     });
   }, [request?.id]);
 
+  useEffect(() => {
+    document.body.classList.toggle('doctor-consultation-mic-gate-open', micGateActive);
+    return () => document.body.classList.remove('doctor-consultation-mic-gate-open');
+  }, [micGateActive]);
+
   const handleFillSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!request) return;

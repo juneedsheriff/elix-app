@@ -66,10 +66,13 @@ export default function AppShell({
 }: AppShellProps) {
   const navItems = getNavItems(role, language);
   const activeNavItem = navItems.find((item) => item.id === activeScreen);
+  const hideBottomNav = activeScreen === 'doctor-consultation';
 
   return (
     <div className='mobile-shell'>
-      <section className={`workspace ${menuOpen ? 'menu-open' : ''}`}>
+      <section
+        className={`workspace ${menuOpen ? 'menu-open' : ''}${hideBottomNav ? ' workspace--no-bottom-nav' : ''}`}
+      >
         <header className='topbar mobile-header'>
           <button
             type='button'
@@ -171,19 +174,21 @@ export default function AppShell({
           </section>
         </div>
 
-        <nav className='bottom-nav' aria-label='Quick navigation'>
-          {bottomTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type='button'
-              className={`bottom-nav-item ${tab.id === activeScreen ? 'active' : ''}`}
-              onClick={() => onNavigate(tab.id)}
-            >
-              <tab.icon size={22} strokeWidth={2} aria-hidden />
-              <span>{tab.label}</span>
-            </button>
-          ))}
-        </nav>
+        {!hideBottomNav ? (
+          <nav className='bottom-nav' aria-label='Quick navigation'>
+            {bottomTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type='button'
+                className={`bottom-nav-item ${tab.id === activeScreen ? 'active' : ''}`}
+                onClick={() => onNavigate(tab.id)}
+              >
+                <tab.icon size={22} strokeWidth={2} aria-hidden />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+        ) : null}
       </section>
     </div>
   );

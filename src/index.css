@@ -2357,6 +2357,22 @@ select {
   gap: 0.4rem;
   justify-content: center;
   width: 100%;
+  color: var(--brand-cyan);
+  border: 1.5px solid var(--brand-cyan);
+  background: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface));
+  font-weight: 600;
+}
+
+.mobile-shell .doctor-consultation-page__case-context-btn:hover:not(:disabled) {
+  color: var(--brand-cyan);
+  border-color: var(--brand-cyan);
+  background: color-mix(in srgb, var(--brand-cyan) 14%, var(--surface));
+}
+
+.mobile-shell .doctor-consultation-page__case-context-btn:disabled {
+  color: color-mix(in srgb, var(--brand-cyan) 55%, var(--text-soft));
+  border-color: color-mix(in srgb, var(--brand-cyan) 40%, var(--border));
+  opacity: 1;
 }
 
 .doctor-consultation-page__case-context-hint {
@@ -2364,6 +2380,7 @@ select {
   font-size: 0.78rem;
   line-height: 1.35;
   text-align: center;
+  color: var(--brand-cyan);
 }
 
 .mobile-shell .doctor-consultation-page__workspace {
@@ -3090,6 +3107,11 @@ select {
 
 .wide {
   width: 100%;
+}
+
+.workspace--no-bottom-nav .bottom-nav,
+body.doctor-consultation-mic-gate-open .mobile-shell .bottom-nav {
+  display: none;
 }
 
 .bottom-nav {

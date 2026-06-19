@@ -188,7 +188,7 @@ export default function AuthPage({
 
       <div className='auth-page__hint-slot' aria-live='polite'>
         {loginMode === 'doctor' ? (
-          <p className='auth-page__hint'>Mobile doctor app.</p>
+          <p className='auth-page__hint'></p>
         ) : (
           <span className='auth-page__hint-placeholder' aria-hidden />
         )}

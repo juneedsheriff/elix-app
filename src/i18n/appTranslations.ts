@@ -57,12 +57,12 @@ type AppCopy = {
 
 export const TRANSLATIONS: Record<Language, AppCopy> = {
   en: {
-    welcome: 'Second Opinion Doctor',
-    tagline: 'Global second opinions with trusted specialists.',
+    welcome: 'World-Class Healthcare at Your Fingertips',
+    tagline: 'Connect with experienced doctors across the globe for trusted medical guidance and second opinions.',
     continue: 'Continue',
     skip: 'Skip',
     getStarted: 'Get Started',
-    signIn: 'Sign in to get Second Opinion',
+    signIn: 'Sign in to Get Consultation',
     emergency: 'Emergency',
     upload: 'Upload',
     profile: 'Profile',
@@ -130,7 +130,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     ]
   },
   es: {
-    welcome: 'Second Opinion Doctor',
+    welcome: 'Get consultation with doctor',
     tagline: 'Segundas opiniones globales con especialistas confiables.',
     continue: 'Continuar',
     skip: 'Omitir',
