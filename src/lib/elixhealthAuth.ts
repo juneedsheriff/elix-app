@@ -5,6 +5,28 @@ import { supabase } from './supabase';
 import type { Admin } from '../types/admin';
 import type { Doctor } from '../types/doctor';
 
+const STAFF_AUTH_ROLES = new Set([
+  'admin',
+  'administrator',
+  'patient_service_executive',
+  'patient_service_executive_clinic'
+]);
+
+async function resolveStaffAdmin(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
+  let admin: Admin | null = (await fetchAdminByAuthUserId(user.id)).data;
+  if (admin || !user.email) return admin;
+
+  admin = (await fetchAdminByEmail(user.email)).data;
+  if (admin) return admin;
+
+  const staffRole = user.user_metadata?.staff_role ?? user.user_metadata?.role;
+  if (typeof staffRole === 'string' && STAFF_AUTH_ROLES.has(staffRole)) {
+    admin = (await fetchAdminByEmail(user.email)).data;
+  }
+
+  return admin;
+}
+
 export async function elixhealthSignIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim(),
@@ -24,11 +46,7 @@ export async function elixhealthSignIn(email: string, password: string) {
     };
   }
 
-  let admin: Admin | null = (await fetchAdminByAuthUserId(user.id)).data;
-  if (!admin && user.email) {
-    admin = (await fetchAdminByEmail(user.email)).data;
-  }
-
+  const admin = await resolveStaffAdmin(user);
   if (admin) {
     return { error: null, admin, doctor: null };
   }

@@ -81,7 +81,8 @@ export type StaffMemberPayload = {
   auth_user_id: string | null;
   email: string;
   full_name: string;
-  role: 'administrator' | 'patient_service_executive';
+  role: 'administrator' | 'patient_service_executive' | 'patient_service_executive_clinic';
+  clinic_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -91,7 +92,8 @@ export async function createStaffMember(input: {
   full_name: string;
   email: string;
   password?: string;
-  role?: 'administrator' | 'patient_service_executive';
+  role?: 'administrator' | 'patient_service_executive' | 'patient_service_executive_clinic';
+  clinic_name?: string;
 }) {
   return adminAuthFetch<{ ok: boolean; staff: StaffMemberPayload }>('/staff', {
     method: 'POST',

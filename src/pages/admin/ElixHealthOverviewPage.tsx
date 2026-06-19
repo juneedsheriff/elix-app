@@ -69,9 +69,12 @@ export default function ElixHealthOverviewPage() {
   }
 
   if (error) {
+    const hint = error.toLowerCase().includes('infinite recursion')
+      ? ' Run npm run db:apply-doctors-rls-fix (migration 057).'
+      : ' Check that required Supabase migrations are applied.';
     return (
       <p className='auth-error' role='alert'>
-        {error}. Ensure migrations 012 and 013 are applied in Supabase.
+        {error}.{hint}
       </p>
     );
   }

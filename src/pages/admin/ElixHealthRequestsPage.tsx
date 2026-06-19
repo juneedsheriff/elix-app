@@ -1,24 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@mantine/core';
-import { fetchAllDoctorsForAdmin, fetchPatientServiceExecutives } from '../../lib/admins';
+import { fetchAllDoctorsForAdmin, fetchAllPatientsForAdmin, fetchPatientServiceExecutives } from '../../lib/admins';
 import {
   assignOpinionRequest,
   deleteOpinionRequestForAdmin,
   fetchOpinionRequestsForStaff,
+  isPendingAdminAssignment,
   staffRequestStatusLabel,
   subscribeStaffOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
-import { isAdministrator, isPatientServiceExecutive } from '../../lib/staffPermissions';
+import { canCreateRequests, isAdministrator, isAnyPatientServiceExecutive, isClinicPatientServiceExecutive } from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
 import type { Doctor } from '../../types/doctor';
 import type { OpinionRequest } from '../../types/opinionRequest';
+import type { Patient } from '../../types/patient';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 import RequestDetailDrawer from './requests/RequestDetailDrawer';
 import RequestsAnalyticsCards from './requests/RequestsAnalyticsCards';
 import RequestsDataTable from './requests/RequestsDataTable';
 import RequestsFilterDrawer from './requests/RequestsFilterDrawer';
 import RequestsPageHeader from './requests/RequestsPageHeader';
+import ClinicPseCreateRequestModal from './requests/ClinicPseCreateRequestModal';
 import RequestsPageSkeleton from './requests/RequestsPageSkeleton';
 import RequestsTableToolbar from './requests/RequestsTableToolbar';
 import {
@@ -52,9 +55,12 @@ function matchesSearch(request: OpinionRequest, query: string) {
 export default function ElixHealthRequestsPage() {
   const staff = useElixHealthStaff();
   const isAdmin = isAdministrator(staff);
-  const isPse = isPatientServiceExecutive(staff);
+  const isPse = isAnyPatientServiceExecutive(staff);
+  const isClinicPse = isClinicPatientServiceExecutive(staff);
+  const canAddRequest = canCreateRequests(staff);
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [executives, setExecutives] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,6 +70,7 @@ export default function ElixHealthRequestsPage() {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<RequestQuickFilters>(() => getDefaultRequestFilters(isAdmin));
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<OpinionRequest | null>(null);
@@ -95,12 +102,15 @@ export default function ElixHealthRequestsPage() {
   const load = useCallback(async () => {
     setError(null);
 
-    const [requestsRes, executivesRes, doctorsRes] = await Promise.all([
+    const [requestsRes, executivesRes, doctorsRes, patientsRes] = await Promise.all([
       fetchOpinionRequestsForStaff(),
-      isAdmin ? fetchPatientServiceExecutives() : Promise.resolve({ data: [] as Admin[], error: null }),
+      isAdmin ? fetchPatientServiceExecutives() : isClinicPse ? Promise.resolve({ data: [staff], error: null }) : Promise.resolve({ data: [] as Admin[], error: null }),
       isAdmin || isPse
         ? fetchAllDoctorsForAdmin()
-        : Promise.resolve({ data: [] as Doctor[], error: null })
+        : Promise.resolve({ data: [] as Doctor[], error: null }),
+      isClinicPse
+        ? fetchAllPatientsForAdmin()
+        : Promise.resolve({ data: [] as Patient[], error: null })
     ]);
 
     if (requestsRes.error) {
@@ -123,7 +133,13 @@ export default function ElixHealthRequestsPage() {
     } else if (isAdmin || isPse) {
       setDoctors(doctorsRes.data ?? []);
     }
-  }, [isAdmin, isPse, notifyPatientSelectionIfNew]);
+
+    if (patientsRes.error && isClinicPse) {
+      setError(patientsRes.error.message);
+    } else if (isClinicPse) {
+      setPatients(patientsRes.data ?? []);
+    }
+  }, [isAdmin, isClinicPse, isPse, notifyPatientSelectionIfNew, staff]);
 
   const initialLoad = useCallback(async () => {
     setLoading(true);
@@ -252,6 +268,55 @@ export default function ElixHealthRequestsPage() {
     setAssigneeId(selectedRequest.assigned_to);
   }, [drawerOpen, selectedRequest?.id, selectedRequest?.assigned_to]);
 
+  useEffect(() => {
+    if (!drawerOpen || !selectedRequest || !isClinicPse) return;
+    if (!isPendingAdminAssignment(selectedRequest)) return;
+
+    let cancelled = false;
+    const requestId = selectedRequest.id;
+
+    void (async () => {
+      setBusyId(requestId);
+      const { error: assignError } = await assignOpinionRequest(requestId, staff.id);
+      if (cancelled) return;
+      setBusyId(null);
+
+      if (assignError) {
+        setActionMessage(assignError.message);
+        return;
+      }
+
+      const assignedAt = new Date().toISOString();
+      const patch = {
+        id: requestId,
+        assigned_to: staff.id,
+        assigned_to_name: staff.full_name,
+        assigned_at: assignedAt,
+        consultation_stage: 'assigned' as const
+      };
+      patchSelectedRequest(patch);
+      setSelectedRequest((current) =>
+        current?.id === requestId ? ({ ...current, ...patch } as OpinionRequest) : current
+      );
+      setAssigneeId(staff.id);
+      void refresh();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    drawerOpen,
+    selectedRequest?.id,
+    selectedRequest?.assigned_to,
+    selectedRequest?.status,
+    isClinicPse,
+    staff.id,
+    staff.full_name,
+    patchSelectedRequest,
+    refresh
+  ]);
+
   const handleAssigneeChange = useCallback(
     (value: string) => {
       setAssigneeId(value);
@@ -262,14 +327,21 @@ export default function ElixHealthRequestsPage() {
     [selectedRequest]
   );
 
-  const openRequest = useCallback((request: OpinionRequest) => {
-    setSelectedRequest(request);
-    const draft = assigneeDraftRef.current.get(request.id);
-    setAssigneeId(request.assigned_to ?? draft ?? '');
-    setActionMessage(null);
-    setSuccessMessage(null);
-    setDrawerOpen(true);
-  }, []);
+  const openRequest = useCallback(
+    (request: OpinionRequest) => {
+      setSelectedRequest(request);
+      const draft = assigneeDraftRef.current.get(request.id);
+      const defaultAssignee =
+        request.assigned_to ??
+        draft ??
+        (isClinicPse && isPendingAdminAssignment(request) ? staff.id : '');
+      setAssigneeId(defaultAssignee);
+      setActionMessage(null);
+      setSuccessMessage(null);
+      setDrawerOpen(true);
+    },
+    [isClinicPse, staff.id]
+  );
 
   const handleDeleteRequest = useCallback(
     async (request: OpinionRequest) => {
@@ -392,6 +464,8 @@ export default function ElixHealthRequestsPage() {
         onExport={handleExport}
         onRefresh={() => void refresh()}
         refreshing={refreshing}
+        canAddRequest={canAddRequest}
+        onAddRequest={() => setAddRequestModalOpen(true)}
       />
 
       {actionMessage ? (
@@ -473,6 +547,20 @@ export default function ElixHealthRequestsPage() {
         onError={setActionMessage}
         onSuccess={setSuccessMessage}
       />
+
+      {canAddRequest ? (
+        <ClinicPseCreateRequestModal
+          opened={addRequestModalOpen}
+          onClose={() => setAddRequestModalOpen(false)}
+          staff={staff}
+          patients={patients}
+          doctors={doctors}
+          onCreated={() => {
+            setSuccessMessage('Opinion request created and assigned to you.');
+            void refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

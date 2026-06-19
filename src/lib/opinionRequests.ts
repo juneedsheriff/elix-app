@@ -16,7 +16,8 @@ import {
   generateConsultationInvoicePdfBlob
 } from './consultationInvoicePdf';
 import { doctorConsultationCurrency, getTierFeeUsd, parseConsultationTiers } from './consultationTiers';
-import { fetchDoctorByAuthUserId, fetchDoctorById } from './doctors';
+import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
+import { fetchDoctorByAuthUserId, fetchDoctorById, normalizeDoctor } from './doctors';
 import { fetchPatientByAuthUserId } from './patients';
 import {
   consultationSummaryPdfMetaFromRequest,
@@ -675,13 +676,80 @@ export type CreateRecommendationOpinionRequestInput = {
   caseDetails?: Record<string, unknown> | null;
 };
 
+type ResolveDoctorRecommendationHint = Pick<
+  OpinionRequestRecommendation,
+  'doctor_id' | 'doctor_name' | 'doctor_consultation_tiers' | 'doctor_consultation_currency'
+>;
+
+type ResolveDoctorContext = {
+  requestId?: string;
+  recommendation?: ResolveDoctorRecommendationHint;
+};
+
+function doctorFromRecommendationHint(hint: ResolveDoctorRecommendationHint): Doctor {
+  return normalizeDoctor({
+    id: hint.doctor_id,
+    full_name: hint.doctor_name?.trim() || 'Doctor',
+    specialty: '',
+    consultation_tiers: hint.doctor_consultation_tiers ?? null,
+    consultation_currency: hint.doctor_consultation_currency ?? 'USD',
+    consultation_fee: 0,
+    fee_usd: 0
+  } as Doctor);
+}
+
+async function verifyDoctorRecommendedForPatientRequest(requestId: string, doctorId: string) {
+  const { data, error } = await supabase
+    .from('opinion_request_recommendations')
+    .select('doctor_id')
+    .eq('request_id', requestId)
+    .eq('doctor_id', doctorId)
+    .maybeSingle();
+
+  return !error && Boolean(data);
+}
+
 /** Resolve doctors.id — never persist auth.users id in opinion_requests.doctor_id */
-async function resolveDoctorRecord(doctorId: string) {
-  const byId = await fetchDoctorById(doctorId);
+async function resolveDoctorRecord(doctorId: string, context?: ResolveDoctorContext) {
+  const trimmedId = doctorId.trim();
+  if (!trimmedId) {
+    return {
+      doctor: null,
+      error: { message: 'Doctor not found. doctor_id must match public.doctors.id.' }
+    };
+  }
+
+  const byId = await fetchDoctorById(trimmedId);
   if (byId.data) return { doctor: byId.data, error: null };
 
-  const byAuth = await fetchDoctorByAuthUserId(doctorId);
+  const byAuth = await fetchDoctorByAuthUserId(trimmedId);
   if (byAuth.data) return { doctor: byAuth.data, error: null };
+
+  if (context?.recommendation?.doctor_id === trimmedId) {
+    return { doctor: doctorFromRecommendationHint(context.recommendation), error: null };
+  }
+
+  if (context?.requestId) {
+    const recommended = await verifyDoctorRecommendedForPatientRequest(context.requestId, trimmedId);
+    if (recommended) {
+      const retry = await fetchDoctorById(trimmedId);
+      if (retry.data) return { doctor: retry.data, error: null };
+
+      if (context.recommendation?.doctor_id === trimmedId) {
+        return { doctor: doctorFromRecommendationHint(context.recommendation), error: null };
+      }
+
+      return {
+        doctor: doctorFromRecommendationHint({
+          doctor_id: trimmedId,
+          doctor_name: null,
+          doctor_consultation_tiers: null,
+          doctor_consultation_currency: null
+        }),
+        error: null
+      };
+    }
+  }
 
   return {
     doctor: null,
@@ -807,6 +875,139 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
   await logRequestAudit(request.id, 'request_created', 'patient', {
     metadata: { doctor_id: doctor.id, doctor_name: doctorName }
   });
+  return { data: { id: request.id }, error: null };
+}
+
+export type CreateClinicPseOpinionRequestInput = {
+  patientProfileId: string;
+  doctorId: string;
+  message: string;
+  consultationDurationMinutes?: number | null;
+  staffId: string;
+  clinicId: string;
+};
+
+/** Clinic PSE creates a patient → doctor request in their clinic workspace (auto-assigned to staff). */
+export async function createClinicPseOpinionRequest(input: CreateClinicPseOpinionRequestInput) {
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('id, auth_user_id, full_name, clinic_id, email')
+    .eq('id', input.patientProfileId)
+    .maybeSingle();
+
+  if (patientError) {
+    return { data: null, error: patientError };
+  }
+  if (!patient) {
+    return { data: null, error: { message: 'Patient not found.' } };
+  }
+  if (patient.clinic_id !== input.clinicId) {
+    return { data: null, error: { message: 'Patient is not in your clinic workspace.' } };
+  }
+
+  const { doctor, error: doctorError } = await resolveDoctorRecord(input.doctorId);
+  if (doctorError || !doctor) {
+    return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
+  }
+
+  const { available, error: availabilityError } = await isDoctorAvailableToClinic(
+    doctor.id,
+    input.clinicId
+  );
+  if (availabilityError) {
+    return { data: null, error: availabilityError };
+  }
+  if (!available) {
+    return { data: null, error: { message: 'Doctor is not in your clinic workspace.' } };
+  }
+
+  const message = input.message.trim() || 'Consultation request';
+  const durationMinutes = input.consultationDurationMinutes ?? null;
+  const consultationFeeUsd =
+    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+
+  const pricingFields =
+    durationMinutes != null
+      ? {
+          consultation_duration_minutes: durationMinutes,
+          consultation_fee_usd: consultationFeeUsd,
+          consultation_currency: doctorConsultationCurrency(doctor)
+        }
+      : {};
+
+  const assignedAt = new Date().toISOString();
+
+  const baseInsert = {
+    doctor_id: doctor.id,
+    doctor_name: doctor.full_name,
+    message,
+    patient_id: patient.auth_user_id,
+    patient_name: patient.full_name,
+    status: 'submitted' as const,
+    doctor_selection_mode: 'self_select' as const,
+    selected_doctor_id: doctor.id,
+    clinic_id: input.clinicId,
+    assigned_to: input.staffId,
+    assigned_at: assignedAt,
+    consultation_stage: 'assigned' as const,
+    ...pricingFields
+  };
+
+  let requestError = null;
+  let request: { id: string } | null = null;
+
+  const withWorkflow = await supabase
+    .from('opinion_requests')
+    .insert(baseInsert)
+    .select('id')
+    .single();
+
+  if (!withWorkflow.error && withWorkflow.data) {
+    request = withWorkflow.data;
+  } else if (isMissingDoctorSelectionModeError(withWorkflow.error)) {
+    const { doctor_selection_mode: _mode, ...withoutMode } = baseInsert;
+    const fallback = await supabase.from('opinion_requests').insert(withoutMode).select('id').single();
+    requestError = fallback.error;
+    request = fallback.data;
+  } else if (isMissingWorkflowColumnsError(withWorkflow.error)) {
+    const legacy = await supabase
+      .from('opinion_requests')
+      .insert({
+        doctor_id: doctor.id,
+        doctor_name: doctor.full_name,
+        message,
+        patient_id: patient.auth_user_id,
+        patient_name: patient.full_name,
+        status: 'submitted',
+        clinic_id: input.clinicId,
+        assigned_to: input.staffId,
+        assigned_at: assignedAt
+      })
+      .select('id')
+      .single();
+    requestError = legacy.error;
+    request = legacy.data;
+  } else {
+    requestError = withWorkflow.error;
+  }
+
+  if (requestError || !request) {
+    const hint =
+      requestError?.code === '42501' || requestError?.message?.toLowerCase().includes('permission')
+        ? ' Run npm run db:apply-clinic-pse if clinic workspace migration is missing.'
+        : '';
+    return { data: null, error: { message: `${requestError?.message ?? 'Could not create request.'}${hint}` } };
+  }
+
+  await logRequestAudit(request.id, 'request_created', 'pse', {
+    metadata: {
+      doctor_id: doctor.id,
+      doctor_name: doctor.full_name,
+      patient_profile_id: patient.id,
+      clinic_created: true
+    }
+  });
+
   return { data: { id: request.id }, error: null };
 }
 
@@ -2519,9 +2720,15 @@ export async function markRecommendationsShared(
 export async function patientSelectRecommendedDoctor(
   requestId: string,
   doctorId: string,
-  input?: { consultationDurationMinutes?: number | null }
+  input?: {
+    consultationDurationMinutes?: number | null;
+    recommendation?: ResolveDoctorRecommendationHint;
+  }
 ) {
-  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId);
+  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId, {
+    requestId,
+    recommendation: input?.recommendation
+  });
   if (doctorError || !doctor) {
     return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
   }
@@ -2560,9 +2767,15 @@ export async function patientSelectDoctorWithAvailability(
   requestId: string,
   doctorId: string,
   availability: unknown,
-  input?: { consultationDurationMinutes?: number | null }
+  input?: {
+    consultationDurationMinutes?: number | null;
+    recommendation?: ResolveDoctorRecommendationHint;
+  }
 ) {
-  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId);
+  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId, {
+    requestId,
+    recommendation: input?.recommendation
+  });
   if (doctorError || !doctor) {
     return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
   }

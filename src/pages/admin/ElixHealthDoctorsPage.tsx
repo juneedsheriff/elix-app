@@ -3,11 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Group, Modal, Select, Stack, Text } from '@mantine/core';
 import { deleteDoctorForAdmin, fetchAllDoctorsForAdmin, fetchPatientServiceExecutives } from '../../lib/admins';
 import {
+  fetchGrantedDoctorIdsForClinic,
+  buildDoctorWorkspaceLinksMap,
+  fetchDoctorWorkspaceGrantsForAdmin,
+  removeDoctorFromClinicWorkspace,
+  subscribeClinicDoctorsUpdates
+} from '../../lib/clinicDoctorRequests';
+import {
   countPendingOpinionRequestsForDoctorForAdmin,
   reassignPendingOpinionRequestsToPseForAdmin
 } from '../../lib/opinionRequests';
-import { canEditProfiles } from '../../lib/staffPermissions';
+import { canCreateDoctors, canEditProfiles, canRequestPlatformDoctors, canReviewClinicDoctorRequests, isAdministrator } from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
+import type { DoctorWorkspaceLink } from '../../types/clinicDoctorRequest';
 import type { Doctor } from '../../types/doctor';
 import DoctorsAnalyticsCards from './doctors/DoctorsAnalyticsCards';
 import DoctorsDataTable from './doctors/DoctorsDataTable';
@@ -24,6 +32,8 @@ import {
 } from './doctors/doctorsUtils';
 import { useDoctorsTableColumns } from './doctors/doctorsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import ClinicDoctorRequestsAdminPanel from './doctors/ClinicDoctorRequestsAdminPanel';
+import ClinicPseRequestDoctorModal from './doctors/ClinicPseRequestDoctorModal';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import './doctors/doctors-management.css';
 
@@ -58,10 +68,16 @@ function matchesSearch(doctor: Doctor, query: string) {
 export default function ElixHealthDoctorsPage() {
   const navigate = useNavigate();
   const staff = useElixHealthStaff();
+  const isAdmin = isAdministrator(staff);
   const canEdit = canEditProfiles(staff);
+  const canAddDoctor = canCreateDoctors(staff);
+  const canRequestDoctor = canRequestPlatformDoctors(staff);
+  const canReviewDoctorRequests = canReviewClinicDoctorRequests(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [grantedDoctorIds, setGrantedDoctorIds] = useState<Set<string>>(() => new Set());
+  const [requestDoctorModalOpen, setRequestDoctorModalOpen] = useState(false);
   const [pseExecutives, setPseExecutives] = useState<Admin[]>([]);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<DoctorQuickFilters>(DEFAULT_FILTERS);
@@ -72,31 +88,86 @@ export default function ElixHealthDoctorsPage() {
   const [deleteDoctorBusy, setDeleteDoctorBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [workspaceLinksByDoctorId, setWorkspaceLinksByDoctorId] = useState(
+    () => new Map<string, DoctorWorkspaceLink[]>()
+  );
+  const [removingLinkKey, setRemovingLinkKey] = useState<string | null>(null);
+
+  const applyDoctorsData = useCallback(
+    async (
+      doctorsRes: Awaited<ReturnType<typeof fetchAllDoctorsForAdmin>>,
+      pseRes: Awaited<ReturnType<typeof fetchPatientServiceExecutives>> | { data: Admin[]; error: null },
+      grantsRes: Awaited<ReturnType<typeof fetchGrantedDoctorIdsForClinic>> | { data: string[]; error: null },
+      workspaceGrantsRes:
+        | Awaited<ReturnType<typeof fetchDoctorWorkspaceGrantsForAdmin>>
+        | { data: DoctorWorkspaceLink[]; error: null }
+    ) => {
+      if (doctorsRes.error) {
+        setError(doctorsRes.error.message);
+        setDoctors([]);
+        setWorkspaceLinksByDoctorId(new Map());
+      } else {
+        const nextDoctors = doctorsRes.data ?? [];
+        setDoctors(nextDoctors);
+        setError(null);
+        if (isAdmin) {
+          const grants = workspaceGrantsRes.error ? [] : (workspaceGrantsRes.data ?? []);
+          setWorkspaceLinksByDoctorId(buildDoctorWorkspaceLinksMap(nextDoctors, grants));
+        } else {
+          setWorkspaceLinksByDoctorId(new Map());
+        }
+      }
+      if (pseRes.error) {
+        setPseExecutives([]);
+      } else {
+        setPseExecutives(pseRes.data ?? []);
+      }
+      if (grantsRes.error && canRequestDoctor) {
+        setGrantedDoctorIds(new Set());
+      } else if (canRequestDoctor) {
+        setGrantedDoctorIds(new Set(grantsRes.data ?? []));
+      }
+    },
+    [canRequestDoctor, isAdmin]
+  );
+
+  const fetchDoctorsData = useCallback(async () => {
+    const [doctorsRes, pseRes, grantsRes, workspaceGrantsRes] = await Promise.all([
+      fetchAllDoctorsForAdmin(),
+      isAdmin ? fetchPatientServiceExecutives() : Promise.resolve({ data: [] as Admin[], error: null }),
+      canRequestDoctor && staff.clinic_id
+        ? fetchGrantedDoctorIdsForClinic(staff.clinic_id)
+        : Promise.resolve({ data: [] as string[], error: null }),
+      isAdmin
+        ? fetchDoctorWorkspaceGrantsForAdmin()
+        : Promise.resolve({ data: [] as DoctorWorkspaceLink[], error: null })
+    ]);
+    await applyDoctorsData(doctorsRes, pseRes, grantsRes, workspaceGrantsRes);
+    return doctorsRes.error;
+  }, [applyDoctorsData, canRequestDoctor, isAdmin, staff.clinic_id]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [doctorsRes, pseRes] = await Promise.all([
-      fetchAllDoctorsForAdmin(),
-      fetchPatientServiceExecutives()
-    ]);
-    if (doctorsRes.error) {
-      setError(doctorsRes.error.message);
-      setDoctors([]);
-    } else {
-      setDoctors(doctorsRes.data ?? []);
-    }
-    if (pseRes.error) {
-      setPseExecutives([]);
-    } else {
-      setPseExecutives(pseRes.data ?? []);
-    }
+    await fetchDoctorsData();
     setLoading(false);
-  }, []);
+  }, [fetchDoctorsData]);
+
+  const refresh = useCallback(async () => {
+    await fetchDoctorsData();
+  }, [fetchDoctorsData]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isAdmin && !(canRequestDoctor && staff.clinic_id)) return;
+    return subscribeClinicDoctorsUpdates(() => void refresh(), {
+      clinicId: staff.clinic_id,
+      isAdmin
+    });
+  }, [canRequestDoctor, isAdmin, refresh, staff.clinic_id]);
 
   const analytics = useMemo(() => computeDoctorAnalytics(doctors), [doctors]);
 
@@ -200,8 +271,52 @@ export default function ElixHealthDoctorsPage() {
     setDoctors((current) => current.filter((row) => row.id !== doctor.id));
   }, [deleteDoctor, deletePendingCasesCount, assignToPseId, pseExecutives]);
 
+  const existingDoctorIds = useMemo(() => new Set(doctors.map((doctor) => doctor.id)), [doctors]);
+
+  const handleRemoveFromClinic = useCallback(
+    async (doctor: Doctor, link: DoctorWorkspaceLink) => {
+      const label = link.linkType === 'granted' ? 'remove platform access' : 'remove this clinic doctor';
+      if (
+        !window.confirm(
+          `${link.linkType === 'granted' ? 'Remove' : 'Delete'} ${doctor.full_name} from ${link.clinicName}? This will ${label} for the clinic PSE workspace.`
+        )
+      ) {
+        return;
+      }
+
+      const linkKey = `${link.doctorId}:${link.clinicId}:${link.linkType}`;
+      setRemovingLinkKey(linkKey);
+      setActionMessage(null);
+      setSuccessMessage(null);
+
+      const { removedAs, error: removeError } = await removeDoctorFromClinicWorkspace(
+        doctor.id,
+        link.clinicId
+      );
+      setRemovingLinkKey(null);
+
+      if (removeError) {
+        setActionMessage(removeError.message);
+        return;
+      }
+
+      setSuccessMessage(
+        removedAs === 'owned'
+          ? `${doctor.full_name} was removed from ${link.clinicName}.`
+          : `${doctor.full_name} was unlinked from ${link.clinicName}.`
+      );
+      void load();
+    },
+    [load]
+  );
+
   const columns = useDoctorsTableColumns({
     canEdit,
+    isAdmin,
+    grantedDoctorIds: canRequestDoctor ? grantedDoctorIds : undefined,
+    workspaceLinksByDoctorId: isAdmin ? workspaceLinksByDoctorId : undefined,
+    onRemoveFromClinic: isAdmin ? (doctor, link) => void handleRemoveFromClinic(doctor, link) : undefined,
+    removingLinkKey,
     onDeleteDoctor: canEdit ? (doctor) => void openDeleteDoctor(doctor) : undefined
   });
 
@@ -230,11 +345,17 @@ export default function ElixHealthDoctorsPage() {
     <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
       <DoctorsPageHeader
         totalCount={doctors.length}
-        canEdit={canEdit}
+        canEdit={canAddDoctor}
+        canRequestPlatformDoctor={canRequestDoctor}
         onOpenFilters={() => setDrawerOpen(true)}
         onExport={handleExport}
         onAddDoctor={() => navigate(ELIX_HEALTH_PATHS.doctorNew)}
+        onRequestPlatformDoctor={() => setRequestDoctorModalOpen(true)}
       />
+
+      {canReviewDoctorRequests ? (
+        <ClinicDoctorRequestsAdminPanel onReviewed={() => void load()} />
+      ) : null}
 
       {actionMessage ? (
         <Alert color='red' radius='md' onClose={() => setActionMessage(null)} withCloseButton>
@@ -368,6 +489,19 @@ export default function ElixHealthDoctorsPage() {
           </Group>
         </Stack>
       </Modal>
+
+      {canRequestDoctor ? (
+        <ClinicPseRequestDoctorModal
+          opened={requestDoctorModalOpen}
+          onClose={() => setRequestDoctorModalOpen(false)}
+          staff={staff}
+          existingDoctorIds={existingDoctorIds}
+          onSubmitted={() => {
+            setSuccessMessage('Doctor request submitted. An administrator will review it shortly.');
+            void load();
+          }}
+        />
+      ) : null}
 
     </div>
   );

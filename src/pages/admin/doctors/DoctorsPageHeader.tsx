@@ -1,21 +1,25 @@
 import { memo } from 'react';
 import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconDownload, IconFilter, IconPlus } from '@tabler/icons-react';
+import { IconDownload, IconFilter, IconPlus, IconSearch } from '@tabler/icons-react';
 
 type DoctorsPageHeaderProps = {
   totalCount: number;
   canEdit: boolean;
+  canRequestPlatformDoctor?: boolean;
   onOpenFilters: () => void;
   onExport: () => void;
   onAddDoctor: () => void;
+  onRequestPlatformDoctor?: () => void;
 };
 
 function DoctorsPageHeader({
   totalCount,
   canEdit,
+  canRequestPlatformDoctor,
   onOpenFilters,
   onExport,
-  onAddDoctor
+  onAddDoctor,
+  onRequestPlatformDoctor
 }: DoctorsPageHeaderProps) {
   return (
     <header className='doctors-mgmt-header'>
@@ -48,6 +52,18 @@ function DoctorsPageHeader({
         >
           Export
         </Button>
+
+        {canRequestPlatformDoctor && onRequestPlatformDoctor ? (
+          <Button
+            variant='default'
+            radius='md'
+            className='doctors-mgmt-header__ghost'
+            leftSection={<IconSearch size={18} />}
+            onClick={onRequestPlatformDoctor}
+          >
+            Request doctor
+          </Button>
+        ) : null}
 
         {canEdit ? (
           <Button

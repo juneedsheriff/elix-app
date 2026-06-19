@@ -6,12 +6,81 @@ import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
 import { supabase } from './supabase';
 
-const adminColumns = 'id, auth_user_id, email, full_name, role, is_active, created_at, updated_at';
+const ADMIN_COLUMNS_BASE =
+  'id, auth_user_id, email, full_name, role, is_active, created_at, updated_at';
+
+const ADMIN_COLUMNS_WITH_CLINIC = `${ADMIN_COLUMNS_BASE}, clinic_id, pse_clinics(name)`;
+
+function isMissingClinicSchemaError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('clinic_id') ||
+    message.includes('pse_clinics') ||
+    message.includes('patient_service_executive_clinic') ||
+    error.code === '42703' ||
+    error.code === 'PGRST200'
+  );
+}
+
+type AdminRow = Admin & { pse_clinics?: { name: string } | { name: string }[] | null };
+
+async function queryAdminSingle(
+  applyFilters: (query: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
+) {
+  const extended = await applyFilters(supabase.from('admins').select(ADMIN_COLUMNS_WITH_CLINIC)).maybeSingle();
+  if (!extended.error) return extended;
+
+  if (!isMissingClinicSchemaError(extended.error)) {
+    return extended;
+  }
+
+  return applyFilters(supabase.from('admins').select(ADMIN_COLUMNS_BASE)).maybeSingle();
+}
+
+async function queryAdminList(
+  applyFilters: (query: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
+) {
+  const extended = await applyFilters(supabase.from('admins').select(ADMIN_COLUMNS_WITH_CLINIC));
+  if (!extended.error) return extended;
+
+  if (!isMissingClinicSchemaError(extended.error)) {
+    return extended;
+  }
+
+  return applyFilters(supabase.from('admins').select(ADMIN_COLUMNS_BASE));
+}
 
 const patientAdminColumns =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, created_at, updated_at';
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, clinic_id, created_at, updated_at';
+
+const patientAdminColumnsWithClinic = `${patientAdminColumns}, pse_clinics(name)`;
+
+type PatientAdminRow = Patient & { pse_clinics?: { name: string } | { name: string }[] | null };
+
+function mapPatientAdminRow(row: PatientAdminRow): Patient {
+  const clinicRef = row.pse_clinics;
+  const clinicName = Array.isArray(clinicRef) ? clinicRef[0]?.name : clinicRef?.name ?? null;
+  const { pse_clinics: _clinic, ...rest } = row;
+  return {
+    ...rest,
+    pse_clinic_name: clinicName
+  };
+}
 
 const doctorAdminColumns = DOCTOR_PROFILE_COLUMNS;
+
+type DoctorAdminRow = Doctor & { pse_clinics?: { name: string } | { name: string }[] | null };
+
+function mapDoctorAdminRow(row: DoctorAdminRow): Doctor {
+  const clinicRef = row.pse_clinics;
+  const clinicName = Array.isArray(clinicRef) ? clinicRef[0]?.name : clinicRef?.name ?? null;
+  const { pse_clinics: _clinic, ...rest } = row;
+  return normalizeDoctor({
+    ...rest,
+    pse_clinic_name: clinicName
+  } as Doctor);
+}
 
 export type { AdminDoctorUpdateInput };
 
@@ -33,59 +102,124 @@ export type AdminPatientUpdateInput = {
 };
 
 export async function fetchAdminByAuthUserId(authUserId: string) {
-  const result = await supabase
-    .from('admins')
-    .select(adminColumns)
-    .eq('auth_user_id', authUserId)
-    .eq('is_active', true)
-    .maybeSingle();
+  const result = await queryAdminSingle((query) =>
+    query.eq('auth_user_id', authUserId).eq('is_active', true)
+  );
 
   if (result.error) return { data: null, error: result.error };
-  return { data: result.data ? normalizeAdmin(result.data as Admin) : null, error: null };
+  return { data: result.data ? normalizeAdmin(result.data as AdminRow) : null, error: null };
 }
 
 export async function fetchAdminByEmail(email: string) {
-  const result = await supabase
-    .from('admins')
-    .select(adminColumns)
-    .ilike('email', email.trim())
-    .eq('is_active', true)
-    .maybeSingle();
+  const result = await queryAdminSingle((query) =>
+    query.ilike('email', email.trim()).eq('is_active', true)
+  );
 
   if (result.error) return { data: null, error: result.error };
-  return { data: result.data ? normalizeAdmin(result.data as Admin) : null, error: null };
+  return { data: result.data ? normalizeAdmin(result.data as AdminRow) : null, error: null };
 }
 
 export async function fetchAllAdmins() {
-  const result = await supabase
-    .from('admins')
-    .select(adminColumns)
-    .order('created_at', { ascending: true });
+  const result = await queryAdminList((query) => query.order('created_at', { ascending: true }));
 
   if (result.error) return { data: null, error: result.error };
-  return { data: (result.data ?? []).map(normalizeAdmin), error: null };
+  return { data: (result.data ?? []).map((row) => normalizeAdmin(row as AdminRow)), error: null };
 }
 
-export async function fetchPatientServiceExecutives() {
-  const result = await supabase
-    .from('admins')
-    .select(adminColumns)
-    .eq('role', 'patient_service_executive')
-    .eq('is_active', true)
-    .order('full_name', { ascending: true });
+export async function fetchPatientServiceExecutives(clinicOnly = false) {
+  const role = clinicOnly ? 'patient_service_executive_clinic' : 'patient_service_executive';
+  const result = await queryAdminList((query) =>
+    query.eq('role', role).eq('is_active', true).order('full_name', { ascending: true })
+  );
 
-  if (result.error) return { data: null, error: result.error };
-  return { data: (result.data ?? []).map(normalizeAdmin), error: null };
+  if (result.error) {
+    if (clinicOnly && isMissingClinicSchemaError(result.error)) {
+      return { data: [], error: null };
+    }
+    return { data: null, error: result.error };
+  }
+  return { data: (result.data ?? []).map((row) => normalizeAdmin(row as AdminRow)), error: null };
 }
 
-function normalizeAdmin(row: Admin): Admin {
+export async function createPatientForAdmin(
+  input: AdminPatientUpdateInput,
+  options?: { clinicId?: string | null }
+) {
+  const row = {
+    full_name: input.full_name.trim(),
+    email: input.email.trim(),
+    phone: input.phone?.trim() || null,
+    date_of_birth: input.date_of_birth || null,
+    gender: input.gender?.trim() || null,
+    blood_group: input.blood_group?.trim() || null,
+    country: input.country?.trim() || null,
+    city: input.city?.trim() || null,
+    allergies: input.allergies?.trim() || null,
+    current_medications: input.current_medications?.trim() || null,
+    insurance_provider: input.insurance_provider?.trim() || null,
+    emergency_contact_name: input.emergency_contact_name?.trim() || null,
+    emergency_contact_phone: input.emergency_contact_phone?.trim() || null,
+    preferred_language: input.preferred_language.trim() || 'English',
+    clinic_id: options?.clinicId ?? null,
+    login_disabled: true
+  };
+
+  const { data, error } = await supabase.from('patients').insert(row).select(patientAdminColumns).single();
+
+  if (error) {
+    const message =
+      error.code === '23505'
+        ? 'A patient with this email already exists.'
+        : error.message.includes('patients_insert_clinic_pse') || error.code === '42501'
+          ? `${error.message} Run supabase/migrations/045_clinic_pse.sql (npm run db:apply-clinic-pse).`
+          : error.message;
+    return { data: null, error: { message } };
+  }
+
+  if (!data) {
+    return { data: null, error: { message: 'Patient was created but could not be reloaded.' } };
+  }
+
+  return { data: data as Patient, error: null };
+}
+
+function normalizeAdmin(row: AdminRow): Admin {
+  const clinicJoin = row.pse_clinics;
+  const clinicName = Array.isArray(clinicJoin) ? clinicJoin[0]?.name ?? null : clinicJoin?.name ?? null;
+  const role: Admin['role'] =
+    row.role === 'patient_service_executive_clinic'
+      ? 'patient_service_executive_clinic'
+      : row.role === 'patient_service_executive'
+        ? 'patient_service_executive'
+        : 'administrator';
+
   return {
-    ...row,
-    role: row.role === 'patient_service_executive' ? 'patient_service_executive' : 'administrator'
+    id: row.id,
+    auth_user_id: row.auth_user_id,
+    email: row.email,
+    full_name: row.full_name,
+    role,
+    clinic_id: row.clinic_id ?? null,
+    clinic_name: clinicName,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    updated_at: row.updated_at
   };
 }
 
 export async function fetchAllPatientsForAdmin() {
+  const withClinic = await supabase
+    .from('patients')
+    .select(patientAdminColumnsWithClinic)
+    .order('created_at', { ascending: false });
+
+  if (!withClinic.error) {
+    return {
+      data: (withClinic.data ?? []).map((row) => mapPatientAdminRow(row as PatientAdminRow)),
+      error: null
+    };
+  }
+
   const result = await supabase
     .from('patients')
     .select(patientAdminColumns)
@@ -96,6 +230,19 @@ export async function fetchAllPatientsForAdmin() {
 }
 
 export async function fetchAllDoctorsForAdmin() {
+  const withClinic = await supabase
+    .from('doctors')
+    .select(`${doctorAdminColumns}, pse_clinics(name)`)
+    .is('deleted_at', null)
+    .order('full_name', { ascending: true });
+
+  if (!withClinic.error) {
+    return {
+      data: (withClinic.data ?? []).map((row) => mapDoctorAdminRow(row as DoctorAdminRow)),
+      error: null
+    };
+  }
+
   const result = await supabase
     .from('doctors')
     .select(doctorAdminColumns)
@@ -109,10 +256,14 @@ export async function fetchAllDoctorsForAdmin() {
   };
 }
 
-export async function createDoctorForAdmin(input: AdminDoctorUpdateInput) {
+export async function createDoctorForAdmin(
+  input: AdminDoctorUpdateInput,
+  options?: { clinicId?: string | null }
+) {
   const row = {
     ...adminInputToDbRow(input),
-    is_visible: true,
+    is_visible: options?.clinicId ? false : true,
+    clinic_id: options?.clinicId ?? null,
     login_disabled: false
   };
 

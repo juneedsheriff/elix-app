@@ -1,4 +1,4 @@
-export type AdminRole = 'administrator' | 'patient_service_executive';
+export type AdminRole = 'administrator' | 'patient_service_executive' | 'patient_service_executive_clinic';
 
 export type Admin = {
   id: string;
@@ -6,6 +6,8 @@ export type Admin = {
   email: string;
   full_name: string;
   role: AdminRole;
+  clinic_id: string | null;
+  clinic_name: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

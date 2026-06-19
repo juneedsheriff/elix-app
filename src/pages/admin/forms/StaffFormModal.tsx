@@ -16,6 +16,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<AdminRole>('patient_service_executive');
+  const [clinicName, setClinicName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
     setFullName(staff?.full_name ?? '');
     setEmail(staff?.email ?? '');
     setRole(staff?.role ?? 'patient_service_executive');
+    setClinicName('');
     setPassword('');
     setConfirmPassword('');
     setError(null);
@@ -80,6 +82,11 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
       }
     }
 
+    if (!isEdit && role === 'patient_service_executive_clinic' && !clinicName.trim()) {
+      setError('Enter a clinic name for this account.');
+      return;
+    }
+
     setBusy(true);
 
     if (isEdit) {
@@ -105,7 +112,8 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
         full_name: trimmedName,
         email: trimmedEmail,
         role,
-        password
+        password,
+        clinic_name: role === 'patient_service_executive_clinic' ? clinicName.trim() : undefined
       });
       setBusy(false);
 
@@ -164,8 +172,23 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                 <span>Role</span>
                 <select value={role} onChange={(e) => setRole(e.target.value as AdminRole)} disabled={busy}>
                   <option value='patient_service_executive'>Patient Service Executive</option>
+                  <option value='patient_service_executive_clinic'>Patient Service Executive (clinic)</option>
                   <option value='administrator'>Administrator</option>
                 </select>
+              </label>
+            ) : null}
+
+            {!isEdit && role === 'patient_service_executive_clinic' ? (
+              <label className='elixhealth-field elixhealth-field--full'>
+                <span>Clinic name</span>
+                <input
+                  type='text'
+                  value={clinicName}
+                  onChange={(e) => setClinicName(e.target.value)}
+                  placeholder='e.g. City Care Clinic'
+                  required
+                  disabled={busy}
+                />
               </label>
             ) : null}
 

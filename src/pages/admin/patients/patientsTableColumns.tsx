@@ -134,6 +134,37 @@ export function usePatientsTableColumns({
           );
         }
       },
+      ...(isAdmin
+        ? [
+            {
+              id: 'pseWorkspace',
+              header: 'PSE clinic',
+              size: 200,
+              minSize: 160,
+              enableSorting: false,
+              Cell: ({ row }: { row: { original: Patient } }) => {
+                const patient = row.original;
+                if (!patient.clinic_id) {
+                  return (
+                    <Text size='sm' c='dimmed' className='doctors-mgmt-muted'>
+                      Platform
+                    </Text>
+                  );
+                }
+                return (
+                  <Stack gap={2}>
+                    <Text size='sm' fw={600}>
+                      {displayCell(patient.pse_clinic_name) || 'Clinic workspace'}
+                    </Text>
+                    <Badge size='xs' variant='light' color='teal' radius='sm'>
+                      Clinic patient
+                    </Badge>
+                  </Stack>
+                );
+              }
+            } as MRT_ColumnDef<Patient>
+          ]
+        : []),
       {
         accessorKey: 'blood_group',
         header: 'Blood group',

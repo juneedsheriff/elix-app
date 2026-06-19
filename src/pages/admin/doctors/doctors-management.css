@@ -962,3 +962,33 @@ body.doctors-mgmt-table-fullscreen-open {
     width: 100%;
   }
 }
+
+.doctors-mgmt-panel-card {
+  margin-bottom: 1rem;
+}
+
+.elixhealth-doctor-search-option {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.elixhealth-doctor-search-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand-cyan) 40%, var(--border));
+  background: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface));
+}
+
+.elixhealth-doctor-search-option--selected {
+  border-color: var(--brand-cyan);
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface));
+}
+
+.elixhealth-doctor-search-option:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

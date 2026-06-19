@@ -138,14 +138,7 @@ export default function ElixHealthApp() {
       >
         <Route index element={<ElixHealthOverviewPage />} />
         <Route path='doctors' element={<ElixHealthDoctorsPage />} />
-        <Route
-          path='doctor/new'
-          element={
-            <AdministratorOnly>
-              <ElixHealthDoctorCreatePage />
-            </AdministratorOnly>
-          }
-        />
+        <Route path='doctor/new' element={<ElixHealthDoctorCreatePage />} />
         <Route path='doctor' element={<ElixHealthDoctorEditPage />} />
         <Route path='patients' element={<ElixHealthPatientsPage />} />
         <Route path='patient' element={<ElixHealthPatientEditPage />} />
