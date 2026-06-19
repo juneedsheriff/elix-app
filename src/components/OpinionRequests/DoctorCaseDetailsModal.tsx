@@ -69,7 +69,7 @@ export default function DoctorCaseDetailsModal({
   const handleGiveConsultation = useCallback(() => {
     if (!request || !onNavigate) return;
     onClose();
-    openDoctorConsultation(request.id, onNavigate, returnScreen);
+    openDoctorConsultation(request.id, onNavigate, returnScreen, { openCaseContext: true });
   }, [onClose, onNavigate, request, returnScreen]);
 
   if (!open || !request) return null;

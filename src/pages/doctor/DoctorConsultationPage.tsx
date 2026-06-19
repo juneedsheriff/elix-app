@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, FileUp, Loader2, Eraser } from 'lucide-react';
+import { ArrowLeft, ClipboardList, FileUp, Loader2, Eraser } from 'lucide-react';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
 import ConsultationSummaryPdfView from '../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
+import DoctorCaseDetailsModal from '../../components/OpinionRequests/DoctorCaseDetailsModal';
 import DoctorPatientCaseDetailsSections from '../../components/OpinionRequests/DoctorPatientCaseDetailsSections';
 import '../../components/OpinionRequests/doctor-patient-case-details-sections.css';
 import {
@@ -19,6 +20,7 @@ import { useMicrophonePermissionGate } from '../../lib/speech/useMicrophonePermi
 import { consumeReturnScreen } from '../../lib/navigation/appRoutes';
 import {
   clearDoctorConsultationRequestId,
+  consumeDoctorConsultationOpenCaseContext,
   getDoctorConsultationRequestId
 } from '../../lib/navigation/doctorConsultationNav';
 import {
@@ -55,6 +57,10 @@ export default function DoctorConsultationPage({
   const consultationRequestIdRef = useRef(getDoctorConsultationRequestId());
 
   const [returnScreen] = useState(() => consumeReturnScreen() ?? 'case-review');
+  const [caseContextOpen, setCaseContextOpen] = useState(() => {
+    if (!consumeDoctorConsultationOpenCaseContext()) return false;
+    return typeof document !== 'undefined' && Boolean(document.querySelector('.mobile-shell'));
+  });
 
   const handleDictated = useCallback((fieldKey: keyof ConsultationSummaryFormValues, rawTranscript: string) => {
     setValues((prev) => ({
@@ -309,16 +315,38 @@ export default function DoctorConsultationPage({
             className='secondary-btn doctor-consultation-page__back'
             onClick={goBack}
             disabled={submitting}
+            aria-label='Back to requests'
           >
             <ArrowLeft size={18} aria-hidden />
           </button>
-          <h2 className='doctor-consultation-page__title'>Consultation</h2>
-          {request ? (
-            <p className='doctor-consultation-page__subtitle muted'>
-              {request.patient_name ?? 'Patient'}
-              {request.patient_email ? ` · ${request.patient_email}` : ''}
-            </p>
-          ) : null}
+          <div className='doctor-consultation-page__heading-titles'>
+            <h2 className='doctor-consultation-page__title'>Consultation</h2>
+            {request ? (
+              <p className='doctor-consultation-page__subtitle muted'>
+                <span className='doctor-consultation-page__patient-name'>
+                  {request.patient_name ?? 'Patient'}
+                </span>
+            
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className='doctor-consultation-page__case-context-action'>
+          <button
+            type='button'
+            className='secondary-btn doctor-consultation-page__case-context-btn'
+            onClick={() => setCaseContextOpen(true)}
+            disabled={loading || !request}
+            aria-haspopup='dialog'
+            aria-expanded={caseContextOpen}
+            aria-describedby='doctor-consultation-case-context-hint'
+          >
+            <ClipboardList size={18} aria-hidden />
+            Patient case details
+          </button>
+          <p id='doctor-consultation-case-context-hint' className='doctor-consultation-page__case-context-hint muted'>
+            Click to view case details
+          </p>
         </div>
       </header>
 
@@ -573,6 +601,16 @@ export default function DoctorConsultationPage({
           )}
           </div>
         </div>
+      ) : null}
+
+      {request ? (
+        <DoctorCaseDetailsModal
+          open={caseContextOpen}
+          request={request}
+          onClose={() => setCaseContextOpen(false)}
+          onRequestUpdated={setRequest}
+          onOpenError={setError}
+        />
       ) : null}
     </div>
   );

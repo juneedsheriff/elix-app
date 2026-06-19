@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorIncomingRequestsTable from './DoctorIncomingRequestsTable';
@@ -65,6 +66,10 @@ export default function OpinionRequestsPanel({
   onNavigate,
   doctorReturnScreen = 'case-review'
 }: OpinionRequestsPanelProps) {
+  const location = useLocation();
+  const isElixHealthWorkspace =
+    view === 'doctor' && location.pathname.startsWith('/elixhealth/workspace');
+
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,8 +144,14 @@ export default function OpinionRequestsPanel({
   }, []);
 
   return (
-    <div className='screen-grid doctors-screen'>
-      <section className='section-card'>
+    <div
+      className={
+        isElixHealthWorkspace
+          ? 'screen-grid doctors-screen doctor-cases-workspace elixhealth-datatable-page'
+          : 'screen-grid doctors-screen'
+      }
+    >
+      <section className={isElixHealthWorkspace ? 'section-card doctor-cases-workspace__card' : 'section-card'}>
         <div className='section-head'>
           <h3>
             <ClipboardList size={22} className='inline-icon' aria-hidden /> {title}

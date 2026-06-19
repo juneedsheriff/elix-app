@@ -3847,6 +3847,104 @@ function createDebouncedLiveRefresh(onChange: () => void, debounceMs: number) {
   return { scheduleRefresh, cancel };
 }
 
+type OpinionRequestLiveSubscriber = {
+  scheduleRefresh: (payload?: unknown, options?: { immediate?: boolean }) => void;
+  applyCaseDetailsHint: (payload: Record<string, unknown> | undefined) => void;
+  cancel: () => void;
+};
+
+const opinionRequestLiveSubscribers = new Map<string, Set<OpinionRequestLiveSubscriber>>();
+const opinionRequestLiveChannels = new Map<string, ReturnType<typeof supabase.channel>>();
+
+function notifyOpinionRequestLiveSubscribers(
+  requestId: string,
+  invoke: (subscriber: OpinionRequestLiveSubscriber) => void
+) {
+  const subscribers = opinionRequestLiveSubscribers.get(requestId);
+  if (!subscribers) return;
+  for (const subscriber of subscribers) {
+    invoke(subscriber);
+  }
+}
+
+function ensureOpinionRequestLiveChannel(requestId: string) {
+  if (opinionRequestLiveChannels.has(requestId)) return;
+
+  const channel = supabase
+    .channel(opinionRequestLiveChannelName(requestId), {
+      config: { broadcast: { ack: false } }
+    })
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'opinion_requests',
+        filter: `id=eq.${requestId}`
+      },
+      (payload) => {
+        const row = (payload as { new?: Record<string, unknown> | null }).new;
+        if (row && isCaseDetailsRealtimePayload(payload)) {
+          notifyOpinionRequestLiveSubscribers(requestId, (subscriber) => {
+            subscriber.applyCaseDetailsHint(row);
+          });
+        }
+        notifyOpinionRequestLiveSubscribers(requestId, (subscriber) => {
+          subscriber.scheduleRefresh(payload);
+        });
+      }
+    )
+    .on('broadcast', { event: 'case_details_updated' }, ({ payload }) => {
+      notifyOpinionRequestLiveSubscribers(requestId, (subscriber) => {
+        subscriber.applyCaseDetailsHint(payload as Record<string, unknown> | undefined);
+        subscriber.scheduleRefresh(undefined, { immediate: true });
+      });
+    })
+    .on('broadcast', { event: 'request_refresh' }, () => {
+      notifyOpinionRequestLiveSubscribers(requestId, (subscriber) => {
+        subscriber.scheduleRefresh(undefined, { immediate: true });
+      });
+    })
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'opinion_request_recommendations',
+        filter: `request_id=eq.${requestId}`
+      },
+      () => {
+        notifyOpinionRequestLiveSubscribers(requestId, (subscriber) => {
+          subscriber.scheduleRefresh();
+        });
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'consultation_summaries',
+        filter: `request_id=eq.${requestId}`
+      },
+      () => {
+        notifyOpinionRequestLiveSubscribers(requestId, (subscriber) => {
+          subscriber.scheduleRefresh();
+        });
+      }
+    )
+    .subscribe();
+
+  opinionRequestLiveChannels.set(requestId, channel);
+}
+
+function teardownOpinionRequestLiveChannel(requestId: string) {
+  const channel = opinionRequestLiveChannels.get(requestId);
+  if (!channel) return;
+  void supabase.removeChannel(channel);
+  opinionRequestLiveChannels.delete(requestId);
+}
+
 /** Live updates for a single request detail view (recommendations, stage, summary). */
 export function subscribeOpinionRequestLiveUpdates(
   requestId: string,
@@ -3864,58 +3962,27 @@ export function subscribeOpinionRequestLiveUpdates(
     });
   };
 
-  const channel = supabase
-    .channel(opinionRequestLiveChannelName(requestId), {
-      config: { broadcast: { ack: false } }
-    })
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'opinion_requests',
-        filter: `id=eq.${requestId}`
-      },
-      (payload) => {
-        const row = (payload as { new?: Record<string, unknown> | null }).new;
-        if (row && isCaseDetailsRealtimePayload(payload)) {
-          applyCaseDetailsHint(row);
-        }
-        scheduleRefresh(payload);
-      }
-    )
-    .on('broadcast', { event: 'case_details_updated' }, ({ payload }) => {
-      applyCaseDetailsHint(payload as Record<string, unknown> | undefined);
-      scheduleRefresh(undefined, { immediate: true });
-    })
-    .on('broadcast', { event: 'request_refresh' }, () =>
-      scheduleRefresh(undefined, { immediate: true })
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'opinion_request_recommendations',
-        filter: `request_id=eq.${requestId}`
-      },
-      () => scheduleRefresh()
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'consultation_summaries',
-        filter: `request_id=eq.${requestId}`
-      },
-      () => scheduleRefresh()
-    )
-    .subscribe();
+  let subscribers = opinionRequestLiveSubscribers.get(requestId);
+  if (!subscribers) {
+    subscribers = new Set();
+    opinionRequestLiveSubscribers.set(requestId, subscribers);
+  }
+
+  const subscriber: OpinionRequestLiveSubscriber = {
+    scheduleRefresh,
+    applyCaseDetailsHint,
+    cancel
+  };
+  subscribers.add(subscriber);
+  ensureOpinionRequestLiveChannel(requestId);
 
   return () => {
     cancel();
-    void supabase.removeChannel(channel);
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) {
+      opinionRequestLiveSubscribers.delete(requestId);
+      teardownOpinionRequestLiveChannel(requestId);
+    }
   };
 }
 
