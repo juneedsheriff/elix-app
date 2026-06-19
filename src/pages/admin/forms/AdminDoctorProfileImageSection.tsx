@@ -16,6 +16,7 @@ type AdminDoctorProfileImageSectionProps = {
   displayName?: string;
   disabled?: boolean;
   readOnly?: boolean;
+  required?: boolean;
 };
 
 function initialsFromName(name: string): string {
@@ -30,7 +31,8 @@ export default function AdminDoctorProfileImageSection({
   onChange,
   displayName = '',
   disabled = false,
-  readOnly = false
+  readOnly = false,
+  required = false
 }: AdminDoctorProfileImageSectionProps) {
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +72,12 @@ export default function AdminDoctorProfileImageSection({
     <section className='admin-doctor-profile-image' aria-labelledby={`${inputId}-heading`}>
       <h3 id={`${inputId}-heading`} className='elixhealth-form-section-title'>
         Profile photo
+        {required ? (
+          <span className='elixhealth-required' aria-hidden='true'>
+            {' '}
+            *
+          </span>
+        ) : null}
       </h3>
 
       <div className='admin-doctor-profile-image__layout'>

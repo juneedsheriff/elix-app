@@ -2,7 +2,16 @@ import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { createDoctorForAdmin } from '../../../lib/admins';
 import { emptyAdminDoctorInput, validateAdminDoctorInput } from '../../../lib/doctorProfile';
+import { DOCTOR_SPECIALTY_OPTIONS } from '../../../lib/doctorSpecialtyOptions';
+import {
+  CONSULTATION_CURRENCY_OPTIONS,
+  consultationCurrencySymbol,
+  normalizeConsultationCurrency
+} from '../../../lib/consultationCurrency';
+import { parsePreferredLanguages } from '../../../lib/patientProfileOptions';
+import PreferredLanguageMultiSelect from '../../../components/patient/PreferredLanguageMultiSelect';
 import AdminDoctorProfileImageSection from './AdminDoctorProfileImageSection';
+import { FieldLabel, RequiredMark } from './adminDoctorFormUi';
 import type { AdminDoctorUpdateInput, Doctor } from '../../../types/doctor';
 
 type CreateTab = 'profile' | 'clinic';
@@ -86,12 +95,13 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
               displayName={form.full_name}
               onChange={(url) => setField('image_url', url)}
               disabled={busy}
+              required
             />
 
             <h3 className='elixhealth-form-section-title'>Personal</h3>
             <div className='elixhealth-form-grid'>
               <label className='elixhealth-field'>
-                <span>Full name</span>
+                <FieldLabel required>Full name</FieldLabel>
                 <input
                   type='text'
                   value={form.full_name}
@@ -100,9 +110,11 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                 />
               </label>
               <label className='elixhealth-field'>
-                <span>Gender</span>
-                <select value={form.gender ?? ''} onChange={(e) => setField('gender', e.target.value || null)}>
-                  <option value=''>—</option>
+                <FieldLabel required>Gender</FieldLabel>
+                <select value={form.gender ?? ''} onChange={(e) => setField('gender', e.target.value || null)} required>
+                  <option value='' disabled>
+                    Please select
+                  </option>
                   <option value='Male'>Male</option>
                   <option value='Female'>Female</option>
                   <option value='Other'>Other</option>
@@ -114,11 +126,10 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                   type='tel'
                   value={form.mobile_no}
                   onChange={(e) => setField('mobile_no', e.target.value)}
-                  required
                 />
               </label>
               <label className='elixhealth-field'>
-                <span>Email ID</span>
+                <FieldLabel required>Email ID</FieldLabel>
                 <input
                   type='email'
                   value={form.email}
@@ -131,19 +142,21 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
             <h3 className='elixhealth-form-section-title'>Professional details</h3>
             <div className='elixhealth-form-grid'>
               <label className='elixhealth-field'>
-                <span>Medical license no.</span>
+                <FieldLabel required>Medical license no.</FieldLabel>
                 <input
                   type='text'
                   value={form.medical_license_no ?? ''}
                   onChange={(e) => setField('medical_license_no', e.target.value || null)}
+                  required
                 />
               </label>
               <label className='elixhealth-field'>
-                <span>Qualification</span>
+                <FieldLabel required>Qualification</FieldLabel>
                 <input
                   type='text'
                   value={form.qualification ?? ''}
                   onChange={(e) => setField('qualification', e.target.value || null)}
+                  required
                 />
               </label>
               <label className='elixhealth-field'>
@@ -155,13 +168,21 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                 />
               </label>
               <label className='elixhealth-field'>
-                <span>Specialty</span>
-                <input
-                  type='text'
+                <FieldLabel required>Specialty</FieldLabel>
+                <select
                   value={form.specialty}
                   onChange={(e) => setField('specialty', e.target.value)}
                   required
-                />
+                >
+                  <option value='' disabled>
+                    Please select
+                  </option>
+                  {DOCTOR_SPECIALTY_OPTIONS.map((specialty) => (
+                    <option key={specialty} value={specialty}>
+                      {specialty}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className='elixhealth-field'>
                 <span>Specialization</span>
@@ -171,15 +192,19 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                   onChange={(e) => setField('specialization', e.target.value || null)}
                 />
               </label>
-              <label className='elixhealth-field'>
-                <span>Languages</span>
-                <input
-                  type='text'
-                  value={form.languages}
-                  onChange={(e) => setField('languages', e.target.value)}
-                  required
+              <div className='elixhealth-field elixhealth-field--full'>
+                <PreferredLanguageMultiSelect
+                  label={
+                    <>
+                      Languages
+                      <RequiredMark />
+                    </>
+                  }
+                  value={parsePreferredLanguages(form.languages)}
+                  onChange={(languages) => setField('languages', languages.join(', '))}
+                  disabled={busy}
                 />
-              </label>
+              </div>
             </div>
 
             <h3 className='elixhealth-form-section-title'>Profile details</h3>
@@ -206,7 +231,6 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                   type='text'
                   value={form.clinic_name}
                   onChange={(e) => setField('clinic_name', e.target.value)}
-                  required
                 />
               </label>
               <label className='elixhealth-field'>
@@ -217,11 +241,26 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                   onChange={(e) => setField('clinic_specialization', e.target.value || null)}
                 />
               </label>
+              <label className='elixhealth-field'>
+                <span>Consultation currency</span>
+                <select
+                  value={form.consultation_currency}
+                  onChange={(e) =>
+                    setField('consultation_currency', normalizeConsultationCurrency(e.target.value))
+                  }
+                >
+                  {CONSULTATION_CURRENCY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {form.consultation_tiers.map((tier) => (
                 <label key={tier.duration_minutes} className='elixhealth-field'>
                   <span>
                     {tier.duration_minutes === 60 ? '1 hour' : `${tier.duration_minutes} min`} consultation
-                    fee (USD)
+                    fee ({consultationCurrencySymbol(form.consultation_currency)})
                   </span>
                   <input
                     type='number'
@@ -237,7 +276,6 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                         )
                       )
                     }
-                    required
                   />
                 </label>
               ))}
@@ -268,7 +306,6 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel }: AdminDoct
                   type='text'
                   value={form.clinic_country}
                   onChange={(e) => setField('clinic_country', e.target.value)}
-                  required
                 />
               </label>
               <label className='elixhealth-field'>
