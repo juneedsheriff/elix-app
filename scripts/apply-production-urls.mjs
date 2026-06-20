@@ -5,7 +5,7 @@
  *
  * Env (.env.local):
  *   SUPABASE_ACCESS_TOKEN=sbp_...
- *   PRODUCTION_APP_URL=https://2ndopinion.elixmeditours.ca   (optional override)
+ *   PRODUCTION_APP_URL=https://app.elixclinix.com   (optional override)
  *   SITE_URL=...          (optional, defaults to PRODUCTION_APP_URL)
  *   URI_ALLOW_LIST=...    (optional, auto-built if omitted)
  */
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const projectRef = 'juwlzcxlekqttpdqqijv';
-const defaultProductionUrl = 'https://2ndopinion.elixmeditours.ca';
+const defaultProductionUrl = 'https://app.elixclinix.com';
 
 function loadEnvFile(relativePath) {
   const path = join(root, relativePath);
@@ -51,8 +51,7 @@ const uriAllowList =
   process.env.URI_ALLOW_LIST?.trim() ||
   [
     `${productionUrl}/**`,
-    'http://localhost:3000/**',
-    'https://elix-app.vercel.app/**'
+    'http://localhost:3000/**'
   ].join(',');
 
 async function managementFetch(path, init = {}) {

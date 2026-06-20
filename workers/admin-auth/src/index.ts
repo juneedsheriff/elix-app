@@ -48,8 +48,6 @@ function isAllowedAppOrigin(origin: string, env: Env): boolean {
   const allowed = env.ALLOWED_ORIGIN?.trim();
   if (!allowed || allowed === '*') return false;
   if (origin === allowed) return true;
-  // Also allow the default Vercel production URL for the same deployment.
-  if (allowed.includes('elixmeditours.ca') && origin === 'https://elix-app.vercel.app') return true;
   return false;
 }
 

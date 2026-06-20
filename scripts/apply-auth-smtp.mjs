@@ -48,15 +48,13 @@ const resendKey = process.env.RESEND_API_KEY?.trim();
 const smtpAdminEmail = process.env.SMTP_ADMIN_EMAIL?.trim();
 const smtpSenderName = process.env.SMTP_SENDER_NAME?.trim() || 'Elix Health';
 const smtpPort = process.env.SMTP_PORT?.trim() || '465';
-const siteUrl = process.env.SITE_URL?.trim() || process.env.VITE_APP_URL?.trim() || 'http://localhost:3000';
-const productionUrl = (process.env.PRODUCTION_APP_URL ?? 'https://2ndopinion.elixmeditours.ca').trim().replace(/\/$/, '');
-const uriAllowList =
-  process.env.URI_ALLOW_LIST?.trim() ||
-  [
-    `${productionUrl}/**`,
-    'http://localhost:3000/**',
-    'https://elix-app.vercel.app/**'
-  ].join(',');
+const explicitSiteUrl = process.env.SITE_URL?.trim() || process.env.VITE_APP_URL?.trim() || null;
+const explicitUriAllowList = process.env.URI_ALLOW_LIST?.trim() || null;
+const productionUrl = (process.env.PRODUCTION_APP_URL ?? 'https://app.elixclinix.com').trim().replace(/\/$/, '');
+const defaultUriAllowList = [
+  `${productionUrl}/**`,
+  'http://localhost:3000/**'
+].join(',');
 
 const confirmationSubject = process.env.SMTP_CONFIRMATION_SUBJECT?.trim() || 'Your Elix verification code';
 const confirmationContent = readFileSync(join(root, templateFile), 'utf8');
@@ -111,7 +109,19 @@ async function getAuthConfig() {
   return managementFetch('/config/auth', { method: 'GET' });
 }
 
-async function applyAuthConfig() {
+function resolveSiteUrl(existing) {
+  if (explicitSiteUrl) return explicitSiteUrl.replace(/\/$/, '');
+  if (existing?.site_url?.trim()) return existing.site_url.trim().replace(/\/$/, '');
+  return 'http://localhost:3000';
+}
+
+function resolveUriAllowList(existing) {
+  if (explicitUriAllowList) return explicitUriAllowList;
+  if (existing?.uri_allow_list?.trim()) return existing.uri_allow_list.trim();
+  return defaultUriAllowList;
+}
+
+async function applyAuthConfig(existing) {
   const payload = {
     external_email_enabled: true,
     mailer_autoconfirm: false,
@@ -122,8 +132,8 @@ async function applyAuthConfig() {
     smtp_pass: resendKey,
     smtp_admin_email: smtpAdminEmail,
     smtp_sender_name: smtpSenderName,
-    site_url: siteUrl.replace(/\/$/, ''),
-    uri_allow_list: uriAllowList,
+    site_url: resolveSiteUrl(existing),
+    uri_allow_list: resolveUriAllowList(existing),
     mailer_subjects_confirmation: confirmationSubject,
     mailer_templates_confirmation_content: confirmationContent,
     mailer_otp_length: Number.isFinite(mailerOtpLength) && mailerOtpLength >= 6 && mailerOtpLength <= 10 ? mailerOtpLength : 6
@@ -155,7 +165,14 @@ try {
   const before = await getAuthConfig();
   console.log(`Current SMTP host: ${before.smtp_host || '(default Supabase mailer)'}`);
 
-  const after = await applyAuthConfig();
+  if (!explicitSiteUrl) {
+    console.log(`  Preserving site URL: ${resolveSiteUrl(before)} (set SITE_URL to override)`);
+  }
+  if (!explicitUriAllowList) {
+    console.log(`  Preserving redirect allow list (set URI_ALLOW_LIST to override)`);
+  }
+
+  const after = await applyAuthConfig(before);
 
   console.log('Applied custom SMTP settings.');
   console.log(`  SMTP host: ${after.smtp_host}`);
@@ -171,6 +188,8 @@ try {
   }
 
   console.log('\nNext: npm run test:auth-signup-email');
+  console.log('       npm run test:auth-recovery-email -- --email=your@account.com');
+  console.log('If sends fail, verify SMTP_ADMIN_EMAIL domain in Resend and try SMTP_PORT=587.');
   console.log('After email works, set ALLOW_EMAILLESS_PATIENT_SIGNUP=false in workers/admin-auth/wrangler.toml and redeploy.');
 } catch (error) {
   console.error('Failed to apply Auth SMTP config:', error.message);

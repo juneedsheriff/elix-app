@@ -53,6 +53,23 @@ Keep **Confirm email** enabled under **Authentication → Providers → Email**.
 
 If sends still fail, check **Logs → Auth** for the underlying SMTP error (auth failed, domain not verified, rate limit).
 
+### Password reset (`Error sending recovery email`)
+
+Forgot password uses the **same Resend SMTP** as signup. If recovery fails:
+
+```bash
+npm run db:show-auth-smtp          # live sender + redirect URLs
+npm run test:auth-recovery-email -- --email=registered-user@example.com
+```
+
+Common fixes:
+
+1. **Resend domain** — `SMTP_ADMIN_EMAIL` must use a domain verified in [Resend → Domains](https://resend.com/domains).
+2. **API key** — regenerate at [Resend → API Keys](https://resend.com/api-keys), update `RESEND_API_KEY` in `.env.local`, then `npm run db:apply-auth-smtp`.
+3. **SMTP port** — try `SMTP_PORT=587` (or `465`) in `.env.local` and re-apply.
+4. **Supabase Auth logs** — Dashboard → **Logs → Auth** shows the exact SMTP error from Resend.
+5. **Redirect URLs** — set `VITE_APP_URL` to your production URL and run `npm run db:apply-production-urls`.
+
 ### After SMTP works
 
 1. Confirm registration reaches the **Enter 6-digit code** step (not the password step immediately).

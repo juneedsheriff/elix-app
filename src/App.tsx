@@ -325,7 +325,14 @@ function App() {
     const { error } = await requestPasswordReset(email.trim());
     setAuthBusy(false);
     if (error) {
-      setAuthError(error.message);
+      const msg = error.message.toLowerCase();
+      if (msg.includes('error sending recovery') || msg.includes('error sending confirmation')) {
+        setAuthError(
+          'Email could not be sent. Custom SMTP (Resend) may be misconfigured — verify the sender domain in Resend and run npm run db:apply-auth-smtp.'
+        );
+      } else {
+        setAuthError(error.message);
+      }
       return;
     }
     setAuthSuccess(

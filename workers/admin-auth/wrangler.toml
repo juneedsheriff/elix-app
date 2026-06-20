@@ -4,7 +4,7 @@ compatibility_date = "2024-11-01"
 
 [vars]
 SUPABASE_URL = "https://juwlzcxlekqttpdqqijv.supabase.co"
-ALLOWED_ORIGIN = "https://2ndopinion.elixmeditours.ca"
+ALLOWED_ORIGIN = "https://app.elixclinix.com"
 # Custom SMTP is configured — signup requires email verification (see npm run test:auth-signup-email).
 ALLOW_EMAILLESS_PATIENT_SIGNUP = "false"
 # Local dev: copy .dev.vars.example → .dev.vars (secrets + ALLOWED_ORIGIN=http://localhost:3000)
