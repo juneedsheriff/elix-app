@@ -789,6 +789,22 @@ select {
   pointer-events: auto;
 }
 
+.sidebar-brand {
+  flex-shrink: 0;
+  padding: 0.15rem 0.35rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.35rem;
+}
+
+.sidebar-brand__logo {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 48px;
+  object-fit: contain;
+}
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -1796,6 +1812,10 @@ select {
   line-height: 1.45;
 }
 
+.patient-profile-edit__field--history textarea {
+  min-height: 7.5rem;
+}
+
 .patient-profile-edit__field input:disabled,
 .patient-profile-edit__field select:disabled,
 .patient-profile-edit__field textarea:disabled {
@@ -1877,6 +1897,110 @@ select {
   color: var(--brand-cyan);
   background: color-mix(in srgb, var(--brand-cyan) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--brand-cyan) 22%, var(--border));
+  overflow: hidden;
+}
+
+.patient-profile-edit__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.patient-profile-image {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.patient-profile-image__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.patient-profile-image__optional {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+.patient-profile-image__layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.patient-profile-image__preview-wrap {
+  flex: 0 0 auto;
+}
+
+.patient-profile-image__preview {
+  display: block;
+  width: 5.5rem;
+  height: 5.5rem;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #f3f4f6;
+}
+
+.patient-profile-image__placeholder {
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface));
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+.patient-profile-image__initials {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--brand-cyan);
+}
+
+.patient-profile-image__controls {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.patient-profile-image__hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.patient-profile-image__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.patient-profile-image__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.patient-profile-image__remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .patient-profile-edit__details {

@@ -13,7 +13,7 @@ Patient registration sends a **6-digit code** via Supabase Auth (`signUp` → `v
 SUPABASE_ACCESS_TOKEN=sbp_...
 RESEND_API_KEY=re_...
 SMTP_ADMIN_EMAIL=noreply@yourdomain.com
-SMTP_SENDER_NAME=Elix Health
+SMTP_SENDER_NAME=ElixClinix Health
 SITE_URL=http://localhost:3000
 URI_ALLOW_LIST=http://localhost:3000/**,https://your-app.vercel.app/**
 ```
@@ -39,7 +39,7 @@ The script sets Resend SMTP (`smtp.resend.com`) and updates the **Confirm signup
 | Username | `resend` |
 | Password | Resend API key (full-access or verified-domain key) |
 | Sender email | Address on your verified domain |
-| Sender name | `Elix Health` |
+| Sender name | `ElixClinix Health` |
 
 **Authentication → Email Templates → Confirm signup** — body must include:
 
@@ -65,10 +65,28 @@ npm run test:auth-recovery-email -- --email=registered-user@example.com
 Common fixes:
 
 1. **Resend domain** — `SMTP_ADMIN_EMAIL` must use a domain verified in [Resend → Domains](https://resend.com/domains).
-2. **API key** — regenerate at [Resend → API Keys](https://resend.com/api-keys), update `RESEND_API_KEY` in `.env.local`, then `npm run db:apply-auth-smtp`.
+2. **API key** — must have **Full access** or be linked to verified **`app.elixclinix.com`**. Domain-scoped keys for unverified domains fail with “Error sending … email”. Run `npm run test:resend-api-key`, then update `RESEND_API_KEY` and `npm run db:apply-auth-smtp`.
 3. **SMTP port** — try `SMTP_PORT=587` (or `465`) in `.env.local` and re-apply.
 4. **Supabase Auth logs** — Dashboard → **Logs → Auth** shows the exact SMTP error from Resend.
 5. **Redirect URLs** — set `VITE_APP_URL` to your production URL and run `npm run db:apply-production-urls`.
+
+#### Elix Clinix: `support@elixclinix.com`
+
+The app sender is **`support@elixclinix.com`**. That requires the **root domain** `elixclinix.com` verified in Resend (separate from `app.elixclinix.com`, which only allows `@app.elixclinix.com` addresses).
+
+1. Resend → **Domains** → **Add domain** → enter `elixclinix.com` (region: Tokyo, same as `app`).
+2. In IONOS DNS for `elixclinix.com`, add the records Resend shows (host names are relative to the root zone):
+
+| Type | Host (IONOS) | Example value |
+|------|--------------|---------------|
+| TXT | `resend._domainkey` | DKIM key from Resend |
+| MX | `send` | `feedback-smtp.ap-northeast-1.amazonses.com` |
+| TXT | `send` | `v=spf1 include:amazonses.com ~all` |
+
+3. Wait until Resend shows **Verified** for `elixclinix.com`.
+4. Run `npm run db:apply-auth-smtp` and `npm run test:auth-signup-email`.
+
+Until `elixclinix.com` is verified, password reset and signup emails will fail with “Error sending … email”.
 
 ### After SMTP works
 
@@ -140,7 +158,7 @@ npm run db:setup
 | `patients` | Patient profiles (linked to Auth); public ID `elix_id` (e.g. `elix-aa0000`) |
 | `uploaded_files` | Uploaded file metadata (name, size, Storage path) |
 | `medical_records` | Legacy table — migrate with `004_uploaded_files.sql` |
-| `opinion_requests` | Second opinion requests — run `006_doctor_opinion_access.sql` (doctor read) and `009_opinion_doctor_response.sql` (respond to patient) |
+| `opinion_requests` | Doctor consultation requests — run `006_doctor_opinion_access.sql` (doctor read) and `009_opinion_doctor_response.sql` (respond to patient) |
 | `opinion_request_records` | Records linked to a request |
 
 Storage bucket: `medical-records` (PDF, JPG, DOC uploads)

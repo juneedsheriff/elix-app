@@ -1,8 +1,9 @@
 import type { Doctor } from '../types/doctor';
+import { ELIX_LOGO_SRC } from './brandAssets';
 
 export const ELIX_BRAND = {
-  legalName: 'Elix Health',
-  tagline: 'Second opinion & teleconsultation platform',
+  legalName: 'ElixClinix',
+  tagline: 'Doctor consultation & teleconsultation platform',
   email: 'support@elixhealth.com',
   website: 'www.elixhealth.com'
 } as const;
@@ -26,7 +27,7 @@ export function formatDoctorContactPhone(doctor: Doctor): string | null {
 }
 
 export async function loadElixLogoDataUrl(): Promise<string | null> {
-  const candidates = ['/icons/elix-logo-transparent.png', '/icons/icon-192.png'];
+  const candidates = [ELIX_LOGO_SRC, '/icons/icon-192.png'];
   for (const path of candidates) {
     try {
       const response = await fetch(path);

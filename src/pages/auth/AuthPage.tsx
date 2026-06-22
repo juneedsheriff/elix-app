@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Stethoscope } from 'lucide-react';
+import ElixLogo from '../../components/ui/ElixLogo';
 import { Lock, Mail } from '../../navIcons';
 import './auth-page.css';
 
@@ -41,13 +42,7 @@ type AuthPageProps = {
 function AuthPageLogo() {
   return (
     <div className='auth-page__logo-wrap'>
-      <img
-        className='auth-page__logo'
-        src='/icons/elix-logo-transparent.png'
-        alt='Elix'
-        width={160}
-        height={88}
-      />
+      <ElixLogo className='auth-page__logo' width={160} height={88} />
     </div>
   );
 }

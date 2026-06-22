@@ -165,11 +165,11 @@ function downloadAppointmentIcs(input: {
   const escape = (text: string) => text.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,');
   const description = input.meetingLink
     ? `Meeting link: ${input.meetingLink}`
-    : 'Elix Health consultation';
+    : 'ElixClinix consultation';
   const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Elix Health//Consultation//EN',
+    'PRODID:-//ElixClinix//Consultation//EN',
     'BEGIN:VEVENT',
     `DTSTART:${toIcsUtc(start)}`,
     `DTEND:${toIcsUtc(end)}`,

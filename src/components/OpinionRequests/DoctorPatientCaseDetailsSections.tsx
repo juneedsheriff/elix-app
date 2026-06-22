@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { getMedicalRecordDownloadUrl } from '../../lib/records';
+import { openMedicalRecordByPath } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import PatientCaseDetailsReadOnlyView from './PatientCaseDetailsReadOnlyView';
 import RequestRecordsGallery from './RequestRecordsGallery';
@@ -19,12 +19,10 @@ export default function DoctorPatientCaseDetailsSections({
 }: DoctorPatientCaseDetailsSectionsProps) {
   const openDocument = useCallback(
     async (storagePath: string, requestId: string) => {
-      const { data, error: urlError } = await getMedicalRecordDownloadUrl(storagePath, { requestId });
-      if (urlError || !data?.signedUrl) {
-        onOpenError?.(urlError?.message ?? 'Could not open file.');
-        return;
+      const { error } = await openMedicalRecordByPath(storagePath, { requestId });
+      if (error) {
+        onOpenError?.(error.message);
       }
-      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
     },
     [onOpenError]
   );

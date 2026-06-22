@@ -1,10 +1,11 @@
 import type { ConsultationCurrency } from '../types/doctor';
 import type { Doctor } from '../types/doctor';
 import {
-  formatConsultationFee,
+  formatConsultationFeeForPdf,
   normalizeConsultationCurrency
 } from './consultationCurrency';
 import { formatDurationMinutesLabel } from './consultationTiers';
+import { loadElixLogoDataUrl } from './pdfBranding';
 
 export type ConsultationInvoiceTotals = {
   subtotal: number;
@@ -27,8 +28,8 @@ export type ConsultationInvoicePdfInput = {
 };
 
 const ELIX_BILLING = {
-  legalName: 'Elix Health',
-  tagline: 'Second opinion & teleconsultation platform',
+  legalName: 'ElixClinix',
+  tagline: 'Doctor consultation & teleconsultation platform',
   email: 'support@elixhealth.com',
   website: 'www.elixhealth.com'
 };
@@ -76,26 +77,6 @@ function wrapText(
   maxWidth: number
 ) {
   return doc.splitTextToSize(text, maxWidth);
-}
-
-async function loadElixLogoDataUrl(): Promise<string | null> {
-  const candidates = ['/icons/elix-logo-transparent.png', '/icons/icon-192.png'];
-  for (const path of candidates) {
-    try {
-      const response = await fetch(path);
-      if (!response.ok) continue;
-      const blob = await response.blob();
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      /* try next */
-    }
-  }
-  return null;
 }
 
 async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
@@ -210,7 +191,7 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
     doc.text(line, margin + 8, y);
     y += 12;
   }
-  const amountLabel = formatConsultationFee(input.totals.subtotal, input.currency);
+  const amountLabel = formatConsultationFeeForPdf(input.totals.subtotal, input.currency);
   doc.text(amountLabel, pageWidth - margin - 8, y - 12, { align: 'right' });
   y += 16;
 
@@ -227,11 +208,14 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
     y += 16;
   };
 
-  addSummaryRow('Consultation fee', formatConsultationFee(input.totals.subtotal, input.currency));
+  addSummaryRow(
+    'Consultation fee',
+    formatConsultationFeeForPdf(input.totals.subtotal, input.currency)
+  );
   if (input.totals.taxLabel && input.totals.taxAmount > 0) {
     addSummaryRow(
       input.totals.taxLabel,
-      formatConsultationFee(input.totals.taxAmount, input.currency)
+      formatConsultationFeeForPdf(input.totals.taxAmount, input.currency)
     );
   } else {
     addSummaryRow('Tax', '—');
@@ -239,11 +223,15 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   y += 4;
   doc.line(summaryX, y, pageWidth - margin, y);
   y += 14;
-  addSummaryRow('Total due', formatConsultationFee(input.totals.total, input.currency), true);
+  addSummaryRow(
+    'Total due',
+    formatConsultationFeeForPdf(input.totals.total, input.currency),
+    true
+  );
 
   y += 24;
   addLine(
-    'This invoice is issued by Elix Health for the consultation service described above. Payment should be made using the link shared by our patient service team.',
+    'This invoice is issued by ElixClinix for the consultation service described above. Payment should be made using the link shared by our patient service team.',
     9
   );
 

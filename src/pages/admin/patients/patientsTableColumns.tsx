@@ -93,7 +93,7 @@ export function usePatientsTableColumns({
       },
       {
         accessorKey: 'elix_id',
-        header: 'Elix ID',
+        header: 'ElixClinix ID',
         size: 120,
         minSize: 100,
         Cell: ({ cell }) => (

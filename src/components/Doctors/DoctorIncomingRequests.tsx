@@ -22,7 +22,7 @@ export default function DoctorIncomingRequests({
       onNavigate={onNavigate}
       doctorReturnScreen='case-review'
       title='Incoming requests'
-      subtitle='Second opinion requests from patients assigned to you'
+      subtitle='Doctor consultation requests from patients assigned to you'
       signInHint='Sign in as a doctor to view incoming requests.'
       emptyHint='No requests yet. Patients can send cases from a doctor profile → Get opinion.'
     />

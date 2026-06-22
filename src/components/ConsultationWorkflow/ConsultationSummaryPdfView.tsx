@@ -148,7 +148,7 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
       {hasStructuredPreview ? (
         <div className='consultation-summary-pdf__page' aria-label='Consultation summary preview'>
           <header className='consultation-summary-pdf__header'>
-            <p className='consultation-summary-pdf__brand'>Elix Health</p>
+            <p className='consultation-summary-pdf__brand'>ElixClinix</p>
             <h5 className='consultation-summary-pdf__title'>Consultation Summary</h5>
             {request.patient_name ? (
               <p className='consultation-summary-pdf__meta'>Patient: {request.patient_name}</p>

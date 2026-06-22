@@ -21,7 +21,6 @@ import {
   fetchOpinionRequestRecommendations,
   fetchStaffOpinionRequestById,
   pseConfirmPayment,
-  pseGenerateConsultationInvoice,
   pseMarkCaseDetailsReviewed,
   pseMarkRecordsVerified,
   pseProceedWithoutRecords,
@@ -29,7 +28,7 @@ import {
   pseReleaseToDoctor,
   pseScheduleAppointment,
   pseSendInvoiceAndPaymentLink,
-  pseSetPaymentPending,
+  pseMarkPaymentPendingNoLink,
   subscribeOpinionRequestLiveUpdates
 } from '../../../lib/opinionRequests';
 import {
@@ -273,24 +272,6 @@ export default function RequestWorkflowWizard({
     onUpdated();
   };
 
-  const generateInvoiceForRequest = async () => {
-    const { amount, currency } = paymentQuote;
-    if (amount == null || !Number.isFinite(amount) || amount <= 0) {
-      return {
-        data: null,
-        error: { message: 'Consultation fee is missing. Confirm the patient selected a doctor and session length.' }
-      };
-    }
-    const doctor = resolveInvoiceDoctor(request, doctors);
-    if (!doctor) {
-      return {
-        data: null,
-        error: { message: 'Could not load the selected doctor profile. Refresh and try again.' }
-      };
-    }
-    return pseGenerateConsultationInvoice(request, { amount, currency, doctor });
-  };
-
   const handleSendInvoiceAndPaymentLink = async () => {
     if (!canPseSendPaymentLink(request)) {
       onError('Wait for the patient to confirm the schedule before sending a payment link.');
@@ -334,23 +315,38 @@ export default function RequestWorkflowWizard({
   };
 
   const handlePaymentPending = async () => {
-    setBusy(true);
-    if (!request.invoice_pdf_storage_path?.trim()) {
-      const invoiceRes = await generateInvoiceForRequest();
-      if (invoiceRes.error) {
-        setBusy(false);
-        onError(invoiceRes.error.message);
-        return;
-      }
-    }
-    const { error } = await pseSetPaymentPending(request.id);
-    setBusy(false);
-    if (error) {
-      onError(error.message);
+    if (!canPseSendPaymentLink(request)) {
+      onError('Wait for the patient to confirm the schedule before marking payment pending.');
       return;
     }
-    onSuccess('Marked as payment pending — patient will see payment required.');
-    onUpdated();
+    const { amount, currency } = paymentQuote;
+    if (amount == null || !Number.isFinite(amount) || amount <= 0) {
+      onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
+      return;
+    }
+    const doctor = resolveInvoiceDoctor(request, doctors);
+    if (!doctor) {
+      onError('Could not load the selected doctor profile. Refresh and try again.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const { data, error } = await pseMarkPaymentPendingNoLink(request, { amount, currency, doctor });
+      if (error) {
+        onError(error.message);
+        return;
+      }
+      if (data) {
+        onRequestPatch?.(data as Partial<OpinionRequest> & { id: string });
+      }
+      onSuccess('Marked as payment pending — patient will see payment required.');
+      onUpdated();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Could not mark payment as pending.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleConfirmPayment = async () => {

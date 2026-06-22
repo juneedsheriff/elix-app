@@ -1,4 +1,5 @@
 import { ONBOARDING_ICONS } from '../../navIcons';
+import ElixLogo from '../../components/ui/ElixLogo';
 
 type OnboardingItem = { title: string; body: string };
 
@@ -26,7 +27,7 @@ export default function OnboardingPage({
       <div className='onboarding-page'>
         <div className='onboarding-main'>
           <header className='onboarding-hero'>
-            <img className='onboarding-logo' src='/icons/elix-logo-source.png' alt='Elix' width={200} height={80} />
+            <ElixLogo className='onboarding-logo' width={200} height={80} />
             <h1 className='onboarding-title'>{welcome}</h1>
             <p className='onboarding-tagline'>{tagline}</p>
           </header>

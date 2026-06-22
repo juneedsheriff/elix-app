@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import type { Admin } from '../../types/admin';
+import ElixLogo from '../../components/ui/ElixLogo';
 import { adminRoleLabel, navItemsForRole, requestsNavLabel, type ElixHealthNavId } from '../../lib/staffPermissions';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 
@@ -107,10 +108,10 @@ export default function ElixHealthLayout({
       >
         <div className='elixhealth-sidebar-brand'>
           <div className='elixhealth-sidebar-logo-wrap'>
-            <img src='/icons/elix-logo-transparent.png' alt='' className='elixhealth-sidebar-logo' />
+            <ElixLogo className='elixhealth-sidebar-logo' />
           </div>
           <div className='elixhealth-sidebar-brand-text'>
-            <p className='elixhealth-sidebar-title'>Elix Health</p>
+            <p className='elixhealth-sidebar-title'>ElixClinix</p>
             <span className='elixhealth-sidebar-role-badge'>{roleLabel}</span>
           </div>
         </div>

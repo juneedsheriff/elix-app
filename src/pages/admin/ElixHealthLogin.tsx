@@ -18,7 +18,7 @@ export default function ElixHealthLogin({ configured, busy, error, onSignIn }: E
         <div className='elixhealth-brand'>
           <Shield size={32} aria-hidden />
           <div>
-            <p className='elixhealth-eyebrow'>Elix Health</p>
+            <p className='elixhealth-eyebrow'>ElixClinix</p>
             <h1>Desktop sign in</h1>
           </div>
         </div>

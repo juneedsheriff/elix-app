@@ -1,4 +1,5 @@
 import { Check, Mail, User, WifiOff } from 'lucide-react';
+import ElixLogo from '../../components/ui/ElixLogo';
 import PatientProfileEditSection from '../../components/patient/PatientProfileEditSection';
 import SectionCard from '../../components/ui/SectionCard';
 import type { ScreenPageProps } from '../types';
@@ -16,7 +17,7 @@ export default function SettingsPage({
       <section className='settings-hero-banner' aria-labelledby='settings-hero-heading'>
         <div className='settings-hero-banner__content'>
           <h2 id='settings-hero-heading' className='settings-hero-banner__title'>
-            Elix  <span
+            ElixClinix  <span
               className={`settings-hero-badge ${
                 dbConnected ? 'settings-hero-badge--connected' : 'settings-hero-badge--disconnected'
               }`}
@@ -29,7 +30,7 @@ export default function SettingsPage({
               {dbConnected ? 'Connected' : 'Not connected'}
             </span>
           </h2>
-          <p className='settings-hero-banner__text'>  Second Opinion</p>
+          <p className='settings-hero-banner__text'>  Doctor Consultation</p>
           <div className='settings-hero-banner__badges'>
            
             <span
@@ -49,14 +50,7 @@ export default function SettingsPage({
           </div>
         </div>
         <div className='settings-hero-banner__art' aria-hidden>
-          <img
-            src='/icons/elix-logo-transparent.png'
-            alt=''
-            className='settings-hero-banner__logo'
-            width={72}
-            height={72}
-            decoding='async'
-          />
+          <ElixLogo className='settings-hero-banner__logo' width={72} height={72} />
         </div>
       </section>
 

@@ -88,7 +88,7 @@ export function applyPatientQuickFilters(patients: Patient[], filters: PatientQu
 
 export function exportPatientsCsv(patients: Patient[]) {
   const headers = [
-    'Elix ID',
+    'ElixClinix ID',
     'Full name',
     'Email',
     'Phone',

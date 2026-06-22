@@ -16,7 +16,7 @@ export default function PaymentsPage() {
         <ul className='list'>
           <li>
             <strong>CONSULT-2026-0912</strong>
-            <span>Neurology second opinion • Paid via Stripe</span>
+            <span>Neurology doctor consultation • Paid via Stripe</span>
           </li>
           <li>
             <strong>SUB-2026-0044</strong>

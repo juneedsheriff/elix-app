@@ -5,7 +5,7 @@ function escapePdfText(text) {
 }
 
 export function demoPdfBuffer(title) {
-  const label = escapePdfText(`Elix demo — ${title}`);
+  const label = escapePdfText(`ElixClinix demo — ${title}`);
   const stream = `BT /F1 14 Tf 72 720 Td (${label}) Tj ET`;
   const len = Buffer.byteLength(stream, 'utf8');
   const body = [

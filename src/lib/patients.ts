@@ -4,7 +4,7 @@ import { isPatientProfileComplete } from './patientProfileCompleteness';
 import { supabase } from './supabase';
 
 const patientColumnsExtended =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, created_at, updated_at';
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, created_at, updated_at';
 
 const patientColumnsWithElix =
   'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
@@ -25,6 +25,10 @@ function normalizePatientRow(patient: Patient | null): Patient | null {
     address: patient.address ?? null,
     height_cm: patient.height_cm ?? null,
     weight_kg: patient.weight_kg ?? null,
+    family_history: patient.family_history ?? null,
+    social_history: patient.social_history ?? null,
+    surgical_history: patient.surgical_history ?? null,
+    medical_history: patient.medical_history ?? null,
     profile_completed_at: patient.profile_completed_at ?? null
   };
 }
@@ -37,9 +41,10 @@ async function selectPatient(
     return { data: withFallbackElixId(normalizePatientRow(extended.data as Patient | null)), error: null };
   }
 
-  const missingColumn = /address|profile_completed_at|height_cm|weight_kg|elix_id|column/.test(
-    extended.error.message
-  );
+  const missingColumn =
+    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|column/.test(
+      extended.error.message
+    );
   if (!missingColumn) {
     return { data: null, error: extended.error };
   }
@@ -148,6 +153,106 @@ function trimOrNull(value: string | null | undefined): string | null {
   return trimmed || null;
 }
 
+const OPTIONAL_PATIENT_PAYLOAD_KEYS = [
+  'address',
+  'height_cm',
+  'weight_kg',
+  'profile_completed_at',
+  'family_history',
+  'social_history',
+  'surgical_history',
+  'medical_history'
+] as const;
+
+function isMissingPatientColumnError(message: string): boolean {
+  return /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|column/.test(
+    message
+  );
+}
+
+function stripOptionalPatientPayload<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload };
+  for (const key of OPTIONAL_PATIENT_PAYLOAD_KEYS) {
+    delete next[key];
+  }
+  return next;
+}
+
+function hasOptionalPatientPayloadValues(payload: Record<string, unknown>): boolean {
+  return OPTIONAL_PATIENT_PAYLOAD_KEYS.some((key) => {
+    const value = payload[key];
+    return value !== undefined && value !== null && value !== '';
+  });
+}
+
+async function patchPatientByAuthUserId(
+  authUserId: string,
+  payload: Record<string, unknown>,
+  selectColumns: string
+) {
+  return supabase
+    .from('patients')
+    .update(payload)
+    .eq('auth_user_id', authUserId)
+    .select(selectColumns)
+    .single<Patient>();
+}
+
+async function updatePatientByAuthUserId(
+  authUserId: string,
+  payload: Record<string, unknown>
+): Promise<{ data: Patient | null; error: { message: string } | null }> {
+  const finalize = (patient: Patient | null) => ({
+    data: withFallbackElixId(normalizePatientRow(patient)),
+    error: null as { message: string } | null
+  });
+
+  let { data, error } = await patchPatientByAuthUserId(authUserId, payload, patientColumnsExtended);
+
+  if (!error) return finalize(data);
+  if (!isMissingPatientColumnError(error.message)) return { data: null, error };
+
+  const optionalMissing =
+    /address|height_cm|weight_kg|profile_completed_at|family_history|social_history|surgical_history|medical_history/.test(
+      error.message
+    );
+  const optionalInPayload = OPTIONAL_PATIENT_PAYLOAD_KEYS.some((key) => key in payload);
+
+  if (optionalMissing && optionalInPayload) {
+    const stripped = stripOptionalPatientPayload(payload);
+    const droppedOptionalValues = hasOptionalPatientPayloadValues(payload);
+    const fallback = await patchPatientByAuthUserId(authUserId, stripped, patientColumnsWithElix);
+
+    if (!fallback.error) {
+      if (droppedOptionalValues) {
+        return {
+          data: withFallbackElixId(normalizePatientRow(fallback.data)),
+          error: {
+            message:
+              'Some profile fields could not be saved. Ask your administrator to run: npm run db:apply-patient-extended-profile and npm run db:apply-patient-medical-history'
+          }
+        };
+      }
+      return finalize(fallback.data);
+    }
+    error = fallback.error;
+  }
+
+  if (error && isMissingPatientColumnError(error.message)) {
+    const retry = await patchPatientByAuthUserId(authUserId, stripOptionalPatientPayload(payload), patientColumnsWithElix);
+    if (!retry.error) return finalize(retry.data);
+    error = retry.error;
+  }
+
+  if (error?.message.includes('elix_id')) {
+    const legacy = await patchPatientByAuthUserId(authUserId, stripOptionalPatientPayload(payload), patientColumnsLegacy);
+    if (legacy.error) return { data: null, error: legacy.error };
+    return finalize(legacy.data);
+  }
+
+  return { data: null, error };
+}
+
 /** Patient updates their own profile (RLS: patients_update_own). */
 export async function updatePatientProfileForUser(
   authUserId: string,
@@ -170,52 +275,34 @@ export async function updatePatientProfileForUser(
     height_cm: input.height_cm ?? null,
     weight_kg: input.weight_kg ?? null,
     allergies: trimOrNull(input.allergies),
+    family_history: trimOrNull(input.family_history),
+    social_history: trimOrNull(input.social_history),
+    surgical_history: trimOrNull(input.surgical_history),
+    medical_history: trimOrNull(input.medical_history),
     current_medications: trimOrNull(input.current_medications),
     insurance_provider: trimOrNull(input.insurance_provider),
     emergency_contact_name: trimOrNull(input.emergency_contact_name),
     emergency_contact_phone: trimOrNull(input.emergency_contact_phone),
     preferred_language: trimOrNull(input.preferred_language) ?? 'en',
+    ...(input.avatar_url !== undefined ? { avatar_url: input.avatar_url } : {}),
     updated_at: new Date().toISOString()
   };
 
-  let { data, error } = await supabase
+  return updatePatientByAuthUserId(authUserId, payload);
+}
+
+/** Patient updates their profile photo (optional; RLS: patients_update_own). */
+export async function updatePatientAvatarForUser(authUserId: string, avatar_url: string | null) {
+  const { error: updateError } = await supabase
     .from('patients')
-    .update(payload)
-    .eq('auth_user_id', authUserId)
-    .select(patientColumnsExtended)
-    .single<Patient>();
+    .update({
+      avatar_url,
+      updated_at: new Date().toISOString()
+    })
+    .eq('auth_user_id', authUserId);
 
-  if (
-    error?.message.includes('address') ||
-    error?.message.includes('profile_completed_at') ||
-    error?.message.includes('height_cm') ||
-    error?.message.includes('weight_kg')
-  ) {
-    const { address: _address, height_cm: _height, weight_kg: _weight, ...fallbackPayload } = payload;
-    const fallback = await supabase
-      .from('patients')
-      .update(fallbackPayload)
-      .eq('auth_user_id', authUserId)
-      .select(patientColumnsWithElix)
-      .single<Patient>();
-    data = fallback.data;
-    error = fallback.error;
-  }
-
-  if (error?.message.includes('elix_id')) {
-    const { address: _address, height_cm: _height, weight_kg: _weight, ...legacyPayload } = payload;
-    const legacy = await supabase
-      .from('patients')
-      .update(legacyPayload)
-      .eq('auth_user_id', authUserId)
-      .select(patientColumnsLegacy)
-      .single<Patient>();
-    data = legacy.data;
-    error = legacy.error;
-  }
-
-  if (error) return { data: null, error };
-  return { data: withFallbackElixId(normalizePatientRow(data)), error: null };
+  if (updateError) return { data: null, error: updateError };
+  return fetchPatientByAuthUserId(authUserId);
 }
 
 /** Save post-verification onboarding answers from the chat wizard. */
@@ -245,51 +332,10 @@ export async function completePatientOnboarding(authUserId: string, input: Patie
     updated_at: new Date().toISOString()
   };
 
-  let { data, error } = await supabase
-    .from('patients')
-    .update(payload)
-    .eq('auth_user_id', authUserId)
-    .select(patientColumnsExtended)
-    .single<Patient>();
+  const result = await updatePatientByAuthUserId(authUserId, payload);
+  if (result.error) return result;
 
-  if (error?.message.includes('address') || error?.message.includes('profile_completed_at')) {
-    const fallback = await supabase
-      .from('patients')
-      .update({
-        phone,
-        gender,
-        date_of_birth,
-        city: address,
-        blood_group,
-        updated_at: new Date().toISOString()
-      })
-      .eq('auth_user_id', authUserId)
-      .select(patientColumnsWithElix)
-      .single<Patient>();
-    data = fallback.data;
-    error = fallback.error;
-  }
-
-  if (error?.message.includes('elix_id')) {
-    const legacy = await supabase
-      .from('patients')
-      .update({
-        phone,
-        gender,
-        date_of_birth,
-        city: address,
-        blood_group,
-        updated_at: new Date().toISOString()
-      })
-      .eq('auth_user_id', authUserId)
-      .select(patientColumnsLegacy)
-      .single<Patient>();
-    data = legacy.data;
-    error = legacy.error;
-  }
-
-  if (error) return { data: null, error };
-  const patient = withFallbackElixId(normalizePatientRow(data));
+  const patient = result.data;
   if (patient && !isPatientProfileComplete(patient)) {
     return {
       data: patient,

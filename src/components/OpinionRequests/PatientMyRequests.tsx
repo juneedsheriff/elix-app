@@ -20,7 +20,7 @@ import {
 } from '../../lib/opinionRequests';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
 import { consumeReturnOpinionRequestId } from '../../lib/navigation/returnOpinionRequest';
-import { getMedicalRecordDownloadUrl } from '../../lib/records';
+import { openMedicalRecordByPath } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import './patient-my-requests.css';
 
@@ -252,12 +252,10 @@ export default function PatientMyRequests({
       setActionMessage('File path missing for this record.');
       return;
     }
-    const { data, error: urlError } = await getMedicalRecordDownloadUrl(storagePath);
-    if (urlError || !data?.signedUrl) {
-      setActionMessage(urlError?.message ?? 'Could not open file.');
-      return;
+    const { error: openError } = await openMedicalRecordByPath(storagePath);
+    if (openError) {
+      setActionMessage(openError.message);
     }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleMessage = (message: string, type: 'error' | 'success') => {
@@ -408,7 +406,7 @@ export default function PatientMyRequests({
           {canLoad ? (
             <button type='button' className='pmr-cta-btn' onClick={() => setChoiceModalOpen(true)}>
               <Sparkles size={18} strokeWidth={2} aria-hidden />
-              <span>Get a second opinion</span>
+              <span>Get a doctor consultation</span>
               <ChevronRight size={18} className='pmr-cta-btn__chevron' aria-hidden />
             </button>
           ) : null}
@@ -490,7 +488,7 @@ export default function PatientMyRequests({
               </div>
               <p className='pmr-empty__title'>No requests yet</p>
               <p className='pmr-empty__text'>
-                Tap Get a second opinion to start your first consultation, or browse doctors to choose a
+                Tap Get a doctor consultation to start your first consultation, or browse doctors to choose a
                 specialist directly.
               </p>
             </div>

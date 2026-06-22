@@ -40,10 +40,9 @@ import {
 import {
   deleteMedicalRecord,
   fetchUserMedicalRecords,
-  getMedicalRecordDownloadUrl,
   medicalFileValidationError,
   isR2StorageConfigured,
-  recordOpenUrl,
+  openMedicalRecordFile,
   saveExternalMedicalRecordLink,
   uploadMedicalRecord
 } from '../../lib/records';
@@ -398,19 +397,10 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
 
   const onOpenFile = async (record: MedicalRecord) => {
     setOpenMenuId(null);
-    const external = record.external_url?.trim();
-    if (external) {
-      window.open(external, '_blank', 'noopener,noreferrer');
-      return;
+    const { error: openError } = await openMedicalRecordFile(record);
+    if (openError) {
+      setStatusMessage(openError.message);
     }
-    const path = recordOpenUrl(record);
-    if (!path) return;
-    const { data, error: urlError } = await getMedicalRecordDownloadUrl(path);
-    if (urlError || !data?.signedUrl) {
-      setStatusMessage(urlError?.message ?? 'Could not open file.');
-      return;
-    }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const requestDelete = (record: MedicalRecord) => {
@@ -772,7 +762,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
                 Records ready
               </h3>
               <p className='urv-pending-request-banner__text'>
-                Your medical records are uploaded. Continue with your second opinion request.
+                Your medical records are uploaded. Continue with your doctor consultation request.
               </p>
             </div>
             <button type='button' className='primary-btn urv-pending-request-banner__btn' onClick={handleProceedToRequest}>

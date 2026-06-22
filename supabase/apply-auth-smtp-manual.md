@@ -14,18 +14,18 @@ Dashboard → **Authentication** → **Email** → **SMTP Settings**
 | Username | `resend` |
 | Password | Your Resend API key |
 | Sender email | `noreply@yourdomain.com` (verified domain in Resend) |
-| Sender name | `Elix Health` |
+| Sender name | `ElixClinix Health` |
 
 ## 2. Confirm signup template (6-digit OTP)
 
 Dashboard → **Authentication** → **Email Templates** → **Confirm signup**
 
-Subject: `Your Elix verification code`
+Subject: `Your ElixClinix verification code`
 
 Body (must include `{{ .Token }}`):
 
 ```html
-<h2>Confirm your Elix account</h2>
+<h2>Confirm your ElixClinix account</h2>
 <p>Enter this verification code in the app:</p>
 <p style="font-size: 24px; letter-spacing: 4px;"><strong>{{ .Token }}</strong></p>
 <p>Or use this link: <a href="{{ .ConfirmationURL }}">Confirm email</a></p>

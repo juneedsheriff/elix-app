@@ -16,7 +16,7 @@ export default function AvailabilityPage({ doctorProfile }: ScreenPageProps) {
       <DoctorConsultationPricingSection
         doctorProfile={doctorProfile}
         title='Consultation fees by duration'
-        subtitle='Patients see these prices when they request a second opinion'
+        subtitle='Patients see these prices when they request a doctor consultation'
       />
     </div>
   );

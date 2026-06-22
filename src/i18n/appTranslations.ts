@@ -58,7 +58,7 @@ type AppCopy = {
 export const TRANSLATIONS: Record<Language, AppCopy> = {
   en: {
     welcome: 'World-Class Healthcare at Your Fingertips',
-    tagline: 'Connect with experienced doctors across the globe for trusted medical guidance and second opinions.',
+    tagline: 'Connect with experienced doctors across the globe for trusted medical guidance and doctor consultations.',
     continue: 'Continue',
     skip: 'Skip',
     getStarted: 'Get Started',
@@ -131,7 +131,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
   },
   es: {
     welcome: 'Get consultation with doctor',
-    tagline: 'Segundas opiniones globales con especialistas confiables.',
+    tagline: 'Consultas médicas globales con especialistas confiables.',
     continue: 'Continuar',
     skip: 'Omitir',
     getStarted: 'Comenzar',
@@ -152,7 +152,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     signInAsPatient: 'Entrar como paciente',
     createPatientAccount: 'Crear cuenta de paciente',
     fullNamePlaceholder: 'Nombre completo (cuenta nueva)',
-    connected: 'Elix conectado',
+    connected: 'ElixClinix conectado',
     languageLabel: 'Idioma',
     chooseLanguage: 'Elegir idioma',
     close: 'Cerrar',
@@ -203,8 +203,8 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     ]
   },
   ar: {
-    welcome: 'Second Opinion Doctor',
-    tagline: 'آراء طبية ثانية عالمية مع أطباء موثوقين.',
+    welcome: 'Doctor Consultation',
+    tagline: 'استشارات طبية عالمية مع أطباء موثوقين.',
     continue: 'متابعة',
     skip: 'تخطي',
     getStarted: 'ابدأ',
@@ -225,7 +225,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     signInAsPatient: 'دخول كمريض',
     createPatientAccount: 'إنشاء حساب مريض',
     fullNamePlaceholder: 'الاسم الكامل (حساب جديد)',
-    connected: 'Elix متصل',
+    connected: 'ElixClinix متصل',
     languageLabel: 'اللغة',
     chooseLanguage: 'اختر اللغة',
     close: 'إغلاق',
@@ -302,7 +302,14 @@ export const NAV_IDS: Record<Role, string[]> = {
 };
 
 /** Shown via ScreenRouter but omitted from the slide-out menu (flow-only or doctor-only screens). */
-const SIDEBAR_HIDDEN_SCREENS = new Set(['doctor-consultation', 'doctor-list']);
+const SIDEBAR_HIDDEN_SCREENS = new Set([
+  'doctor-consultation',
+  'doctor-list',
+  'payments',
+  'subscriptions',
+  'timeline',
+  'ai-insights'
+]);
 
 export function getNavItems(role: Role, language: Language) {
   const labels = TRANSLATIONS[language].nav[role];

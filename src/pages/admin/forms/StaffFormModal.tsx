@@ -201,7 +201,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
             <p className='muted'>
               {isEdit
                 ? 'Update profile details, clinic workspace, or password.'
-                : 'Creates a login and staff profile for the Elix Health console.'}
+                : 'Creates a login and staff profile for the ElixClinix console.'}
             </p>
           </div>
           <button type='button' className='icon-btn elixhealth-modal-close' onClick={onClose} disabled={busy} aria-label='Close'>

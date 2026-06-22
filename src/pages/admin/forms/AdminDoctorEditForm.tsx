@@ -520,7 +520,7 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 checked={form.elix_patient_priority}
                 onChange={(e) => setField('elix_patient_priority', e.target.checked)}
               />
-              <span>Elix patient will be treated as priority</span>
+              <span>ElixClinix patient will be treated as priority</span>
             </label>
           </div>
 

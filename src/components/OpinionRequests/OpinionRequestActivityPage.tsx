@@ -17,7 +17,7 @@ export default function OpinionRequestActivityPage({
   requestLabel,
   onBack,
   backLabel = 'Back to request',
-  subtitle = 'Actions by you, your care team, and your doctor on this request.',
+  subtitle = 'Actions by you, PSE, and your doctor on this request.',
   refreshKey,
   variant = 'patient'
 }: OpinionRequestActivityPageProps) {
@@ -43,7 +43,11 @@ export default function OpinionRequestActivityPage({
         </header>
 
         <div className='pmr-audit-page__body'>
-          <OpinionRequestActivityTimeline requestId={requestId} refreshKey={refreshKey} />
+          <OpinionRequestActivityTimeline
+            requestId={requestId}
+            refreshKey={refreshKey}
+            audience={variant}
+          />
         </div>
       </section>
     </div>

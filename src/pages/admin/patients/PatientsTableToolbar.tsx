@@ -39,7 +39,7 @@ function PatientsTableToolbar({
     <div className='doctors-mgmt-table-toolbar__inner'>
       <TextInput
         className='doctors-mgmt-search'
-        placeholder='Search by name, Elix ID, email, phone, or location…'
+        placeholder='Search by name, ElixClinix ID, email, phone, or location…'
         value={search}
         onChange={(event) => onSearchChange(event.currentTarget.value)}
         leftSection={<IconSearch size={18} stroke={1.5} />}

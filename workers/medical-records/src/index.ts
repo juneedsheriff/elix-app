@@ -445,7 +445,7 @@ export default {
         {
           ok: true,
           service: 'elix-medical-records',
-          message: 'Use the Elix app while signed in; API routes require Authorization: Bearer <supabase_token>.'
+          message: 'Use the ElixClinix app while signed in; API routes require Authorization: Bearer <supabase_token>.'
         },
         200,
         origin,
@@ -459,7 +459,7 @@ export default {
         return jsonResponse(
           {
             error: 'Unauthorized',
-            hint: 'Send Authorization: Bearer <supabase_access_token> from a signed-in Elix Health session (patient, doctor, or staff).'
+            hint: 'Send Authorization: Bearer <supabase_access_token> from a signed-in ElixClinix Health session (patient, doctor, or staff).'
           },
           401,
           origin,

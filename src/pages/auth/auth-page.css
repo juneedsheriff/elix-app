@@ -39,8 +39,7 @@
 
 .auth-page__logo {
   display: block;
-  width: auto;
- 
+  
   object-fit: contain;
 }
 

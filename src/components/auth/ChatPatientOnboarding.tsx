@@ -65,7 +65,7 @@ function firstProfileStep(profile: Patient | null): ProfileStep {
 function botPrompt(step: Step, name?: string): string {
   switch (step) {
     case 'intro':
-      return "Hi! I'm Elix Assistant. I'll help you create your patient account in a few quick steps.";
+      return "Hi! I'm ElixClinix Assistant. I'll help you create your patient account in a few quick steps.";
     case 'name':
       return "Let's start — what's your full name?";
     case 'email':
@@ -485,7 +485,7 @@ export default function ChatPatientOnboarding({
             <Bot size={18} />
           </div>
           <div className='chat-onboarding__header-text'>
-            <h2>Elix Assistant</h2>
+            <h2>ElixClinix Assistant</h2>
             <p>Patient account setup</p>
           </div>
         </header>

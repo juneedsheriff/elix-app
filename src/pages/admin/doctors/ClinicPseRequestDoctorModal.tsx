@@ -137,7 +137,7 @@ export default function ClinicPseRequestDoctorModal({
     >
       <Stack gap='md'>
         <Text size='sm' c='dimmed'>
-          Search the Elix Health doctor directory. Your request goes to the administrator for
+          Search the ElixClinix doctor directory. Your request goes to the administrator for
           approval. Once approved, the doctor appears in your clinic list.
         </Text>
 

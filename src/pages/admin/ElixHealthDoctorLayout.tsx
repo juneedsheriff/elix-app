@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, ChevronRight, ClipboardList, LayoutDashboard, LogOut, Menu, Stethoscope, X } from 'lucide-react';
+import ElixLogo from '../../components/ui/ElixLogo';
 import type { Doctor } from '../../types/doctor';
 import {
   doctorNavIdFromPathname,
@@ -69,10 +70,10 @@ export default function ElixHealthDoctorLayout({
       >
         <div className='elixhealth-sidebar-brand'>
           <div className='elixhealth-sidebar-logo-wrap'>
-            <img src='/icons/elix-logo-transparent.png' alt='' className='elixhealth-sidebar-logo' />
+            <ElixLogo className='elixhealth-sidebar-logo' />
           </div>
           <div className='elixhealth-sidebar-brand-text'>
-            <p className='elixhealth-sidebar-title'>Elix Health</p>
+            <p className='elixhealth-sidebar-title'>ElixClinix</p>
             <span className='elixhealth-sidebar-role-badge'>Doctor</span>
           </div>
         </div>

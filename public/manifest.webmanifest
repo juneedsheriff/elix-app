@@ -1,7 +1,7 @@
 {
-  "name": "Elix — Second Opinion Doctor",
-  "short_name": "Elix",
-  "description": "Get verified second opinions from specialists. Upload records, request opinions, and track doctor replies.",
+  "name": "ElixClinix — Doctor Consultation",
+  "short_name": "ElixClinix",
+  "description": "Get verified doctor consultations from specialists. Upload records, request consultations, and track doctor replies.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

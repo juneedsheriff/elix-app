@@ -9,7 +9,7 @@
  *   SMTP_ADMIN_EMAIL=noreply@yourdomain.com
  *
  * Optional:
- *   SMTP_SENDER_NAME=Elix Health
+ *   SMTP_SENDER_NAME=ElixClinix Health
  *   SMTP_PORT=465                     (465 SSL or 587 STARTTLS)
  *   SITE_URL=http://localhost:3000
  *   URI_ALLOW_LIST=http://localhost:3000/**,https://your-app.vercel.app/**
@@ -46,7 +46,7 @@ loadEnvFile('.env.local');
 const accessToken = process.env.SUPABASE_ACCESS_TOKEN?.trim();
 const resendKey = process.env.RESEND_API_KEY?.trim();
 const smtpAdminEmail = process.env.SMTP_ADMIN_EMAIL?.trim();
-const smtpSenderName = process.env.SMTP_SENDER_NAME?.trim() || 'Elix Health';
+const smtpSenderName = process.env.SMTP_SENDER_NAME?.trim() || 'ElixClinix Health';
 const smtpPort = process.env.SMTP_PORT?.trim() || '465';
 const explicitSiteUrl = process.env.SITE_URL?.trim() || process.env.VITE_APP_URL?.trim() || null;
 const explicitUriAllowList = process.env.URI_ALLOW_LIST?.trim() || null;
@@ -56,7 +56,7 @@ const defaultUriAllowList = [
   'http://localhost:3000/**'
 ].join(',');
 
-const confirmationSubject = process.env.SMTP_CONFIRMATION_SUBJECT?.trim() || 'Your Elix verification code';
+const confirmationSubject = process.env.SMTP_CONFIRMATION_SUBJECT?.trim() || 'Your ElixClinix verification code';
 const confirmationContent = readFileSync(join(root, templateFile), 'utf8');
 const mailerOtpLength = Number.parseInt(process.env.MAILER_OTP_LENGTH?.trim() || '6', 10);
 
@@ -71,7 +71,7 @@ Add to .env.local (server-only — do NOT prefix with VITE_):
   SMTP_ADMIN_EMAIL=noreply@yourdomain.com
 
 Optional:
-  SMTP_SENDER_NAME=Elix Health
+  SMTP_SENDER_NAME=ElixClinix Health
   SMTP_PORT=465
   SITE_URL=http://localhost:3000
   URI_ALLOW_LIST=http://localhost:3000/**,https://your-app.vercel.app/**

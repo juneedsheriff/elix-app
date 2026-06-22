@@ -9,7 +9,7 @@ import {
   staffRequestStatusLabel,
   subscribeStaffOpinionRequestUpdates
 } from '../../lib/opinionRequests';
-import { getMedicalRecordDownloadUrl } from '../../lib/records';
+import { openMedicalRecordByPath } from '../../lib/records';
 import { canCreateRequests, isAdministrator, isAnyPatientServiceExecutive, isClinicPatientServiceExecutive } from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
 import type { Doctor } from '../../types/doctor';
@@ -384,12 +384,10 @@ export default function ElixHealthRequestsPage() {
   });
 
   const openRecord = async (storagePath: string) => {
-    const { data, error: urlError } = await getMedicalRecordDownloadUrl(storagePath);
-    if (urlError || !data?.signedUrl) {
-      setActionMessage(urlError?.message ?? 'Could not open file.');
-      return;
+    const { error } = await openMedicalRecordByPath(storagePath);
+    if (error) {
+      setActionMessage(error.message);
     }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleAssign = async () => {

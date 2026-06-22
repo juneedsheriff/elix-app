@@ -230,7 +230,7 @@ export default function RecommendDoctorsSection({
 
       {!doctors.length ? (
         <Alert color='orange' radius='md' mb='sm' title='No doctors available'>
-          Add doctors under Elix Health → Doctors before you can build a recommendation list.
+          Add doctors under ElixClinix → Doctors before you can build a recommendation list.
         </Alert>
       ) : null}
 

@@ -427,7 +427,7 @@ export async function adminSignIn(email: string, password: string) {
     await supabase.auth.signOut();
     return {
       error: {
-        message: 'This account is not authorized for Elix Health staff.',
+        message: 'This account is not authorized for ElixClinix staff.',
         name: 'AuthError',
         status: 403
       } as AuthError,

@@ -1,6 +1,7 @@
 import { CheckCircle2, LogOut } from 'lucide-react';
-import { Globe, Menu, Moon, Sun, X } from '../navIcons';
+import ElixLogo from '../components/ui/ElixLogo';
 import NavIcon from '../components/navigation/NavIcon';
+import { Globe, Menu, Moon, Sun, X } from '../navIcons';
 import LanguagePickerModal from '../components/Language/LanguagePickerModal';
 import ScreenRouter from '../pages/ScreenRouter';
 import { isDashboardScreen } from '../lib/dashboardTitle';
@@ -88,7 +89,7 @@ export default function AppShell({
             <p className='mobile-header-titles__sub'>
               <CheckCircle2 size={13} className='mobile-header-titles__verified' aria-hidden />
               <span>
-                {roleLabel(language, role)} • Elix
+                {roleLabel(language, role)} • ElixClinix
               </span>
             </p>
           </div>
@@ -128,6 +129,9 @@ export default function AppShell({
         ) : null}
 
         <nav className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`} aria-label='Main navigation' aria-hidden={!menuOpen}>
+          <div className='sidebar-brand'>
+            <ElixLogo className='sidebar-brand__logo' width={140} height={48} />
+          </div>
           <div className='sidebar-nav'>
             {navItems.map((item) => (
               <button

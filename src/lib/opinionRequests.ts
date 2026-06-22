@@ -3275,6 +3275,66 @@ export async function pseSetPaymentPending(requestId: string) {
   return { data, error: null };
 }
 
+/** Generate invoice (if needed) and mark payment pending without sharing a payment link. */
+export async function pseMarkPaymentPendingNoLink(
+  request: OpinionRequest,
+  input: { amount: number; currency: string; doctor: Doctor }
+) {
+  let invoicePayload: ReturnType<typeof consultationInvoiceDbPayload> | null = null;
+  let paymentAmount =
+    request.invoice_total != null && Number.isFinite(Number(request.invoice_total))
+      ? Number(request.invoice_total)
+      : null;
+  let paymentCurrency = request.payment_currency?.trim()
+    ? normalizeConsultationCurrency(request.payment_currency)
+    : normalizeConsultationCurrency(input.currency);
+
+  if (!request.invoice_pdf_storage_path?.trim()) {
+    const uploaded = await uploadConsultationInvoicePdf(request, input);
+    if (uploaded.error || !uploaded.data) {
+      return { data: null, error: uploaded.error };
+    }
+    invoicePayload = consultationInvoiceDbPayload(uploaded.data);
+    paymentAmount = uploaded.data.totals.total;
+    paymentCurrency = uploaded.data.currency;
+  } else if (paymentAmount == null) {
+    const currency = normalizeConsultationCurrency(input.currency);
+    paymentAmount = computeConsultationInvoiceTotals(input.amount, currency).total;
+    paymentCurrency = currency;
+  }
+
+  const payload = {
+    ...(invoicePayload ?? {}),
+    payment_status: 'pending' as const,
+    consultation_stage: 'payment_pending' as const,
+    payment_amount: paymentAmount,
+    payment_currency: paymentCurrency
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', request.id)
+    .select(invoiceSelectFields)
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation invoice is not enabled in the database. Run npm run db:apply-consultation-invoice or apply supabase/migrations/037_consultation_invoice.sql.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error };
+  await logRequestAudit(request.id, 'payment_pending_set', 'pse', {
+    metadata: { payment_amount: paymentAmount, payment_currency: paymentCurrency }
+  });
+  return { data, error: null };
+}
+
 export async function pseConfirmPayment(
   requestId: string,
   input: { amount?: number | null; currency?: string | null; reference?: string | null }

@@ -16,6 +16,7 @@ import {
   type MedicalRecordDownloadOptions
 } from './r2Storage';
 import { supabase } from './supabase';
+import { completeAsyncOpenInNewTab, openUrlInNewTab, prepareAsyncOpenInNewTab } from './openFileUrl';
 
 /** Cloudflare R2 bucket name (metadata column + worker binding). */
 const BUCKET = 'medical-records';
@@ -256,6 +257,45 @@ export async function getMedicalRecordDownloadUrl(
   if (error || !blob) return { data: null, error };
   const signedUrl = URL.createObjectURL(blob);
   return { data: { signedUrl }, error: null };
+}
+
+export async function openMedicalRecordFile(
+  record: MedicalRecord,
+  options?: MedicalRecordDownloadOptions
+): Promise<{ error: { message: string } | null }> {
+  const external = record.external_url?.trim();
+  if (external) {
+    openUrlInNewTab(external);
+    return { error: null };
+  }
+
+  const path = record.storage_path;
+  if (!path) return { error: { message: 'No file to open.' } };
+
+  const prepared = prepareAsyncOpenInNewTab();
+  const { data, error } = await getMedicalRecordDownloadUrl(path, options);
+  if (error || !data?.signedUrl) {
+    prepared?.close();
+    return { error: error ?? { message: 'Could not open file.' } };
+  }
+
+  completeAsyncOpenInNewTab(prepared, data.signedUrl, record.file_name);
+  return { error: null };
+}
+
+export async function openMedicalRecordByPath(
+  storagePath: string,
+  options?: MedicalRecordDownloadOptions & { fileName?: string }
+): Promise<{ error: { message: string } | null }> {
+  const prepared = prepareAsyncOpenInNewTab();
+  const { data, error } = await getMedicalRecordDownloadUrl(storagePath, options);
+  if (error || !data?.signedUrl) {
+    prepared?.close();
+    return { error: error ?? { message: 'Could not open file.' } };
+  }
+
+  completeAsyncOpenInNewTab(prepared, data.signedUrl, options?.fileName);
+  return { error: null };
 }
 
 export async function deleteMedicalRecord(record: MedicalRecord) {

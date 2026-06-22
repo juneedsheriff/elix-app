@@ -80,7 +80,7 @@ export default function DoctorDashboardPage({ doctorProfile, dbConnected, onNavi
           <MetricCard
             title='Total requests'
             value={loading ? '…' : String(requests.length)}
-            subtitle='Incoming second opinions'
+            subtitle='Incoming doctor consultations'
           />
           <MetricCard
             title='Awaiting response'
@@ -90,7 +90,7 @@ export default function DoctorDashboardPage({ doctorProfile, dbConnected, onNavi
           <MetricCard
             title='Patient rating'
             value={rating}
-            subtitle={doctorProfile ? 'From your Elix profile' : 'Sign in to load profile'}
+            subtitle={doctorProfile ? 'From your ElixClinix profile' : 'Sign in to load profile'}
           />
         </div>
       </SectionCard>

@@ -429,7 +429,7 @@ export default function DoctorConsultationPage({
                 onSubmit={(e) => void handleFillSubmit(e)}
               >
                 <p className='muted doctor-consultation-page__mode-hint'>
-                  Complete the fields below. A branded consultation notes PDF with Elix logo and your
+                  Complete the fields below. A branded consultation notes PDF with ElixClinix logo and your
                   clinic details will be generated on submit.
                 </p>
 

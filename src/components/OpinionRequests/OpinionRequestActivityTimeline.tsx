@@ -3,6 +3,8 @@ import { Clock, Loader2, UserRound } from 'lucide-react';
 import {
   fetchOpinionRequestAuditEvents,
   formatOpinionRequestAuditActorLabel,
+  formatOpinionRequestAuditSummary,
+  type OpinionRequestAuditAudience,
   type OpinionRequestAuditEvent
 } from '../../lib/opinionRequestAudit';
 
@@ -15,11 +17,13 @@ function formatAuditTimestamp(iso: string): string {
 type OpinionRequestActivityTimelineProps = {
   requestId: string;
   refreshKey?: number;
+  audience?: OpinionRequestAuditAudience;
 };
 
 export default function OpinionRequestActivityTimeline({
   requestId,
-  refreshKey = 0
+  refreshKey = 0,
+  audience = 'patient'
 }: OpinionRequestActivityTimelineProps) {
   const [events, setEvents] = useState<OpinionRequestAuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,11 +72,13 @@ export default function OpinionRequestActivityTimeline({
         <li key={event.id} className='pmr-audit-timeline__item'>
           <span className='pmr-audit-timeline__dot' aria-hidden />
           <div className='pmr-audit-timeline__card'>
-            <p className='pmr-audit-timeline__summary'>{event.summary}</p>
+            <p className='pmr-audit-timeline__summary'>
+              {formatOpinionRequestAuditSummary(event, audience)}
+            </p>
             <div className='pmr-audit-timeline__meta'>
               <span className='pmr-audit-timeline__actor'>
                 <UserRound size={13} aria-hidden />
-                {formatOpinionRequestAuditActorLabel(event)}
+                {formatOpinionRequestAuditActorLabel(event, audience)}
               </span>
               <span className='pmr-audit-timeline__time'>
                 <Clock size={13} aria-hidden />

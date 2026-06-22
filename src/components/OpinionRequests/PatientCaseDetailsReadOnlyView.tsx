@@ -57,7 +57,7 @@ export default function PatientCaseDetailsReadOnlyView({
           value={formatCaseDetailValue(details.primaryHealthConcern || request.message)}
         />
         <DetailField label='Specialty Required' value={formatCaseDetailValue(specialty)} />
-        <DetailField label='Reason for Seeking a Second Opinion' value={reason} />
+        <DetailField label='Reason for Seeking a Doctor Consultation' value={reason} />
       </div>
 
       <SectionHeading title='2. Current Medical Condition' />
@@ -113,7 +113,7 @@ export default function PatientCaseDetailsReadOnlyView({
         />
       </div>
 
-      <SectionHeading title='6. Questions for the Second Opinion Doctor' />
+      <SectionHeading title='6. Questions for the Doctor Consultation' />
       <div className='patient-case-details-readonly__grid'>
         <DetailField
           label='What specific questions would you like answered?'

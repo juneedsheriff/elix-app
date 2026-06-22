@@ -14,6 +14,10 @@ export type Patient = {
   height_cm: number | null;
   weight_kg: number | null;
   allergies: string | null;
+  family_history: string | null;
+  social_history: string | null;
+  surgical_history: string | null;
+  medical_history: string | null;
   current_medications: string | null;
   insurance_provider: string | null;
   emergency_contact_name: string | null;
@@ -49,11 +53,16 @@ export type PatientProfileUpdateInput = {
   height_cm?: number | null;
   weight_kg?: number | null;
   allergies?: string | null;
+  family_history?: string | null;
+  social_history?: string | null;
+  surgical_history?: string | null;
+  medical_history?: string | null;
   current_medications?: string | null;
   insurance_provider?: string | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   preferred_language?: string;
+  avatar_url?: string | null;
 };
 
 export type PatientOnboardingInput = {

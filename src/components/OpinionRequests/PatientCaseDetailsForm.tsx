@@ -108,7 +108,7 @@ export default function PatientCaseDetailsForm({
         </label>
 
         <label className='opinion-message-label'>
-          Reason for Seeking a Second Opinion
+          Reason for Seeking a Doctor Consultation
           <select
             className='opinion-select'
             value={value.reasonForSecondOpinion}
@@ -283,7 +283,7 @@ export default function PatientCaseDetailsForm({
         />
       </div>
 
-      <SectionTitle>6. Questions for the Second Opinion Doctor</SectionTitle>
+      <SectionTitle>6. Questions for the Doctor Consultation</SectionTitle>
       <fieldset className='opinion-fieldset patient-case-details-form__fieldset'>
         <legend>What specific questions would you like answered?</legend>
         <ul className='patient-case-details-form__checkbox-list'>
@@ -396,7 +396,7 @@ export default function PatientCaseDetailsForm({
                   ],
                   [
                     'consentNotEmergencyCare',
-                    'I understand that a second opinion does not replace emergency medical care.'
+                    'I understand that a doctor consultation does not replace emergency medical care.'
                   ]
                 ] as const
               ).map(([key, label]) => (

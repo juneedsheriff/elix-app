@@ -198,7 +198,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
           <CheckCircle2 size={40} aria-hidden />
           <h3>Request submitted</h3>
           <p className='muted'>
-            Your second opinion request was submitted. Your request will be assigned to our patient
+            Your doctor consultation request was submitted. Your request will be assigned to our patient
             service team, who will coordinate with you and {doctor.full_name}.
           </p>
           <p className='muted'>
@@ -223,7 +223,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
   return (
     <section className='section-card opinion-form-card' aria-labelledby='get-opinion-title'>
       <div className='section-head'>
-        <h3 id='get-opinion-title'>Request second opinion</h3>
+        <h3 id='get-opinion-title'>Request doctor consultation</h3>
         <p>
           Send selected records and a message to <strong>{doctor.full_name}</strong> ({doctor.specialty})
         </p>

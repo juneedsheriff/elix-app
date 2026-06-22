@@ -78,7 +78,7 @@ export default function DoctorConsultationPricingSection({
     <SectionCard title={title} subtitle={subtitle}>
       <form className='doctor-pricing-form' onSubmit={(e) => void handleSubmit(e)}>
         <p className='muted'>
-          Patients choose a duration when requesting a second opinion. Set the charge for each length
+          Patients choose a duration when requesting a doctor consultation. Set the charge for each length
           you offer — use 0 to hide a duration from patients.
         </p>
 

@@ -23,7 +23,7 @@ export type WizardStepDef = {
 };
 
 export const PSE_WIZARD_STEPS: WizardStepDef[] = [
-  { id: 1, title: 'Request received', subtitle: 'Patient submitted a second opinion request' },
+  { id: 1, title: 'Request received', subtitle: 'Patient submitted a doctor consultation request' },
   { id: 2, title: 'Patient case details', subtitle: "Review the patient's submitted case information" },
   { id: 3, title: 'Verify records', subtitle: 'Review uploaded medical documents' },
   {
@@ -37,7 +37,7 @@ export const PSE_WIZARD_STEPS: WizardStepDef[] = [
 ];
 
 export const PATIENT_WIZARD_STEPS: WizardStepDef[] = [
-  { id: 1, title: 'Request second opinion', subtitle: 'Review your submitted case details' },
+  { id: 1, title: 'Request doctor consultation', subtitle: 'Review your submitted case details' },
   { id: 2, title: 'Document verification', subtitle: 'We verify your uploaded records' },
   { id: 3, title: 'Recommended doctors', subtitle: 'Choose from doctors curated for you' },
   { id: 4, title: 'Payment', subtitle: 'Complete payment to continue' },

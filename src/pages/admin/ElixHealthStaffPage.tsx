@@ -192,7 +192,7 @@ export default function ElixHealthStaffPage() {
       {isAdministrator(currentStaff) ? (
         <div className='elixhealth-staff-toolbar elixhealth-staff-toolbar--page'>
           <p className='muted'>
-            Add new staff accounts for the Elix Health console.
+            Add new staff accounts for the ElixClinix console.
           </p>
           <button type='button' className='primary-btn' onClick={openCreateModal}>
             <Plus size={16} aria-hidden />

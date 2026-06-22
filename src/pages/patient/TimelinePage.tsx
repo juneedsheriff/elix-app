@@ -11,7 +11,7 @@ export default function TimelinePage() {
           </div>
           <div>
             <strong>Mar 14</strong>
-            <p>Second opinion from cardiology: recommend additional echocardiogram.</p>
+            <p>Doctor consultation from cardiology: recommend additional echocardiogram.</p>
           </div>
           <div>
             <strong>Mar 16</strong>

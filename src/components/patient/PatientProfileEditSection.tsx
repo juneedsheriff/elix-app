@@ -16,6 +16,7 @@ import {
 } from '../../lib/patients';
 import type { Patient } from '../../types/patient';
 import PatientBirthDatePicker from './PatientBirthDatePicker';
+import PatientProfileImageSection from './PatientProfileImageSection';
 import PreferredLanguageMultiSelect from './PreferredLanguageMultiSelect';
 
 type PatientProfileEditSectionProps = {
@@ -36,6 +37,10 @@ type ProfileFormState = {
   heightCm: string;
   weightKg: string;
   allergies: string;
+  familyHistory: string;
+  socialHistory: string;
+  surgicalHistory: string;
+  medicalHistory: string;
   currentMedications: string;
   insuranceProvider: string;
   emergencyContactName: string;
@@ -57,6 +62,10 @@ function emptyFormState(): ProfileFormState {
     heightCm: '',
     weightKg: '',
     allergies: '',
+    familyHistory: '',
+    socialHistory: '',
+    surgicalHistory: '',
+    medicalHistory: '',
     currentMedications: '',
     insuranceProvider: '',
     emergencyContactName: '',
@@ -80,6 +89,10 @@ function patientToFormState(patient: Patient): ProfileFormState {
     heightCm: patient.height_cm != null ? String(patient.height_cm) : '',
     weightKg: patient.weight_kg != null ? String(patient.weight_kg) : '',
     allergies: patient.allergies ?? '',
+    familyHistory: patient.family_history ?? '',
+    socialHistory: patient.social_history ?? '',
+    surgicalHistory: patient.surgical_history ?? '',
+    medicalHistory: patient.medical_history ?? '',
     currentMedications: patient.current_medications ?? '',
     insuranceProvider: patient.insurance_provider ?? '',
     emergencyContactName: patient.emergency_contact_name ?? '',
@@ -133,6 +146,10 @@ function profileDetailRows(patient: Patient): DetailRow[] {
       value: patient.weight_kg != null ? `${patient.weight_kg} kg` : 'Not set'
     },
     { label: 'Allergies', value: displayValue(patient.allergies) },
+    { label: 'Family history', value: displayValue(patient.family_history) },
+    { label: 'Social history', value: displayValue(patient.social_history) },
+    { label: 'Surgical history', value: displayValue(patient.surgical_history) },
+    { label: 'Medical history', value: displayValue(patient.medical_history) },
     { label: 'Current medications', value: displayValue(patient.current_medications) },
     { label: 'Insurance provider', value: displayValue(patient.insurance_provider) },
     { label: 'Emergency contact', value: displayValue(patient.emergency_contact_name) },
@@ -214,6 +231,10 @@ export default function PatientProfileEditSection({
       height_cm: height.value,
       weight_kg: weight.value,
       allergies: form.allergies.trim() || null,
+      family_history: form.familyHistory.trim() || null,
+      social_history: form.socialHistory.trim() || null,
+      surgical_history: form.surgicalHistory.trim() || null,
+      medical_history: form.medicalHistory.trim() || null,
       current_medications: form.currentMedications.trim() || null,
       insurance_provider: form.insuranceProvider.trim() || null,
       emergency_contact_name: form.emergencyContactName.trim() || null,
@@ -224,6 +245,10 @@ export default function PatientProfileEditSection({
 
     if (saveError) {
       setError(saveError.message);
+      if (data) {
+        await refreshPatientProfile();
+        setForm(patientToFormState(data));
+      }
       return;
     }
 
@@ -250,7 +275,15 @@ export default function PatientProfileEditSection({
     >
       {!patientProfile ? (
         <p className='muted'>Sign in to load your patient profile.</p>
-      ) : editing ? (
+      ) : (
+        <>
+          <PatientProfileImageSection
+            userId={userId}
+            avatarUrl={patientProfile.avatar_url}
+            displayName={displayName}
+            disabled={busy}
+          />
+          {editing ? (
         <form className='patient-profile-edit' onSubmit={(e) => void handleSubmit(e)}>
           {error ? (
             <p className='auth-error' role='alert'>
@@ -411,13 +444,53 @@ export default function PatientProfileEditSection({
                 disabled={busy}
               />
             </label>
-            <label className='patient-profile-edit__field patient-profile-edit__field--full'>
+            <label className='patient-profile-edit__field patient-profile-edit__field--full patient-profile-edit__field--history'>
+              <span>Family history</span>
+              <textarea
+                rows={5}
+                value={form.familyHistory}
+                onChange={(e) => setField('familyHistory', e.target.value)}
+                placeholder='Optional — e.g. heart disease, diabetes in close relatives'
+                disabled={busy}
+              />
+            </label>
+            <label className='patient-profile-edit__field patient-profile-edit__field--full patient-profile-edit__field--history'>
+              <span>Social history</span>
+              <textarea
+                rows={5}
+                value={form.socialHistory}
+                onChange={(e) => setField('socialHistory', e.target.value)}
+                placeholder='Optional — e.g. smoking, alcohol, occupation'
+                disabled={busy}
+              />
+            </label>
+            <label className='patient-profile-edit__field patient-profile-edit__field--full patient-profile-edit__field--history'>
+              <span>Surgical history</span>
+              <textarea
+                rows={5}
+                value={form.surgicalHistory}
+                onChange={(e) => setField('surgicalHistory', e.target.value)}
+                placeholder='Optional — past surgeries and dates'
+                disabled={busy}
+              />
+            </label>
+            <label className='patient-profile-edit__field patient-profile-edit__field--full patient-profile-edit__field--history'>
+              <span>Medical history</span>
+              <textarea
+                rows={5}
+                value={form.medicalHistory}
+                onChange={(e) => setField('medicalHistory', e.target.value)}
+                placeholder='Optional — chronic conditions, hospitalizations, diagnoses'
+                disabled={busy}
+              />
+            </label>
+            <label className='patient-profile-edit__field patient-profile-edit__field--full patient-profile-edit__field--history'>
               <span>Current medications</span>
               <textarea
-                rows={2}
+                rows={5}
                 value={form.currentMedications}
                 onChange={(e) => setField('currentMedications', e.target.value)}
-                placeholder='Optional'
+                placeholder='Optional — name, dose, and how often you take each medicine'
                 disabled={busy}
               />
             </label>
@@ -479,7 +552,15 @@ export default function PatientProfileEditSection({
           ) : null}
           <div className='patient-profile-edit__summary'>
             <div className='patient-profile-edit__avatar' aria-hidden>
-              <User size={20} />
+              {patientProfile.avatar_url?.trim() ? (
+                <img
+                  src={patientProfile.avatar_url}
+                  alt=''
+                  className='patient-profile-edit__avatar-img'
+                />
+              ) : (
+                <User size={20} />
+              )}
             </div>
             <div className='patient-profile-edit__details'>
               <p className='patient-profile-edit__name'>{displayName}</p>
@@ -504,6 +585,8 @@ export default function PatientProfileEditSection({
               </div>
             ))}
           </dl>
+        </>
+      )}
         </>
       )}
     </SectionCard>

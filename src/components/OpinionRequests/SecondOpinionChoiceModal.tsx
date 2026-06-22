@@ -34,7 +34,7 @@ export default function SecondOpinionChoiceModal({
         type='button'
         className='second-opinion-modal-backdrop'
         onClick={onClose}
-        aria-label='Close second opinion options'
+        aria-label='Close doctor consultation options'
       />
       <div
         className='second-opinion-modal'
@@ -45,7 +45,7 @@ export default function SecondOpinionChoiceModal({
       >
         <div className='second-opinion-modal-head'>
           <div>
-            <h2 id='second-opinion-modal-title'>Choose your second opinion option</h2>
+            <h2 id='second-opinion-modal-title'>Choose your doctor consultation option</h2>
             <p className='muted'>Select how you would like to proceed with your consultation request.</p>
           </div>
           <button type='button' className='icon-btn second-opinion-modal-close' onClick={onClose} aria-label='Close'>

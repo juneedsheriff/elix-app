@@ -275,7 +275,7 @@ export default function PatientDashboardPage({
               <Stethoscope size={20} strokeWidth={2} />
             </span>
             <span className='pd-action__text'>
-              <strong>Second opinion</strong>
+              <strong>Doctor consultation</strong>
               <small>Choose a doctor or get recommendations</small>
             </span>
             <ChevronRight size={18} className='pd-action__chevron' aria-hidden />

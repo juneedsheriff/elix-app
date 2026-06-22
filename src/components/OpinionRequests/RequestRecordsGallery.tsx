@@ -3,7 +3,7 @@ import { Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { IconExternalLink, IconFileText } from '@tabler/icons-react';
 import ImageLightboxGallery, { type LightboxImageItem } from '../common/ImageLightboxGallery';
 import { isImageFileName } from '../../lib/imageFiles';
-import { getMedicalRecordDownloadUrl } from '../../lib/records';
+import { openMedicalRecordByPath } from '../../lib/records';
 import type { OpinionRequestFile } from '../../types/opinionRequest';
 
 type RequestRecordsGalleryProps = {
@@ -106,11 +106,10 @@ export default function RequestRecordsGallery({
       }
 
       setOpeningPath(storagePath);
-      const { data, error } = await getMedicalRecordDownloadUrl(storagePath, { requestId });
+      const { error } = await openMedicalRecordByPath(storagePath, { requestId });
       setOpeningPath(null);
 
-      if (error || !data?.signedUrl) return;
-      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+      if (error) return;
     },
     [onOpenDocument, onOpenRecord, requestId]
   );

@@ -62,7 +62,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>('light');
   const [role, setRole] = useState<Role>('patient');
   const [loginMode, setLoginMode] = useState<LoginMode>('patient');
-  const [stage, setStage] = useState<Stage>('splash');
+  const [stage, setStage] = useState<Stage>(() => (isPasswordRecoveryCallback() ? 'auth' : 'splash'));
   const [language, setLanguage] = useState<Language>('en');
   const [activeScreen, setActiveScreen] = useState<string>(() =>
     parseAppScreenPath(window.location.pathname) ?? 'patient-dashboard'
@@ -74,7 +74,7 @@ function App() {
   const [authView, setAuthView] = useState<AuthView>('signin');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
-  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => isPasswordRecoveryCallback());
   const [authBusy, setAuthBusy] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
 
@@ -147,6 +147,10 @@ function App() {
 
   useEffect(() => {
     if (stage !== 'splash') return;
+    if (passwordRecovery || isPasswordRecoveryCallback()) {
+      setStage('auth');
+      return;
+    }
     const timeout = window.setTimeout(() => {
       if (configured && session) {
         if (isDoctor && getAuthSurface() === 'desktop') {
@@ -159,10 +163,11 @@ function App() {
       }
     }, 1700);
     return () => window.clearTimeout(timeout);
-  }, [stage, configured, session, isDoctor, navigate]);
+  }, [stage, configured, session, isDoctor, navigate, passwordRecovery]);
 
   useEffect(() => {
     if (authLoading || !session || isDoctor) return;
+    if (passwordRecovery || isPasswordRecoveryCallback()) return;
     if (stage !== 'auth' && stage !== 'onboarding') return;
     if (stage === 'auth' && authView === 'signup') return;
 
@@ -175,7 +180,7 @@ function App() {
     if (patientProfile) {
       setStage('app');
     }
-  }, [authLoading, session, isDoctor, patientProfile, stage, authView]);
+  }, [authLoading, session, isDoctor, patientProfile, stage, authView, passwordRecovery]);
 
   useEffect(() => {
     if (authLoading || !isDoctor || !doctorProfile) return;
@@ -328,7 +333,7 @@ function App() {
       const msg = error.message.toLowerCase();
       if (msg.includes('error sending recovery') || msg.includes('error sending confirmation')) {
         setAuthError(
-          'Email could not be sent. Custom SMTP (Resend) may be misconfigured — verify the sender domain in Resend and run npm run db:apply-auth-smtp.'
+          'Email could not be sent. In Resend, create an API key with Full access (or linked to verified app.elixclinix.com), update RESEND_API_KEY, then run npm run db:apply-auth-smtp.'
         );
       } else {
         setAuthError(error.message);

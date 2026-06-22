@@ -190,7 +190,7 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
           <CheckCircle2 size={40} aria-hidden />
           <h3>Request submitted</h3>
           <p className='muted'>
-            Your second opinion request for <strong>{caseDetails.specialtyRequired}</strong> was submitted. Our patient
+            Your doctor consultation request for <strong>{caseDetails.specialtyRequired}</strong> was submitted. Our patient
             service team will review your records and recommend suitable specialists for your case.
           </p>
           <button type='button' className='secondary-btn wide' onClick={onBack}>
