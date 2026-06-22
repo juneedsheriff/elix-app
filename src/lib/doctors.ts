@@ -19,7 +19,36 @@ export function normalizeDoctor(row: Doctor): Doctor {
   return normalizeDoctorProfile(row);
 }
 
+/** Doctors visible in patient browse (is_visible true or unset). */
+function applyPatientBrowseVisibilityFilter<T extends { or: (filters: string) => T }>(query: T): T {
+  return query.or('is_visible.is.null,is_visible.eq.true');
+}
+
+function isMissingBrowseDoctorsRpc(error: { message?: string; code?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  const code = error?.code ?? '';
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    msg.includes('list_doctors_for_patient_browse') ||
+    msg.includes('could not find the function')
+  );
+}
+
 export async function fetchDoctors(limit = 50, options?: { patientClinicId?: string | null }) {
+  const rpcResult = await supabase.rpc('list_doctors_for_patient_browse', { p_limit: limit });
+
+  if (!rpcResult.error && rpcResult.data) {
+    return {
+      data: (rpcResult.data as Doctor[]).map((row) => normalizeDoctor(row)),
+      error: null
+    };
+  }
+
+  if (!isMissingBrowseDoctorsRpc(rpcResult.error)) {
+    return { data: null, error: rpcResult.error };
+  }
+
   const isClinicPatient = Boolean(options?.patientClinicId?.trim());
 
   let query = supabase
@@ -30,7 +59,7 @@ export async function fetchDoctors(limit = 50, options?: { patientClinicId?: str
     .limit(limit);
 
   if (!isClinicPatient) {
-    query = query.eq('is_visible', true);
+    query = applyPatientBrowseVisibilityFilter(query);
   }
 
   const result = await query;
@@ -94,24 +123,15 @@ export async function fetchDoctorByAuthUserId(authUserId: string) {
 
 /** Distinct specialties from doctors the patient can request (platform or clinic workspace). */
 export async function fetchDoctorSpecialties(options?: { patientClinicId?: string | null }) {
-  const isClinicPatient = Boolean(options?.patientClinicId?.trim());
-
-  let query = supabase.from('doctors').select('specialty').is('deleted_at', null);
-
-  if (!isClinicPatient) {
-    query = query.eq('is_visible', true);
-  }
-
-  const result = await query;
-
-  if (result.error) {
-    return { data: null, error: result.error };
+  const doctorsRes = await fetchDoctors(200, options);
+  if (doctorsRes.error) {
+    return { data: null, error: doctorsRes.error };
   }
 
   const specialties = [
     ...new Set(
-      (result.data ?? [])
-        .map((row) => row.specialty?.trim())
+      (doctorsRes.data ?? [])
+        .map((doctor) => doctor.specialty?.trim())
         .filter((value): value is string => Boolean(value))
     )
   ].sort((a, b) => a.localeCompare(b));

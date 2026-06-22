@@ -262,7 +262,7 @@ export async function createDoctorForAdmin(
 ) {
   const row = {
     ...adminInputToDbRow(input),
-    is_visible: options?.clinicId ? false : true,
+    is_visible: true,
     clinic_id: options?.clinicId ?? null,
     login_disabled: false
   };
