@@ -4695,6 +4695,8 @@ body:has(.elixhealth-app),
   max-height: min(92dvh, 900px);
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -4702,11 +4704,32 @@ body:has(.elixhealth-app),
   animation: fadeIn 200ms ease-out;
 }
 
+.elixhealth-modal > .elixhealth-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 0;
+}
+
+.elixhealth-modal > .elixhealth-form .elixhealth-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.elixhealth-modal > .elixhealth-form .elixhealth-modal-footer {
+  flex-shrink: 0;
+}
+
 .elixhealth-modal-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  flex-shrink: 0;
   padding: 1.1rem 1.25rem 0.75rem;
   border-bottom: 1px solid var(--border);
 }
@@ -4733,9 +4756,48 @@ body:has(.elixhealth-app),
 .elixhealth-modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 0.65rem;
   padding: 0.85rem 1.25rem 1.1rem;
   border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.elixhealth-staff-form-modal {
+  width: min(100%, 520px);
+}
+
+@media (max-width: 640px) {
+  .elixhealth-modal-root {
+    padding: 0.5rem;
+    align-items: center;
+  }
+
+  .elixhealth-modal {
+    width: 100%;
+    max-height: calc(100dvh - 1rem);
+    border-radius: 14px;
+  }
+
+  .elixhealth-modal-head {
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .elixhealth-modal > .elixhealth-form .elixhealth-modal-body {
+    padding: 0.85rem 1rem;
+  }
+
+  .elixhealth-modal > .elixhealth-form .elixhealth-modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    padding: 0.85rem 1rem 1rem;
+  }
+
+  .elixhealth-modal > .elixhealth-form .elixhealth-modal-footer .primary-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 .elixhealth-form {

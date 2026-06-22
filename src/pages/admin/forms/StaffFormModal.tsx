@@ -189,7 +189,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
         disabled={busy}
       />
       <div
-        className='elixhealth-modal'
+        className='elixhealth-modal elixhealth-staff-form-modal'
         role='dialog'
         aria-modal='true'
         aria-labelledby='staff-form-title'
