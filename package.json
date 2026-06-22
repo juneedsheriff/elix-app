@@ -56,6 +56,7 @@
     "db:setup-staff-roles": "node scripts/apply-staff-roles.mjs && node scripts/seed-admin.mjs && node scripts/seed-pse.mjs",
     "db:apply-clinic-pse": "node scripts/apply-clinic-pse.mjs",
     "db:apply-patient-recommended-doctors": "node scripts/apply-patient-recommended-doctors.mjs",
+    "db:apply-patient-clinic-doctors": "node scripts/apply-patient-clinic-doctors.mjs",
     "db:apply-doctors-rls-fix": "node scripts/apply-doctors-rls-fix.mjs",
     "db:apply-clinic-pse-create-requests": "node scripts/apply-clinic-pse-create-requests.mjs",
     "db:apply-clinic-doctor-requests": "node scripts/apply-clinic-doctor-requests.mjs",

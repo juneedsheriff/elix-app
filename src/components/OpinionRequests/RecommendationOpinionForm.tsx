@@ -58,7 +58,9 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       setSpecialtiesLoading(true);
       setSpecialtiesError(null);
 
-      const { data, error } = await fetchDoctorSpecialties();
+      const { data, error } = await fetchDoctorSpecialties({
+        patientClinicId: patientProfile?.clinic_id ?? null
+      });
       if (cancelled) return;
 
       if (error) {
@@ -74,7 +76,7 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [patientProfile?.clinic_id]);
 
   useEffect(() => {
     let cancelled = false;

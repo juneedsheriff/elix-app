@@ -19,14 +19,21 @@ export function normalizeDoctor(row: Doctor): Doctor {
   return normalizeDoctorProfile(row);
 }
 
-export async function fetchDoctors(limit = 50) {
-  const result = await supabase
+export async function fetchDoctors(limit = 50, options?: { patientClinicId?: string | null }) {
+  const isClinicPatient = Boolean(options?.patientClinicId?.trim());
+
+  let query = supabase
     .from('doctors')
     .select(doctorColumns)
-    .eq('is_visible', true)
     .is('deleted_at', null)
     .order('rating', { ascending: false })
     .limit(limit);
+
+  if (!isClinicPatient) {
+    query = query.eq('is_visible', true);
+  }
+
+  const result = await query;
 
   if (result.error) {
     return { data: null, error: result.error };
@@ -85,13 +92,17 @@ export async function fetchDoctorByAuthUserId(authUserId: string) {
   };
 }
 
-/** Distinct specialties from visible doctors (for patient recommendation requests). */
-export async function fetchDoctorSpecialties() {
-  const result = await supabase
-    .from('doctors')
-    .select('specialty')
-    .eq('is_visible', true)
-    .is('deleted_at', null);
+/** Distinct specialties from doctors the patient can request (platform or clinic workspace). */
+export async function fetchDoctorSpecialties(options?: { patientClinicId?: string | null }) {
+  const isClinicPatient = Boolean(options?.patientClinicId?.trim());
+
+  let query = supabase.from('doctors').select('specialty').is('deleted_at', null);
+
+  if (!isClinicPatient) {
+    query = query.eq('is_visible', true);
+  }
+
+  const result = await query;
 
   if (result.error) {
     return { data: null, error: result.error };

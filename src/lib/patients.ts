@@ -4,7 +4,7 @@ import { isPatientProfileComplete } from './patientProfileCompleteness';
 import { supabase } from './supabase';
 
 const patientColumnsExtended =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, created_at, updated_at';
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, clinic_id, created_at, updated_at';
 
 const patientColumnsWithElix =
   'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
@@ -42,7 +42,7 @@ async function selectPatient(
   }
 
   const missingColumn =
-    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|column/.test(
+    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|clinic_id|column/.test(
       extended.error.message
     );
   if (!missingColumn) {

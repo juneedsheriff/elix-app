@@ -111,13 +111,13 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
 
   useEffect(() => {
     let cancelled = false;
-    void fetchDoctorSpecialties().then(({ data }) => {
+    void fetchDoctorSpecialties({ patientClinicId: patientProfile?.clinic_id ?? null }).then(({ data }) => {
       if (!cancelled) setSpecialties(data ?? []);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [patientProfile?.clinic_id]);
 
   const toggleRecord = (id: string) => {
     setSelectedIds((prev) => {

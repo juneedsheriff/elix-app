@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Search, Star } from 'lucide-react';
+import { useSupabase } from '../../context/SupabaseProvider';
 import { formatConsultationTiersSummary } from '../../lib/consultationTiers';
 import { fetchDoctors } from '../../lib/doctors';
 import type { Doctor } from '../../types/doctor';
@@ -41,6 +42,8 @@ type DoctorsListProps = {
 };
 
 export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
+  const { patientProfile } = useSupabase();
+  const patientClinicId = patientProfile?.clinic_id ?? null;
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +55,7 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
     async function load() {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await fetchDoctors(50);
+      const { data, error: fetchError } = await fetchDoctors(50, { patientClinicId });
       if (cancelled) return;
 
       if (fetchError) {
@@ -68,7 +71,7 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [patientClinicId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -89,15 +92,23 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
     <div className='doctors-screen'>
       <header className='doctors-subheader'>
         <div className='doctors-subheader-titles'>
-          <h2>Find a specialist</h2>
-          <p>{doctors.length} verified doctors</p>
+          <h2>{patientClinicId ? 'Your clinic doctors' : 'Find a specialist'}</h2>
+          <p>
+            {patientClinicId
+              ? `${doctors.length} doctor${doctors.length === 1 ? '' : 's'} in your clinic`
+              : `${doctors.length} verified doctors`}
+          </p>
         </div>
       </header>
 
       <section className='section-card'>
         <div className='section-head'>
-          <h3>Verified doctor network</h3>
-          <p>Filter by specialty, language, country, and fee</p>
+          <h3>{patientClinicId ? 'Clinic specialists' : 'Verified doctor network'}</h3>
+          <p>
+            {patientClinicId
+              ? 'Choose a doctor from your clinic to submit a consultation request.'
+              : 'Filter by specialty, language, country, and fee'}
+          </p>
         </div>
 
         <label className='doctor-search'>
