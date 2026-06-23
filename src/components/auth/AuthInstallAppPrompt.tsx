@@ -30,18 +30,20 @@ function applyTopPositionStyle(el: PWAInstallElement) {
 
 export default function AuthInstallAppPrompt() {
   const installRef = useRef<PWAInstallElement | null>(null);
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const [portalMounted, setPortalMounted] = useState(false);
   const [canOfferInstall, setCanOfferInstall] = useState(false);
+  const [installed, setInstalled] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches
+  );
 
-  // Attach ref: inject the pre-captured beforeinstallprompt event so the
-  // component shows the proper Install dialog instead of manual instructions.
+  // Inject the pre-captured beforeinstallprompt so the component shows the
+  // proper Install dialog instead of manual "Open browser menu" instructions.
   const attachInstallRef = useCallback((node: PWAInstallElement | null) => {
     installRef.current = node;
     if (!node) return;
 
     const captured = (window as unknown as Record<string, unknown>).__elixInstallPrompt;
     if (captured) {
-      // Set before connectedCallback's async _checkInstallAvailable finishes
       node.externalPromptEvent = captured as BeforeInstallPromptEvent;
     }
   }, []);
@@ -53,22 +55,31 @@ export default function AuthInstallAppPrompt() {
     el.showDialog(true);
   }, []);
 
+  // Mount portal only on client
   useEffect(() => {
-    setPortalTarget(document.body);
-  }, []);
+    if (!installed) setPortalMounted(true);
+  }, [installed]);
 
   useEffect(() => {
     const el = installRef.current;
-    if (!el || el.isUnderStandaloneMode) return;
+    if (!el) return;
+
+    if (el.isUnderStandaloneMode) {
+      setInstalled(true);
+      setCanOfferInstall(false);
+      return;
+    }
 
     const onAvailable = () => {
       setCanOfferInstall(true);
       applyTopPositionStyle(el);
-      // Auto-show the proper install dialog
       el.showDialog();
     };
 
-    const onSuccess = () => setCanOfferInstall(false);
+    const onSuccess = () => {
+      setInstalled(true);
+      setCanOfferInstall(false);
+    };
 
     el.addEventListener('pwa-install-available-event', onAvailable);
     el.addEventListener('pwa-install-success-event', onSuccess);
@@ -77,7 +88,10 @@ export default function AuthInstallAppPrompt() {
       el.removeEventListener('pwa-install-available-event', onAvailable);
       el.removeEventListener('pwa-install-success-event', onSuccess);
     };
-  }, [portalTarget]); // re-run after portal target (and thus element) is ready
+  }, [portalMounted]);
+
+  // Don't render anything once already installed as a PWA
+  if (installed) return null;
 
   const installElement = (
     <pwa-install
@@ -96,7 +110,7 @@ export default function AuthInstallAppPrompt() {
 
   return (
     <>
-      {portalTarget ? createPortal(installElement, portalTarget) : null}
+      {portalMounted ? createPortal(installElement, document.body) : null}
       {canOfferInstall ? (
         <button type='button' className='auth-page__install-link text-btn' onClick={openInstallDialog}>
           Install app
