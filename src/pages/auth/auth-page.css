@@ -7,7 +7,8 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem 1rem 2rem;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background-color: #e8f3f8;
   background-image: url('/bglogin.png');
   background-size: cover;

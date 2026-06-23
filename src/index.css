@@ -48,6 +48,14 @@ body {
   min-height: 100dvh;
 }
 
+/* PWA install prompt is portaled to body; keep it out of scroll/overflow clipping */
+pwa-install {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483001;
+  pointer-events: none;
+}
+
 button,
 input,
 select {
