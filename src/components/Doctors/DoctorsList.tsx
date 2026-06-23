@@ -55,7 +55,7 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
     async function load() {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await fetchDoctors(50, { patientClinicId });
+      const { data, error: fetchError } = await fetchDoctors(200, { patientClinicId });
       if (cancelled) return;
 
       if (fetchError) {

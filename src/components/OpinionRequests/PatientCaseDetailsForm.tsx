@@ -1,5 +1,6 @@
 import PreferredLanguageMultiSelect from '../patient/PreferredLanguageMultiSelect';
 import PatientBirthDatePicker from '../patient/PatientBirthDatePicker';
+import { DOCTOR_SPECIALTY_OPTIONS } from '../../lib/doctorSpecialtyOptions';
 import {
   CONSULTATION_MODE_OPTIONS,
   SECOND_OPINION_QUESTION_OPTIONS,
@@ -38,6 +39,23 @@ function SectionTitle({ children }: { children: string }) {
   return <h4 className='patient-case-details-form__section-title'>{children}</h4>;
 }
 
+function specialtyOptionsForValues(
+  passedSpecialties: string[],
+  currentValues: Array<string | null | undefined>
+): string[] {
+  return [
+    ...new Set(
+      [
+        ...DOCTOR_SPECIALTY_OPTIONS,
+        ...passedSpecialties,
+        ...currentValues
+      ]
+        .map((specialty) => specialty?.trim())
+        .filter((specialty): specialty is string => Boolean(specialty))
+    )
+  ].sort((a, b) => a.localeCompare(b));
+}
+
 export default function PatientCaseDetailsForm({
   value,
   onChange,
@@ -54,6 +72,11 @@ export default function PatientCaseDetailsForm({
   const isDisabled = disabled || readOnly;
   const showPreferencesSection = sectionsThrough >= 8 && showPreferences;
   const showConsentSection = sectionsThrough >= 8 && showConsent;
+  const allSpecialties = specialtyOptionsForValues(specialties, [
+    value.specialtyRequired,
+    value.treatingDoctorSpecialty,
+    doctorSpecialty
+  ]);
 
   const toggleQuestion = (question: SecondOpinionQuestion) => {
     const exists = value.questionCategories.includes(question);
@@ -98,7 +121,7 @@ export default function PatientCaseDetailsForm({
               disabled={isDisabled}
             >
               <option value=''>Select a specialty…</option>
-              {specialties.map((specialty) => (
+              {allSpecialties.map((specialty) => (
                 <option key={specialty} value={specialty}>
                   {specialty}
                 </option>
@@ -216,6 +239,7 @@ export default function PatientCaseDetailsForm({
             ['Existing Medical Conditions', 'existingMedicalConditions'],
             ['Previous Surgeries', 'previousSurgeries'],
             ['Relevant Family History', 'familyHistory'],
+            ['Social History', 'socialHistory'],
             ['Known Allergies', 'knownAllergies'],
             ['Current Medications', 'currentMedications']
           ] as const
@@ -266,7 +290,7 @@ export default function PatientCaseDetailsForm({
             disabled={isDisabled}
           >
             <option value=''>Select a specialty…</option>
-            {specialties.map((specialty) => (
+            {allSpecialties.map((specialty) => (
               <option key={specialty} value={specialty}>
                 {specialty}
               </option>

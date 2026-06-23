@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useSupabase } from '../../context/SupabaseProvider';
 import PatientCaseDetailsForm from './PatientCaseDetailsForm';
 import {
+  applyPatientProfileHistoryDefaults,
   caseDetailsFromRequest,
   emptyPatientCaseDetails,
   serializePatientCaseDetails,
@@ -45,8 +47,9 @@ export default function PatientCaseDetailsEditor({
   onError,
   onSuccess
 }: PatientCaseDetailsEditorProps) {
+  const { patientProfile } = useSupabase();
   const [caseDetails, setCaseDetails] = useState<PatientCaseDetails>(() =>
-    caseDetailsFromRequest(request)
+    applyPatientProfileHistoryDefaults(caseDetailsFromRequest(request), actorRole === 'patient' ? patientProfile : null)
   );
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -56,15 +59,28 @@ export default function PatientCaseDetailsEditor({
     patientCaseDetails: request.patient_case_details ?? null,
     message: request.message ?? '',
     requestedSpecialty: request.requested_specialty ?? '',
-    caseDetailsReviewedAt: request.case_details_reviewed_at ?? null
+    caseDetailsReviewedAt: request.case_details_reviewed_at ?? null,
+    patientHistory:
+      actorRole === 'patient'
+        ? {
+            medical: patientProfile?.medical_history ?? '',
+            surgical: patientProfile?.surgical_history ?? '',
+            family: patientProfile?.family_history ?? '',
+            social: patientProfile?.social_history ?? '',
+            allergies: patientProfile?.allergies ?? '',
+            medications: patientProfile?.current_medications ?? ''
+          }
+        : null
   });
 
   useEffect(() => {
     if (savingRef.current) return;
     if (syncedRemoteKeyRef.current === remoteCaseDetailsKey) return;
-    setCaseDetails(caseDetailsFromRequest(request));
+    setCaseDetails(
+      applyPatientProfileHistoryDefaults(caseDetailsFromRequest(request), actorRole === 'patient' ? patientProfile : null)
+    );
     syncedRemoteKeyRef.current = remoteCaseDetailsKey;
-  }, [request.id, remoteCaseDetailsKey, request]);
+  }, [request.id, remoteCaseDetailsKey, request, actorRole, patientProfile]);
 
   const handleSave = async () => {
     const validationError = validatePatientCaseDetails(caseDetails, {

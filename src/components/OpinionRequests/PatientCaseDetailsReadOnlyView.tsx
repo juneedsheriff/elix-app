@@ -81,11 +81,12 @@ export default function PatientCaseDetailsReadOnlyView({
       <SectionHeading title='3. Medical History' />
       <div className='patient-case-details-readonly__grid'>
         <DetailField
-          label='Existing Medical Conditions'
+          label='Medical History'
           value={formatCaseDetailValue(details.existingMedicalConditions)}
         />
-        <DetailField label='Previous Surgeries' value={formatCaseDetailValue(details.previousSurgeries)} />
-        <DetailField label='Relevant Family History' value={formatCaseDetailValue(details.familyHistory)} />
+        <DetailField label='Surgical History' value={formatCaseDetailValue(details.previousSurgeries)} />
+        <DetailField label='Family History' value={formatCaseDetailValue(details.familyHistory)} />
+        <DetailField label='Social History' value={formatCaseDetailValue(details.socialHistory)} />
         <DetailField label='Known Allergies' value={formatCaseDetailValue(details.knownAllergies)} />
         <DetailField
           label='Current Medications'

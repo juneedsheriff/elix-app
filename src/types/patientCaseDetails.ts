@@ -44,6 +44,7 @@ export type PatientCaseDetails = {
   existingMedicalConditions: string;
   previousSurgeries: string;
   familyHistory: string;
+  socialHistory: string;
   knownAllergies: string;
   currentMedications: string;
   treatingDoctorName: string;

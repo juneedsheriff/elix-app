@@ -10,12 +10,14 @@ import {
 import ConsultationDurationSelect from '../ConsultationWorkflow/ConsultationDurationSelect';
 import MedicalRecordsChoicePrompt from './MedicalRecordsChoicePrompt';
 import PatientCaseDetailsForm from './PatientCaseDetailsForm';
+import { DOCTOR_SPECIALTY_OPTIONS } from '../../lib/doctorSpecialtyOptions';
 import {
   preferredDurationTiers,
   STANDARD_CONSULTATION_DURATIONS
 } from '../../lib/consultationTiers';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import {
+  applyPatientProfileHistoryDefaults,
   emptyPatientCaseDetails,
   serializePatientCaseDetails,
   validatePatientCaseDetails
@@ -42,7 +44,9 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
   const [specialtiesLoading, setSpecialtiesLoading] = useState(true);
   const [specialtiesError, setSpecialtiesError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [caseDetails, setCaseDetails] = useState<PatientCaseDetails>(() => emptyPatientCaseDetails());
+  const [caseDetails, setCaseDetails] = useState<PatientCaseDetails>(() =>
+    applyPatientProfileHistoryDefaults(emptyPatientCaseDetails(), patientProfile)
+  );
   const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<number>(
     STANDARD_CONSULTATION_DURATIONS[1]
   );
@@ -65,9 +69,13 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
 
       if (error) {
         setSpecialtiesError(error.message);
-        setSpecialties([]);
+        setSpecialties([...DOCTOR_SPECIALTY_OPTIONS]);
       } else {
-        setSpecialties(data ?? []);
+        setSpecialties(
+          [...new Set([...DOCTOR_SPECIALTY_OPTIONS, ...(data ?? [])])]
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b))
+        );
       }
       setSpecialtiesLoading(false);
     }
@@ -77,6 +85,10 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       cancelled = true;
     };
   }, [patientProfile?.clinic_id]);
+
+  useEffect(() => {
+    setCaseDetails((prev) => applyPatientProfileHistoryDefaults(prev, patientProfile));
+  }, [patientProfile]);
 
   useEffect(() => {
     let cancelled = false;

@@ -87,6 +87,22 @@ export async function fetchDoctorById(id: string) {
   };
 }
 
+export async function fetchPatientBrowseDoctorById(
+  id: string,
+  options?: { patientClinicId?: string | null }
+) {
+  const direct = await fetchDoctorById(id);
+  if (direct.data || direct.error) return direct;
+
+  const browse = await fetchDoctors(200, options);
+  if (browse.error) return { data: null, error: browse.error };
+
+  return {
+    data: (browse.data ?? []).find((doctor) => doctor.id === id) ?? null,
+    error: null
+  };
+}
+
 export async function fetchDoctorByEmail(email: string) {
   const result = await supabase
     .from('doctors')

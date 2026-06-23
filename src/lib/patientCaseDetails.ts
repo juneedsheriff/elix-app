@@ -1,4 +1,5 @@
 import type { OpinionRequest } from '../types/opinionRequest';
+import type { Patient } from '../types/patient';
 import type { PatientCaseDetails } from '../types/patientCaseDetails';
 
 export function emptyPatientCaseDetails(
@@ -17,6 +18,7 @@ export function emptyPatientCaseDetails(
     existingMedicalConditions: '',
     previousSurgeries: '',
     familyHistory: '',
+    socialHistory: '',
     knownAllergies: '',
     currentMedications: '',
     treatingDoctorName: '',
@@ -75,6 +77,7 @@ export function parsePatientCaseDetails(value: unknown): PatientCaseDetails | nu
     existingMedicalConditions: readString(value.existingMedicalConditions),
     previousSurgeries: readString(value.previousSurgeries),
     familyHistory: readString(value.familyHistory),
+    socialHistory: readString(value.socialHistory),
     knownAllergies: readString(value.knownAllergies),
     currentMedications: readString(value.currentMedications),
     treatingDoctorName: readString(value.treatingDoctorName),
@@ -137,6 +140,7 @@ export function serializePatientCaseDetails(details: PatientCaseDetails): Record
     existingMedicalConditions: details.existingMedicalConditions.trim() || null,
     previousSurgeries: details.previousSurgeries.trim() || null,
     familyHistory: details.familyHistory.trim() || null,
+    socialHistory: details.socialHistory.trim() || null,
     knownAllergies: details.knownAllergies.trim() || null,
     currentMedications: details.currentMedications.trim() || null,
     treatingDoctorName: details.treatingDoctorName.trim() || null,
@@ -153,6 +157,23 @@ export function serializePatientCaseDetails(details: PatientCaseDetails): Record
     consentShareRecords: details.consentShareRecords,
     consentNotEmergencyCare: details.consentNotEmergencyCare
   };
+}
+
+export function applyPatientProfileHistoryDefaults(
+  details: PatientCaseDetails,
+  patient: Patient | null | undefined
+): PatientCaseDetails {
+  if (!patient) return details;
+
+  return emptyPatientCaseDetails({
+    ...details,
+    existingMedicalConditions: details.existingMedicalConditions || patient.medical_history || '',
+    previousSurgeries: details.previousSurgeries || patient.surgical_history || '',
+    familyHistory: details.familyHistory || patient.family_history || '',
+    socialHistory: details.socialHistory || patient.social_history || '',
+    knownAllergies: details.knownAllergies || patient.allergies || '',
+    currentMedications: details.currentMedications || patient.current_medications || ''
+  });
 }
 
 export function validatePatientCaseDetails(

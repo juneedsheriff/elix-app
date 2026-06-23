@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { fetchDoctorById } from '../../lib/doctors';
+import { useSupabase } from '../../context/SupabaseProvider';
+import { fetchPatientBrowseDoctorById } from '../../lib/doctors';
 import {
   clearPendingOpinionRequest,
   getPendingOpinionRequest
@@ -11,23 +12,26 @@ import GetOpinionForm from './GetOpinionForm';
 
 type DoctorProfilePageProps = {
   doctorId: string;
+  initialDoctor?: Doctor | null;
   onBack: () => void;
 };
 
 type View = 'profile' | 'opinion';
 
-export default function DoctorProfilePage({ doctorId, onBack }: DoctorProfilePageProps) {
-  const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function DoctorProfilePage({ doctorId, initialDoctor = null, onBack }: DoctorProfilePageProps) {
+  const { patientProfile } = useSupabase();
+  const patientClinicId = patientProfile?.clinic_id ?? null;
+  const [doctor, setDoctor] = useState<Doctor | null>(initialDoctor);
+  const [loading, setLoading] = useState(!initialDoctor);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>('profile');
 
-  const loadProfile = useCallback(async (id: string) => {
+  const loadProfile = useCallback(async (id: string, seed: Doctor | null) => {
     setLoading(true);
     setError(null);
-    setDoctor(null);
+    setDoctor(seed);
 
-    const { data, error: fetchError } = await fetchDoctorById(id);
+    const { data, error: fetchError } = await fetchPatientBrowseDoctorById(id, { patientClinicId });
 
     if (fetchError) {
       setError(fetchError.message);
@@ -37,12 +41,12 @@ export default function DoctorProfilePage({ doctorId, onBack }: DoctorProfilePag
       setDoctor(data);
     }
     setLoading(false);
-  }, []);
+  }, [patientClinicId]);
 
   useEffect(() => {
     setView('profile');
-    void loadProfile(doctorId);
-  }, [doctorId, loadProfile]);
+    void loadProfile(doctorId, initialDoctor);
+  }, [doctorId, initialDoctor, loadProfile]);
 
   useEffect(() => {
     if (!doctor) return;

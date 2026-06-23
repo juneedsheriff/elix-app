@@ -9,10 +9,27 @@ export default function DoctorsSection() {
     const pending = getPendingOpinionRequest();
     return pending?.flow === 'doctor-opinion' ? pending.doctorId : null;
   });
+  const [profileDoctor, setProfileDoctor] = useState<Doctor | null>(null);
 
   if (profileDoctorId) {
-    return <DoctorProfilePage doctorId={profileDoctorId} onBack={() => setProfileDoctorId(null)} />;
+    return (
+      <DoctorProfilePage
+        doctorId={profileDoctorId}
+        initialDoctor={profileDoctor}
+        onBack={() => {
+          setProfileDoctorId(null);
+          setProfileDoctor(null);
+        }}
+      />
+    );
   }
 
-  return <DoctorsList onViewProfile={(doctor: Doctor) => setProfileDoctorId(doctor.id)} />;
+  return (
+    <DoctorsList
+      onViewProfile={(doctor: Doctor) => {
+        setProfileDoctor(doctor);
+        setProfileDoctorId(doctor.id);
+      }}
+    />
+  );
 }
