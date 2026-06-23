@@ -1,10 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ImagePlus, Loader2, Trash2, User } from 'lucide-react';
+import { Camera, ImagePlus, Loader2, Trash2, User } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
+import { isAcceptedProfileImageFile, resizeImageFileToSquareDataUrl } from '../../lib/imageFiles';
 import { updatePatientAvatarForUser } from '../../lib/patients';
-
-const MAX_UPLOAD_BYTES = 512 * 1024;
-const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+import PatientCameraCaptureModal from './PatientCameraCaptureModal';
 
 type PatientProfileImageSectionProps = {
   userId: string;
@@ -28,12 +27,13 @@ export default function PatientProfileImageSection({
 }: PatientProfileImageSectionProps) {
   const { refreshPatientProfile } = useSupabase();
   const inputId = useId();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(avatarUrl);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   useEffect(() => {
     setPreviewUrl(avatarUrl);
@@ -65,31 +65,61 @@ export default function PatientProfileImageSection({
     setSuccess(nextUrl ? 'Profile photo updated.' : 'Profile photo removed.');
   };
 
-  const handleFileChange = (file: File | null) => {
+  const processAndSaveDataUrl = async (dataUrl: string) => {
+    if (busy) return;
+
+    setBusy(true);
+    setFileError(null);
+    setSuccess(null);
+    setPreviewUrl(dataUrl);
+
+    const { data, error } = await updatePatientAvatarForUser(userId, dataUrl);
+    if (error) {
+      setPreviewUrl(avatarUrl);
+      setFileError(error.message);
+      setBusy(false);
+      return;
+    }
+
+    await refreshPatientProfile();
+    const saved = data?.avatar_url ?? null;
+    setPreviewUrl(saved);
+    setPreviewBroken(false);
+    setSuccess('Profile photo updated.');
+    setBusy(false);
+  };
+
+  const processAndSaveFile = async (file: File | null) => {
     if (!file || busy) return;
+
+    setBusy(true);
     setFileError(null);
     setSuccess(null);
 
-    if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+    if (!isAcceptedProfileImageFile(file)) {
       setFileError('Choose a JPEG, PNG, WebP, or GIF image.');
-      return;
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setFileError('Image must be 512 KB or smaller.');
+      setBusy(false);
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      if (!result) return;
-      setPreviewUrl(result);
-      void saveAvatar(result);
-    };
-    reader.onerror = () => {
-      setFileError('Could not read the selected image.');
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await resizeImageFileToSquareDataUrl(file);
+      await processAndSaveDataUrl(dataUrl);
+    } catch {
+      setPreviewUrl(avatarUrl);
+      setFileError('Could not process the selected image.');
+      setBusy(false);
+    }
+  };
+
+  const handleFileInputChange = (file: File | null, input: HTMLInputElement | null) => {
+    void processAndSaveFile(file);
+    if (input) input.value = '';
+  };
+
+  const handleCameraCapture = (dataUrl: string) => {
+    setCameraOpen(false);
+    void processAndSaveDataUrl(dataUrl);
   };
 
   return (
@@ -122,7 +152,7 @@ export default function PatientProfileImageSection({
 
         <div className='patient-profile-image__controls'>
           <p className='muted patient-profile-image__hint'>
-            Add a photo so doctors can recognize you. JPEG, PNG, WebP, or GIF up to 512 KB.
+            Add a photo so doctors can recognize you. Large images are automatically resized to 512×512.
           </p>
 
           {previewBroken && trimmed ? (
@@ -145,21 +175,18 @@ export default function PatientProfileImageSection({
 
           <div className='patient-profile-image__actions'>
             <input
-              ref={fileInputRef}
+              ref={galleryInputRef}
               type='file'
               accept='image/jpeg,image/png,image/webp,image/gif'
               className='patient-profile-image__file-input'
               disabled={disabled || busy}
-              onChange={(e) => {
-                handleFileChange(e.target.files?.[0] ?? null);
-                e.target.value = '';
-              }}
+              onChange={(e) => handleFileInputChange(e.target.files?.[0] ?? null, e.target)}
             />
             <button
               type='button'
               className='secondary-btn'
               disabled={disabled || busy}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => galleryInputRef.current?.click()}
             >
               {busy ? (
                 <>
@@ -169,6 +196,23 @@ export default function PatientProfileImageSection({
                 <>
                   <ImagePlus size={16} aria-hidden />
                   {trimmed ? 'Change photo' : 'Upload photo'}
+                </>
+              )}
+            </button>
+            <button
+              type='button'
+              className='secondary-btn'
+              disabled={disabled || busy}
+              onClick={() => setCameraOpen(true)}
+            >
+              {busy ? (
+                <>
+                  <Loader2 size={16} className='spin' aria-hidden /> Saving…
+                </>
+              ) : (
+                <>
+                  <Camera size={16} aria-hidden />
+                  Take photo
                 </>
               )}
             </button>
@@ -186,6 +230,12 @@ export default function PatientProfileImageSection({
           </div>
         </div>
       </div>
+
+      <PatientCameraCaptureModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
     </section>
   );
 }
