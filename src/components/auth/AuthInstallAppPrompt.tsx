@@ -10,7 +10,7 @@ const PWA_STYLES = { '--tint-color': '#09abc0' };
 
 const PWA_TOP_POSITION_STYLE_ID = 'elix-pwa-install-top-position';
 
-function applyTopInstallPromptLayout(el: PWAInstallElement) {
+function applyTopPositionStyle(el: PWAInstallElement) {
   const root = el.shadowRoot;
   if (!root || root.getElementById(PWA_TOP_POSITION_STYLE_ID)) return;
 
@@ -18,15 +18,11 @@ function applyTopInstallPromptLayout(el: PWAInstallElement) {
   style.id = PWA_TOP_POSITION_STYLE_ID;
   style.textContent = `
     #pwa-install-element .install-dialog.mobile.available {
-      --translateY: translateY(0);
-      top: max(12px, env(safe-area-inset-top));
-      bottom: auto;
-      transform: var(--translateY);
-      max-height: min(420px, calc(100dvh - 24px - env(safe-area-inset-top)));
-    }
-
-    #pwa-install-element .install-dialog.chrome.mobile.available {
-      --translateY: translateY(0);
+      --translateY: translateY(0) !important;
+      top: max(12px, env(safe-area-inset-top)) !important;
+      bottom: auto !important;
+      transform: translateY(0) !important;
+      max-height: min(440px, calc(100dvh - 24px - env(safe-area-inset-top))) !important;
     }
   `;
   root.appendChild(style);
@@ -34,21 +30,26 @@ function applyTopInstallPromptLayout(el: PWAInstallElement) {
 
 export default function AuthInstallAppPrompt() {
   const installRef = useRef<PWAInstallElement | null>(null);
-  const [installNode, setInstallNode] = useState<PWAInstallElement | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [canOfferInstall, setCanOfferInstall] = useState(false);
 
+  // Attach ref: inject the pre-captured beforeinstallprompt event so the
+  // component shows the proper Install dialog instead of manual instructions.
   const attachInstallRef = useCallback((node: PWAInstallElement | null) => {
     installRef.current = node;
-    setInstallNode(node);
+    if (!node) return;
+
+    const captured = (window as unknown as Record<string, unknown>).__elixInstallPrompt;
+    if (captured) {
+      // Set before connectedCallback's async _checkInstallAvailable finishes
+      node.externalPromptEvent = captured as BeforeInstallPromptEvent;
+    }
   }, []);
 
   const openInstallDialog = useCallback(() => {
     const el = installRef.current;
     if (!el || el.isUnderStandaloneMode) return;
-    applyTopInstallPromptLayout(el);
-    // pass true to force isInstallAvailable = true even if the browser
-    // prompt hasn't been captured yet (manual-chrome / manual-apple modes)
+    applyTopPositionStyle(el);
     el.showDialog(true);
   }, []);
 
@@ -57,39 +58,26 @@ export default function AuthInstallAppPrompt() {
   }, []);
 
   useEffect(() => {
-    const el = installNode;
-    if (!el) return;
+    const el = installRef.current;
+    if (!el || el.isUnderStandaloneMode) return;
 
-    applyTopInstallPromptLayout(el);
-
-    if (el.isUnderStandaloneMode) {
-      setCanOfferInstall(false);
-      return;
-    }
-
-    setCanOfferInstall(true);
-
-    const showDialogIfNeeded = () => {
-      if (!el.isUnderStandaloneMode) {
-        applyTopInstallPromptLayout(el);
-        el.showDialog(true);
-      }
+    const onAvailable = () => {
+      setCanOfferInstall(true);
+      applyTopPositionStyle(el);
+      // Auto-show the proper install dialog
+      el.showDialog();
     };
 
-    const onAvailable = () => showDialogIfNeeded();
     const onSuccess = () => setCanOfferInstall(false);
 
     el.addEventListener('pwa-install-available-event', onAvailable);
     el.addEventListener('pwa-install-success-event', onSuccess);
 
-    const timer = window.setTimeout(showDialogIfNeeded, 700);
-
     return () => {
-      clearTimeout(timer);
       el.removeEventListener('pwa-install-available-event', onAvailable);
       el.removeEventListener('pwa-install-success-event', onSuccess);
     };
-  }, [installNode]);
+  }, [portalTarget]); // re-run after portal target (and thus element) is ready
 
   const installElement = (
     <pwa-install

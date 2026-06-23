@@ -10,6 +10,20 @@ import { registerElixServiceWorker } from './lib/registerServiceWorker';
 
 registerElixServiceWorker();
 
+// Capture beforeinstallprompt as early as possible — before React renders.
+// The pwa-install element mounts later (on auth page) and would miss this event.
+// We store it globally so AuthInstallAppPrompt can pass it via externalPromptEvent.
+if (!window.matchMedia('(display-mode: standalone)').matches) {
+  window.addEventListener(
+    'beforeinstallprompt',
+    (e) => {
+      e.preventDefault();
+      (window as unknown as Record<string, unknown>).__elixInstallPrompt = e;
+    },
+    { once: true }
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
