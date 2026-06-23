@@ -1,16 +1,16 @@
 import '@khmyznikov/pwa-install';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PwaInstallElement } from '../../types/pwa-install';
+import type { PWAInstallElement } from '../../types/pwa-install';
 
 const INSTALL_DESCRIPTION =
   'This site has app functionality. Install it on your device for a better experience and easy access.';
 
-const PWA_STYLES = JSON.stringify({ '--tint-color': '#09abc0' });
+const PWA_STYLES = { '--tint-color': '#09abc0' };
 
 const PWA_TOP_POSITION_STYLE_ID = 'elix-pwa-install-top-position';
 
-function applyTopInstallPromptLayout(el: PwaInstallElement) {
+function applyTopInstallPromptLayout(el: PWAInstallElement) {
   const root = el.shadowRoot;
   if (!root || root.getElementById(PWA_TOP_POSITION_STYLE_ID)) return;
 
@@ -33,12 +33,12 @@ function applyTopInstallPromptLayout(el: PwaInstallElement) {
 }
 
 export default function AuthInstallAppPrompt() {
-  const installRef = useRef<PwaInstallElement | null>(null);
-  const [installNode, setInstallNode] = useState<PwaInstallElement | null>(null);
+  const installRef = useRef<PWAInstallElement | null>(null);
+  const [installNode, setInstallNode] = useState<PWAInstallElement | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [canOfferInstall, setCanOfferInstall] = useState(false);
 
-  const attachInstallRef = useCallback((node: PwaInstallElement | null) => {
+  const attachInstallRef = useCallback((node: PWAInstallElement | null) => {
     installRef.current = node;
     setInstallNode(node);
   }, []);
@@ -47,7 +47,9 @@ export default function AuthInstallAppPrompt() {
     const el = installRef.current;
     if (!el || el.isUnderStandaloneMode) return;
     applyTopInstallPromptLayout(el);
-    el.showDialog();
+    // pass true to force isInstallAvailable = true even if the browser
+    // prompt hasn't been captured yet (manual-chrome / manual-apple modes)
+    el.showDialog(true);
   }, []);
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function AuthInstallAppPrompt() {
     const showDialogIfNeeded = () => {
       if (!el.isUnderStandaloneMode) {
         applyTopInstallPromptLayout(el);
-        el.showDialog();
+        el.showDialog(true);
       }
     };
 
@@ -92,9 +94,9 @@ export default function AuthInstallAppPrompt() {
   const installElement = (
     <pwa-install
       ref={attachInstallRef}
-      manual-chrome
-      manual-apple
-      use-local-storage
+      manual-chrome='true'
+      manual-apple='true'
+      use-local-storage='true'
       manifest-url='/manifest.webmanifest'
       icon='/icons/icon-192.png'
       name='ElixClinix'
