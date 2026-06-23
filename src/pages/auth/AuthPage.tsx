@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Stethoscope } from 'lucide-react';
+import AuthInstallAppPrompt from '../../components/auth/AuthInstallAppPrompt';
 import ElixLogo from '../../components/ui/ElixLogo';
 import { Lock, Mail } from '../../navIcons';
 import './auth-page.css';
@@ -90,6 +91,8 @@ export default function AuthPage({
         <h1 className='auth-page__title'>Set new password</h1>
         <p className='auth-page__status'>Enter a new password for your account.</p>
 
+        <AuthInstallAppPrompt />
+
         <form
           className='auth-page__form'
           onSubmit={(event: FormEvent) => {
@@ -159,6 +162,8 @@ export default function AuthPage({
           Add VITE_SUPABASE_* to .env.local and restart dev server
         </p>
       )}
+
+      <AuthInstallAppPrompt />
 
       <div className='auth-page__tabs' role='tablist' aria-label='Login type'>
         <button
