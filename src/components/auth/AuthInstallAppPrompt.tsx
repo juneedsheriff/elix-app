@@ -1,53 +1,79 @@
-import { Download, Smartphone } from 'lucide-react';
-import { usePwaInstall } from '../../hooks/usePwaInstall';
+import '@khmyznikov/pwa-install';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PwaInstallElement } from '../../types/pwa-install';
+
+const INSTALL_DESCRIPTION =
+  'This site has app functionality. Install it on your device for a better experience and easy access.';
+
+const PWA_STYLES = JSON.stringify({ '--tint-color': '#09abc0' });
 
 export default function AuthInstallAppPrompt() {
-  const { showInstallOption, canPromptInstall, installHint, installing, install } = usePwaInstall();
+  const installRef = useRef<PwaInstallElement | null>(null);
+  const [installNode, setInstallNode] = useState<PwaInstallElement | null>(null);
+  const [canOfferInstall, setCanOfferInstall] = useState(false);
 
-  if (!showInstallOption) {
-    return null;
-  }
+  const attachInstallRef = useCallback((node: PwaInstallElement | null) => {
+    installRef.current = node;
+    setInstallNode(node);
+  }, []);
 
-  if (installHint === 'ios') {
-    return (
-      <div className='auth-page__install' role='note'>
-        <span className='auth-page__install-icon' aria-hidden>
-          <Smartphone size={18} />
-        </span>
-        <div className='auth-page__install-copy'>
-          <strong>Install app</strong>
-          <p>Tap Share in Safari, then <em>Add to Home Screen</em>.</p>
-        </div>
-      </div>
-    );
-  }
+  const openInstallDialog = useCallback(() => {
+    const el = installRef.current;
+    if (!el || el.isUnderStandaloneMode) return;
+    el.showDialog();
+  }, []);
 
-  if (installHint === 'android' && !canPromptInstall) {
-    return (
-      <div className='auth-page__install' role='note'>
-        <span className='auth-page__install-icon' aria-hidden>
-          <Smartphone size={18} />
-        </span>
-        <div className='auth-page__install-copy'>
-          <strong>Install app</strong>
-          <p>Open your browser menu and choose <em>Install app</em> or <em>Add to Home screen</em>.</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const el = installNode;
+    if (!el) return;
+
+    if (el.isUnderStandaloneMode) {
+      setCanOfferInstall(false);
+      return;
+    }
+
+    setCanOfferInstall(true);
+
+    const showDialogIfNeeded = () => {
+      if (!el.isUnderStandaloneMode) {
+        el.showDialog();
+      }
+    };
+
+    const onAvailable = () => showDialogIfNeeded();
+    const onSuccess = () => setCanOfferInstall(false);
+
+    el.addEventListener('pwa-install-available-event', onAvailable);
+    el.addEventListener('pwa-install-success-event', onSuccess);
+
+    const timer = window.setTimeout(showDialogIfNeeded, 700);
+
+    return () => {
+      clearTimeout(timer);
+      el.removeEventListener('pwa-install-available-event', onAvailable);
+      el.removeEventListener('pwa-install-success-event', onSuccess);
+    };
+  }, [installNode]);
 
   return (
-    <div className='auth-page__install auth-page__install--action'>
-      <button
-        type='button'
-        className='auth-page__install-btn'
-        disabled={installing}
-        onClick={() => void install()}
-      >
-        <Download size={18} aria-hidden />
-        {installing ? 'Installing…' : 'Install app'}
-      </button>
-      <p className='auth-page__install-help'>Add ElixClinix to your home screen for quick access.</p>
-    </div>
+    <>
+      <pwa-install
+        ref={attachInstallRef}
+        manual-chrome
+        manual-apple
+        use-local-storage
+        manifest-url='/manifest.webmanifest'
+        icon='/icons/icon-192.png'
+        name='ElixClinix'
+        description='Expert care, informed decisions'
+        install-description={INSTALL_DESCRIPTION}
+        styles={PWA_STYLES}
+      />
+      {canOfferInstall ? (
+        <button type='button' className='auth-page__install-link text-btn' onClick={openInstallDialog}>
+          Install app
+        </button>
+      ) : null}
+    </>
   );
 }
