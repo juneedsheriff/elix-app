@@ -1,5 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import App from './App.tsx';
 import ElixHealthApp from './pages/admin/ElixHealthApp.tsx';
@@ -41,5 +43,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         </Routes>
       </SupabaseProvider>
     </BrowserRouter>
+    <SpeedInsights />
+    <Analytics />
   </React.StrictMode>
 );
