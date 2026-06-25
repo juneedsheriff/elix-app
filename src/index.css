@@ -2825,8 +2825,23 @@ select {
 .doctor-consultation-page__upload {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.doctor-consultation-page__upload-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.doctor-consultation-page__upload-btn,
+.doctor-consultation-page__camera-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 9rem;
+  justify-content: center;
 }
 
 .doctor-consultation-page__file-input {

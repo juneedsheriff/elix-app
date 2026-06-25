@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, ClipboardList, FileUp, Loader2, Eraser } from 'lucide-react';
+import { ArrowLeft, Camera, ClipboardList, FileUp, Loader2, Eraser } from 'lucide-react';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
 import ConsultationSummaryPdfView from '../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
 import DoctorCaseDetailsModal from '../../components/OpinionRequests/DoctorCaseDetailsModal';
 import DoctorPatientCaseDetailsSections from '../../components/OpinionRequests/DoctorPatientCaseDetailsSections';
+import PatientCameraCaptureModal from '../../components/patient/PatientCameraCaptureModal';
 import '../../components/OpinionRequests/doctor-patient-case-details-sections.css';
 import {
   CONSULTATION_SUMMARY_FIELDS,
@@ -24,7 +25,7 @@ import {
   getDoctorConsultationRequestId
 } from '../../lib/navigation/doctorConsultationNav';
 import {
-  consultationNotesPdfValidationError,
+  consultationNotesFileValidationError,
   fetchConsultationSummary,
   fetchDoctorOpinionRequests,
   fetchStaffOpinionRequestById,
@@ -33,8 +34,12 @@ import {
   subscribeOpinionRequestLiveUpdates
 } from '../../lib/opinionRequests';
 import { hasConsultationSummary } from '../../lib/consultationWizard';
+import { dataUrlToFile } from '../../lib/imageFiles';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
+
+const CONSULTATION_NOTES_ACCEPT =
+  '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.doc,.docx,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 type ConsultationMode = 'fill' | 'upload';
 
@@ -49,6 +54,7 @@ export default function DoctorConsultationPage({
   const [mode, setMode] = useState<ConsultationMode>('fill');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadNote, setUploadNote] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -256,11 +262,11 @@ export default function DoctorConsultationPage({
     if (!request) return;
 
     if (!uploadFile) {
-      setError('Select a PDF file to upload.');
+      setError('Select a file or take a photo to upload.');
       return;
     }
 
-    const validationError = consultationNotesPdfValidationError(uploadFile);
+    const validationError = consultationNotesFileValidationError(uploadFile);
     if (validationError) {
       setError(validationError);
       return;
@@ -289,7 +295,7 @@ export default function DoctorConsultationPage({
       setUploadFile(null);
       return;
     }
-    const validationError = consultationNotesPdfValidationError(file);
+    const validationError = consultationNotesFileValidationError(file);
     if (validationError) {
       setError(validationError);
       setUploadFile(null);
@@ -297,6 +303,13 @@ export default function DoctorConsultationPage({
     }
     setError(null);
     setUploadFile(file);
+  };
+
+  const handleCameraCapture = (dataUrl: string) => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const file = dataUrlToFile(dataUrl, `consultation-notes-${timestamp}.jpg`);
+    handleFileChange(file);
+    setCameraOpen(false);
   };
 
   if (!consultationRequestIdRef.current) {
@@ -408,7 +421,7 @@ export default function DoctorConsultationPage({
               onClick={() => switchMode('upload')}
               disabled={submitting}
             >
-              Upload PDF
+              Upload notes
             </button>
           </div>
 
@@ -535,28 +548,39 @@ export default function DoctorConsultationPage({
           ) : (
             <div className='doctor-consultation-page__form'>
               <p className='muted doctor-consultation-page__mode-hint'>
-                Upload an existing consultation notes PDF (max 10 MB). You can add an optional note for
-                the patient record.
+                Upload consultation notes as a file (PDF, DOC, JPG, PNG, and other supported formats,
+                max 10 MB) or take a photo with your camera.
               </p>
 
               <div className='doctor-consultation-page__upload'>
                 <input
                   ref={fileInputRef}
                   type='file'
-                  accept='application/pdf,.pdf'
+                  accept={CONSULTATION_NOTES_ACCEPT}
                   className='doctor-consultation-page__file-input'
                   onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
                   disabled={submitting}
                 />
-                <button
-                  type='button'
-                  className='secondary-btn doctor-consultation-page__upload-btn'
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={submitting}
-                >
-                  <FileUp size={18} aria-hidden />
-                  {uploadFile ? 'Change PDF' : 'Choose PDF'}
-                </button>
+                <div className='doctor-consultation-page__upload-actions'>
+                  <button
+                    type='button'
+                    className='secondary-btn doctor-consultation-page__upload-btn'
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={submitting}
+                  >
+                    <FileUp size={18} aria-hidden />
+                    {uploadFile ? 'Change file' : 'Choose file'}
+                  </button>
+                  <button
+                    type='button'
+                    className='secondary-btn doctor-consultation-page__camera-btn'
+                    onClick={() => setCameraOpen(true)}
+                    disabled={submitting}
+                  >
+                    <Camera size={18} aria-hidden />
+                    Take photo
+                  </button>
+                </div>
                 {uploadFile ? (
                   <p className='doctor-consultation-page__file-name'>{uploadFile.name}</p>
                 ) : (
@@ -617,6 +641,13 @@ export default function DoctorConsultationPage({
           onOpenError={setError}
         />
       ) : null}
+
+      <PatientCameraCaptureModal
+        open={cameraOpen}
+        mode='document'
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
     </div>
   );
 }

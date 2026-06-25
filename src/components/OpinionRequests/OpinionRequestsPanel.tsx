@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorIncomingRequestsTable from './DoctorIncomingRequestsTable';
+import DoctorIncomingRequestsMobileList from './DoctorIncomingRequestsMobileList';
 import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
 import {
   fetchDoctorOpinionRequests,
@@ -224,11 +225,26 @@ export default function OpinionRequestsPanel({
         {!loading && !error && requests.length > 0 ? (
           <>
             {view === 'doctor' ? (
-              <div className='doctor-cases-desktop'>
-                <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
-                  <DoctorIncomingRequestsTable
+              <>
+                <div className='doctor-cases-desktop'>
+                  <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
+                    <DoctorIncomingRequestsTable
+                      data={visibleRequests}
+                      isLoading={loading}
+                      search={doctorSearch}
+                      onSearchChange={setDoctorSearch}
+                      hasActiveFilters={Boolean(doctorSearch.trim())}
+                      onClearFilters={() => setDoctorSearch('')}
+                      onNavigate={onNavigate}
+                      returnScreen={doctorReturnScreen}
+                      onOpenError={showOpenRecordError}
+                      onRequestUpdated={patchDoctorRequest}
+                    />
+                  </div>
+                </div>
+                <div className='doctor-cases-mobile'>
+                  <DoctorIncomingRequestsMobileList
                     data={visibleRequests}
-                    isLoading={loading}
                     search={doctorSearch}
                     onSearchChange={setDoctorSearch}
                     hasActiveFilters={Boolean(doctorSearch.trim())}
@@ -239,7 +255,7 @@ export default function OpinionRequestsPanel({
                     onRequestUpdated={patchDoctorRequest}
                   />
                 </div>
-              </div>
+              </>
             ) : null}
           </>
         ) : null}

@@ -58,6 +58,39 @@ export function captureVideoFrameToSquareDataUrl(
   return canvas.toDataURL('image/jpeg', quality);
 }
 
+/** Capture the full camera frame as a JPEG data URL. */
+export function captureVideoFrameToDataUrl(
+  video: HTMLVideoElement,
+  quality = 0.92,
+  mimeType = 'image/jpeg'
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) throw new Error('Camera preview not ready');
+
+  ctx.drawImage(video, 0, 0, vw, vh);
+  return canvas.toDataURL(mimeType, quality);
+}
+
+export function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [header, base64] = dataUrl.split(',');
+  const mimeMatch = header?.match(/data:([^;]+)/);
+  const mimeType = mimeMatch?.[1] ?? 'image/jpeg';
+  const binary = atob(base64 ?? '');
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new File([bytes], fileName, { type: mimeType });
+}
+
 /** Center-crop to square and resize; output is JPEG data URL for compact storage. */
 export async function resizeImageFileToSquareDataUrl(
   file: File,

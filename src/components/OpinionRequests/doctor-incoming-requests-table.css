@@ -1,8 +1,3 @@
-.doctor-cases-desktop {
-  display: none;
-  margin-top: 0.35rem;
-}
-
 .doctor-cases-table-shell {
   min-height: 28rem;
 }
@@ -57,6 +52,13 @@
   flex: 1;
 }
 
+.doctor-cases-workspace .doctor-cases-mobile {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0;
+}
+
 .doctor-cases-table-toolbar__inner {
   align-items: center;
 }
@@ -67,8 +69,144 @@
   white-space: nowrap;
 }
 
+.doctor-cases-desktop {
+  display: none;
+  margin-top: 0.35rem;
+  min-width: 0;
+}
+
+.doctor-cases-mobile {
+  display: block;
+  min-width: 0;
+  margin-top: 0.35rem;
+}
+
+.doctor-cases-mobile-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.doctor-cases-mobile-search {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.doctor-cases-mobile-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+}
+
+.doctor-cases-mobile-search input:focus {
+  outline: none;
+}
+
+.doctor-cases-mobile-count {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.doctor-cases-mobile-empty {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  padding: 0.5rem 0;
+}
+
+.doctor-incoming-mobile-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--brand-cyan) 8%);
+}
+
+.doctor-incoming-mobile-card .doctor-request-head {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.doctor-incoming-mobile-card .doctor-request-message {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.doctor-incoming-mobile-card__meeting {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #4285f4 28%, var(--border));
+  background: color-mix(in srgb, #4285f4 6%, var(--surface));
+}
+
+.doctor-incoming-mobile-card__meeting-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.doctor-incoming-mobile-card__join {
+  justify-self: start;
+}
+
+.doctor-incoming-mobile-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.doctor-incoming-mobile-card__btn {
+  width: 100%;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.doctor-incoming-mobile-card__actions .doctor-respond-cta,
+.doctor-incoming-mobile-card__actions .primary-btn {
+  width: 100%;
+  justify-content: center;
+}
+
 .doctor-request-list--mobile-cards {
   display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doctors-screen .section-card {
+  min-width: 0;
+}
+
+.doctors-screen .section-head h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.doctors-screen .section-head p {
+  word-break: break-word;
 }
 
 @media (min-width: 768px) {
@@ -76,13 +214,24 @@
     display: block;
   }
 
-  .doctor-request-list--mobile-cards {
+  .doctor-cases-mobile {
     display: none;
   }
 }
 
 @media (max-width: 767px) {
-  .doctor-cases-desktop {
-    display: none;
+  .doctors-screen .section-card {
+    padding: 0.85rem;
+    border-radius: 16px;
+  }
+
+  .case-review-consultation-banner {
+    margin-bottom: 0.85rem;
+  }
+
+  .case-review-consultation-banner .doctor-respond-cta {
+    max-width: none;
+    width: 100%;
+    justify-content: center;
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, CameraOff, Loader2, ShieldAlert, X } from 'lucide-react';
-import { captureVideoFrameToSquareDataUrl } from '../../lib/imageFiles';
+import { captureVideoFrameToDataUrl, captureVideoFrameToSquareDataUrl } from '../../lib/imageFiles';
 import {
   queryCameraPermission,
   requestCameraStream,
@@ -12,12 +12,14 @@ type PatientCameraCaptureModalProps = {
   open: boolean;
   onClose: () => void;
   onCapture: (dataUrl: string) => void;
+  mode?: 'profile' | 'document';
 };
 
 export default function PatientCameraCaptureModal({
   open,
   onClose,
-  onCapture
+  onCapture,
+  mode = 'profile'
 }: PatientCameraCaptureModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -105,7 +107,10 @@ export default function PatientCameraCaptureModal({
     if (!video || !previewReady) return;
 
     try {
-      const dataUrl = captureVideoFrameToSquareDataUrl(video);
+      const dataUrl =
+        mode === 'document'
+          ? captureVideoFrameToDataUrl(video)
+          : captureVideoFrameToSquareDataUrl(video);
       cleanupStream();
       onCapture(dataUrl);
     } catch {
@@ -124,6 +129,7 @@ export default function PatientCameraCaptureModal({
   const isDenied = status === 'denied';
   const isUnsupported = status === 'unsupported';
   const showPreview = status === 'granted' && previewReady;
+  const isDocumentMode = mode === 'document';
 
   return (
     <div className='patient-camera-modal-root' role='presentation'>
@@ -150,7 +156,9 @@ export default function PatientCameraCaptureModal({
 
         <h2 id='patient-camera-modal-title' className='patient-camera-modal__title'>
           {showPreview
-            ? 'Take your profile photo'
+            ? isDocumentMode
+              ? 'Capture consultation notes'
+              : 'Take your profile photo'
             : isUnsupported
               ? 'Camera not available'
               : isDenied
@@ -160,14 +168,20 @@ export default function PatientCameraCaptureModal({
 
         <p id='patient-camera-modal-desc' className='patient-camera-modal__desc muted'>
           {showPreview
-            ? 'Position your face in the frame, then tap Capture photo.'
+            ? isDocumentMode
+              ? 'Point the camera at your notes, then tap Capture photo.'
+              : 'Position your face in the frame, then tap Capture photo.'
             : isChecking
               ? 'Checking camera permission…'
               : isUnsupported
-                ? 'This browser does not support the camera. Use Upload photo instead.'
+                ? 'This browser does not support the camera. Use Upload file instead.'
                 : isDenied
-                  ? 'Profile photos need camera access. Enable the camera for this site in your browser settings, then tap Try again.'
-                  : 'Allow camera access so you can take a profile photo.'}
+                  ? isDocumentMode
+                    ? 'Camera access is needed to photograph notes. Enable the camera for this site in your browser settings, then tap Try again.'
+                    : 'Profile photos need camera access. Enable the camera for this site in your browser settings, then tap Try again.'
+                  : isDocumentMode
+                    ? 'Allow camera access so you can photograph consultation notes.'
+                    : 'Allow camera access so you can take a profile photo.'}
         </p>
 
         <div

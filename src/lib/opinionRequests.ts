@@ -3659,7 +3659,8 @@ export async function saveDoctorConsultation(
 
   const { data: uploadTarget, error: presignError } = await createConsultationSummaryUploadUrl(
     requestId,
-    file.size
+    file.size,
+    file.name
   );
   if (presignError || !uploadTarget) {
     return {
@@ -3725,16 +3726,60 @@ export async function saveDoctorConsultation(
   return { data, error: null };
 }
 
-const CONSULTATION_NOTES_PDF_MAX_BYTES = 10 * 1024 * 1024;
+const CONSULTATION_NOTES_MAX_BYTES = 10 * 1024 * 1024;
 
-export function consultationNotesPdfValidationError(file: File): string | null {
-  if (file.size < 1 || file.size > CONSULTATION_NOTES_PDF_MAX_BYTES) {
-    return 'Consultation notes PDF must be between 1 byte and 10 MB.';
+const CONSULTATION_NOTES_EXTENSION_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  gif: 'image/gif',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+};
+
+const CONSULTATION_NOTES_ALLOWED_EXTENSIONS = new Set(Object.keys(CONSULTATION_NOTES_EXTENSION_MIME));
+
+export function consultationNotesFileExtension(file: File): string {
+  const fromName = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (CONSULTATION_NOTES_ALLOWED_EXTENSIONS.has(fromName)) return fromName;
+
+  const mimeToExt: Record<string, string> = {
+    'application/pdf': 'pdf',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/gif': 'gif',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
+  };
+  return mimeToExt[file.type] ?? fromName;
+}
+
+export function consultationNotesMimeType(file: File): string {
+  const ext = consultationNotesFileExtension(file);
+  return file.type || CONSULTATION_NOTES_EXTENSION_MIME[ext] || 'application/octet-stream';
+}
+
+export function consultationNotesFileValidationError(file: File): string | null {
+  if (file.size < 1 || file.size > CONSULTATION_NOTES_MAX_BYTES) {
+    return 'Consultation notes file must be between 1 byte and 10 MB.';
   }
-  const name = file.name.toLowerCase();
-  const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
-  if (!isPdf) return 'Upload a PDF file for consultation notes.';
+  const ext = consultationNotesFileExtension(file);
+  if (!CONSULTATION_NOTES_ALLOWED_EXTENSIONS.has(ext)) {
+    return 'Upload a supported file: PDF, JPG, PNG, DOC, or DOCX.';
+  }
   return null;
+}
+
+/** @deprecated Use consultationNotesFileValidationError */
+export function consultationNotesPdfValidationError(file: File): string | null {
+  return consultationNotesFileValidationError(file);
 }
 
 async function finalizeDoctorConsultationRequest(
@@ -3779,7 +3824,7 @@ export async function saveDoctorConsultationUpload(
   optionalNote?: string,
   doctorProfile?: Doctor | null
 ) {
-  const validationError = consultationNotesPdfValidationError(file);
+  const validationError = consultationNotesFileValidationError(file);
   if (validationError) {
     return { data: null, error: { message: validationError } };
   }
@@ -3794,7 +3839,7 @@ export async function saveDoctorConsultationUpload(
       data: null,
       error: {
         message:
-          'File storage is not configured. Set VITE_R2_API_URL so consultation PDFs can be saved.'
+          'File storage is not configured. Set VITE_R2_API_URL so consultation notes can be saved.'
       }
     };
   }
@@ -3805,16 +3850,20 @@ export async function saveDoctorConsultationUpload(
     return { data: null, error: { message: 'This request is missing doctor or patient information.' } };
   }
 
+  const uploadFileName = file.name.trim() || `consultation-notes.${consultationNotesFileExtension(file)}`;
+  const contentType = consultationNotesMimeType(file);
+
   const { data: uploadTarget, error: presignError } = await createConsultationSummaryUploadUrl(
     requestId,
-    file.size
+    file.size,
+    uploadFileName
   );
   if (presignError || !uploadTarget) {
     return {
       data: null,
       error: {
         message: normalizeStorageAuthError(
-          presignError?.message ?? 'Could not prepare PDF upload.'
+          presignError?.message ?? 'Could not prepare file upload.'
         )
       }
     };
@@ -3823,7 +3872,7 @@ export async function saveDoctorConsultationUpload(
   const { error: uploadError } = await uploadFileToR2(
     uploadTarget.uploadUrl,
     file,
-    'application/pdf',
+    contentType,
     uploadTarget.storagePath
   );
   if (uploadError) {
@@ -3835,7 +3884,7 @@ export async function saveDoctorConsultationUpload(
 
   const note = optionalNote?.trim();
   const responseText =
-    note || 'Consultation notes uploaded. See the attached PDF for the full clinical summary.';
+    note || 'Consultation notes uploaded. See the attached file for the full clinical summary.';
   const now = new Date().toISOString();
   const summaryPayload = {
     request_id: requestId,

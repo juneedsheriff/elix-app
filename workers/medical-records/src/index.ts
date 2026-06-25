@@ -522,6 +522,7 @@ export default {
         const body = (await request.json()) as {
           requestId?: string;
           contentLength?: number;
+          fileName?: string;
         };
 
         if (!body.requestId?.trim()) {
@@ -533,10 +534,34 @@ export default {
           return jsonResponse({ error: 'File must be between 1 byte and 10 MB' }, 400, origin, env);
         }
 
+        const CONSULTATION_NOTES_EXTENSIONS = new Set([
+          'pdf',
+          'jpg',
+          'jpeg',
+          'png',
+          'webp',
+          'heic',
+          'heif',
+          'gif',
+          'doc',
+          'docx'
+        ]);
+
+        const rawFileName = body.fileName?.trim() || 'consultation-summary.pdf';
+        const ext = rawFileName.split('.').pop()?.toLowerCase() ?? '';
+        if (!CONSULTATION_NOTES_EXTENSIONS.has(ext)) {
+          return jsonResponse(
+            { error: 'Unsupported file type. Use PDF, JPG, PNG, DOC, or DOCX.' },
+            400,
+            origin,
+            env
+          );
+        }
+
         const requestId = body.requestId.trim();
         const storagePath = storagePathFor(
           `consultation-summaries/${requestId}`,
-          'consultation-summary.pdf'
+          rawFileName
         );
 
         const canUpload = await canDoctorUploadConsultationSummary(

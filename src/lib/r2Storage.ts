@@ -126,14 +126,19 @@ export async function createConsultationInvoiceUploadUrl(requestId: string, cont
   );
 }
 
-export async function createConsultationSummaryUploadUrl(requestId: string, contentLength: number) {
+export async function createConsultationSummaryUploadUrl(
+  requestId: string,
+  contentLength: number,
+  fileName: string
+) {
   return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
     '/v1/consultation-summary/upload-url',
     {
       method: 'POST',
       json: {
         requestId,
-        contentLength
+        contentLength,
+        fileName
       }
     }
   );

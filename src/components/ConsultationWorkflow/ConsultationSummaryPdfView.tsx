@@ -5,6 +5,7 @@ import {
   downloadConsultationSummaryPdf,
   getConsultationSummarySections
 } from '../../lib/consultationSummaryPdf';
+import { isImageFileName } from '../../lib/imageFiles';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import { normalizeStorageAuthError } from '../../lib/supabaseSession';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
@@ -24,6 +25,9 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const sections = getConsultationSummarySections(summary);
   const storedPath = summary.pdf_storage_path?.trim() ?? '';
   const hasStoredPdf = Boolean(storedPath);
+  const storedFileName = storedPath.split('/').pop() ?? 'consultation-notes';
+  const storedIsPdf = storedFileName.toLowerCase().endsWith('.pdf');
+  const storedIsImage = isImageFileName(storedFileName);
   const hasStructuredPreview = sections.length > 0;
 
   useEffect(() => {
@@ -43,7 +47,7 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
       if (cancelled) return;
       if (error || !data?.signedUrl) {
         setPdfUrl(null);
-        setPdfError(normalizeStorageAuthError(error?.message ?? 'Could not load consultation PDF.'));
+        setPdfError(normalizeStorageAuthError(error?.message ?? 'Could not load consultation notes file.'));
         setPdfLoading(false);
         return;
       }
@@ -79,7 +83,7 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
       if (storedPath && pdfUrl) {
         const anchor = document.createElement('a');
         anchor.href = pdfUrl;
-        anchor.download = `consultation-summary-${request.patient_name ?? request.id}.pdf`;
+        anchor.download = storedFileName || `consultation-summary-${request.patient_name ?? request.id}`;
         anchor.click();
         return;
       }
@@ -98,7 +102,7 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
       <div className='consultation-summary-pdf__toolbar'>
         <span className='consultation-summary-pdf__toolbar-label'>
           <FileText size={18} aria-hidden />
-          Consultation notes (PDF)
+          Consultation notes{storedIsPdf ? ' (PDF)' : ''}
         </span>
         <div className='consultation-summary-pdf__toolbar-actions'>
           {pdfUrl ? (
@@ -108,7 +112,7 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
               onClick={handleOpenInNewTab}
             >
               <ExternalLink size={16} aria-hidden />
-              Open PDF
+              Open file
             </button>
           ) : null}
           <button
@@ -124,10 +128,10 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
       </div>
 
       {hasStoredPdf ? (
-        <div className='consultation-summary-pdf__viewer' aria-label='Stored consultation PDF'>
+        <div className='consultation-summary-pdf__viewer' aria-label='Stored consultation notes file'>
           {pdfLoading ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
-              <Loader2 size={16} className='spin' aria-hidden /> Loading PDF…
+              <Loader2 size={16} className='spin' aria-hidden /> Loading file…
             </p>
           ) : null}
           {pdfError ? (
@@ -135,12 +139,24 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
               {pdfError}
             </p>
           ) : null}
-          {pdfUrl ? (
+          {pdfUrl && storedIsPdf ? (
             <iframe
               className='consultation-summary-pdf__iframe'
               src={pdfUrl}
               title='Consultation summary PDF'
             />
+          ) : null}
+          {pdfUrl && storedIsImage ? (
+            <img
+              className='consultation-summary-pdf__image'
+              src={pdfUrl}
+              alt='Uploaded consultation notes'
+            />
+          ) : null}
+          {pdfUrl && !storedIsPdf && !storedIsImage ? (
+            <p className='muted consultation-summary-pdf__viewer-status'>
+              Preview is not available for this file type. Use Open file or Download.
+            </p>
           ) : null}
         </div>
       ) : null}

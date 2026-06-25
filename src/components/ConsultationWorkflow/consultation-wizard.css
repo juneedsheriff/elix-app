@@ -1321,6 +1321,14 @@
   background: #fff;
 }
 
+.consultation-summary-pdf__image {
+  display: block;
+  width: 100%;
+  max-height: 28rem;
+  object-fit: contain;
+  background: #fff;
+}
+
 .consultation-summary-pdf__page {
   background: #fff;
   color: #111827;
