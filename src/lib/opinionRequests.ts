@@ -211,6 +211,13 @@ const assignmentFields = `
   )
 `;
 
+const clinicScopeFields = `
+  clinic_id,
+  clinic:pse_clinics!opinion_requests_clinic_id_fkey (
+    name
+  )
+`;
+
 const requestListSelectWithResponse = `
   id,
   message,
@@ -226,6 +233,7 @@ const requestListSelectWithResponse = `
   doctor_response,
   responded_at,
   ${assignmentFields},
+  ${clinicScopeFields},
   doctors (
     id,
     full_name,
@@ -561,6 +569,26 @@ function isMissingRequestedSpecialtyError(error: { message?: string } | null) {
   return msg.includes('requested_specialty');
 }
 
+function isMissingClinicScopeError(error: { message?: string; code?: string } | null) {
+  if (!error) return false;
+  const msg = error.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('clinic_id') ||
+    msg.includes('pse_clinics') ||
+    msg.includes('opinion_requests_clinic_id_fkey') ||
+    error.code === 'PGRST200'
+  );
+}
+
+function stripClinicScopeFromSelect(select: string) {
+  return select
+    .replace(/,?\s*clinic_id\s*/g, '')
+    .replace(
+      /,?\s*clinic:pse_clinics!opinion_requests_clinic_id_fkey\s*\(\s*name\s*\)\s*/g,
+      ''
+    );
+}
+
 function isNullableDoctorIdBlocked(error: { message?: string } | null) {
   const msg = error?.message?.toLowerCase() ?? '';
   return msg.includes('doctor_id') && (msg.includes('not-null') || msg.includes('null value'));
@@ -608,6 +636,8 @@ type RequestListRow = {
   doctor_name: string | null;
   doctor_selection_mode?: DoctorSelectionMode | null;
   requested_specialty?: string | null;
+  clinic_id?: string | null;
+  clinic?: { name: string } | { name: string }[] | null;
   consultation_stage?: string | null;
   selected_doctor_id?: string | null;
   patient_availability?: unknown | null;
@@ -1160,6 +1190,8 @@ function mapRequestRow(
     doctor_specialty: row.doctors?.specialty ?? null,
     doctor_selection_mode: row.doctor_selection_mode ?? (row.doctor_id ? 'self_select' : 'needs_recommendation'),
     requested_specialty: row.requested_specialty ?? null,
+    clinic_id: row.clinic_id ?? null,
+    clinic_name: Array.isArray(row.clinic) ? row.clinic[0]?.name ?? null : row.clinic?.name ?? null,
     patient_email: patient?.email ?? null,
     doctor_response: row.doctor_response,
     responded_at: row.responded_at,
@@ -1618,6 +1650,14 @@ async function fetchOpinionRequestRows(
 
   if (isMissingRequestedSpecialtyError(lastError)) {
     result = await buildQuery(stripRequestedSpecialtyFromSelect(requestListSelectWithResponse));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingClinicScopeError(lastError)) {
+    result = await buildQuery(stripClinicScopeFromSelect(requestListSelectWithResponse));
     if (!result.error) {
       return { rows: result.data, error: null, responsesEnabled: true };
     }

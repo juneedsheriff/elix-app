@@ -162,6 +162,25 @@ export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseReques
 
       if (isAdmin) {
         columns.push({
+          id: 'workspace',
+          header: 'Workspace',
+          accessorFn: (row) => row.clinic_name ?? 'Global',
+          size: 170,
+          minSize: 140,
+          Cell: ({ row }) => (
+            <Badge
+              variant='light'
+              color={row.original.clinic_id ? 'blue' : 'gray'}
+              radius='xl'
+              size='md'
+              className='doctors-mgmt-pill'
+            >
+              {row.original.clinic_name ?? 'Global'}
+            </Badge>
+          )
+        });
+
+        columns.push({
           id: 'assigned_to',
           header: 'Assigned to',
           accessorFn: (row) => row.assigned_to_name ?? row.assigned_to ?? '',

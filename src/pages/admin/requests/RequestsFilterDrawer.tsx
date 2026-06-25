@@ -1,12 +1,18 @@
 import { Button, Drawer, Select, Stack, Text } from '@mantine/core';
 import { IconFilterOff } from '@tabler/icons-react';
-import type { RequestQuickFilters, RequestQueueFilter, RequestStatusFilter } from './requestsUtils';
+import type {
+  RequestQuickFilters,
+  RequestQueueFilter,
+  RequestStatusFilter,
+  RequestWorkspaceFilter
+} from './requestsUtils';
 
 type RequestsFilterDrawerProps = {
   opened: boolean;
   onClose: () => void;
   filters: RequestQuickFilters;
   specialtyOptions: string[];
+  workspaceOptions: Array<{ value: RequestWorkspaceFilter; label: string }>;
   assigneeOptions: string[];
   showAssignee: boolean;
   onChange: (filters: RequestQuickFilters) => void;
@@ -31,6 +37,7 @@ export default function RequestsFilterDrawer({
   onClose,
   filters,
   specialtyOptions,
+  workspaceOptions,
   assigneeOptions,
   showAssignee,
   onChange,
@@ -78,6 +85,20 @@ export default function RequestsFilterDrawer({
           value={filters.specialty}
           onChange={(value) => onChange({ ...filters, specialty: value })}
         />
+
+        {workspaceOptions.length ? (
+          <Select
+            label='Workspace'
+            data={workspaceOptions}
+            value={filters.workspace}
+            onChange={(value) =>
+              onChange({
+                ...filters,
+                workspace: (value as RequestWorkspaceFilter) ?? filters.workspace
+              })
+            }
+          />
+        ) : null}
 
         {showAssignee ? (
           <Select

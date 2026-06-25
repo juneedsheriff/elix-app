@@ -68,6 +68,8 @@ export type OpinionRequest = {
   doctor_specialty: string | null;
   doctor_selection_mode: DoctorSelectionMode | null;
   requested_specialty: string | null;
+  clinic_id: string | null;
+  clinic_name: string | null;
   patient_email: string | null;
   doctor_response: string | null;
   responded_at: string | null;

@@ -30,7 +30,8 @@ import {
   exportRequestsCsv,
   getDefaultRequestFilters,
   uniqueSorted,
-  type RequestQuickFilters
+  type RequestQuickFilters,
+  type RequestWorkspaceFilter
 } from './requests/requestsUtils';
 import { useRequestsTableColumns } from './requests/requestsTableColumns';
 import './doctors/doctors-management.css';
@@ -235,6 +236,23 @@ export default function ElixHealthRequestsPage() {
     [requests]
   );
 
+  const workspaceOptions = useMemo(() => {
+    if (!isAdmin) return [] as Array<{ value: RequestWorkspaceFilter; label: string }>;
+    const clinics = new Map<string, string>();
+    for (const request of requests) {
+      if (!request.clinic_id) continue;
+      clinics.set(request.clinic_id, request.clinic_name?.trim() || 'Clinic workspace');
+    }
+    const clinicOptions = [...clinics.entries()]
+      .map(([id, name]) => ({ value: `clinic:${id}` as RequestWorkspaceFilter, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      { value: 'all' as const, label: 'All workspaces' },
+      { value: 'global' as const, label: 'Global' },
+      ...clinicOptions
+    ];
+  }, [isAdmin, requests]);
+
   const normalizedSearch = search.trim().toLowerCase();
 
   const filteredRequests = useMemo(() => {
@@ -251,6 +269,7 @@ export default function ElixHealthRequestsPage() {
     Boolean(normalizedSearch) ||
     filters.queue !== defaultFilters.queue ||
     filters.status !== 'all' ||
+    filters.workspace !== defaultFilters.workspace ||
     Boolean(filters.specialty) ||
     Boolean(filters.assignee);
 
@@ -503,6 +522,7 @@ export default function ElixHealthRequestsPage() {
               onSearchChange={setSearch}
               filters={filters}
               specialtyOptions={specialtyOptions}
+              workspaceOptions={workspaceOptions}
               pendingCount={analytics.pendingQueue}
               totalCount={analytics.total}
               onFilterChange={setFilters}
@@ -516,6 +536,7 @@ export default function ElixHealthRequestsPage() {
         onClose={() => setFilterDrawerOpen(false)}
         filters={filters}
         specialtyOptions={specialtyOptions}
+        workspaceOptions={workspaceOptions}
         assigneeOptions={assigneeOptions}
         showAssignee={isAdmin}
         onChange={setFilters}

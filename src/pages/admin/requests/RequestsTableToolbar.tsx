@@ -3,7 +3,11 @@ import { ActionIcon, Group, Select, TextInput, Tooltip } from '@mantine/core';
 import { IconMaximize, IconMinimize, IconSearch } from '@tabler/icons-react';
 import { MRT_ShowHideColumnsButton, type MRT_TableInstance } from 'mantine-react-table';
 import type { OpinionRequest } from '../../../types/opinionRequest';
-import type { RequestQuickFilters, RequestQueueFilter } from './requestsUtils';
+import type {
+  RequestQuickFilters,
+  RequestQueueFilter,
+  RequestWorkspaceFilter
+} from './requestsUtils';
 
 type RequestsTableToolbarProps = {
   table: MRT_TableInstance<OpinionRequest>;
@@ -13,6 +17,7 @@ type RequestsTableToolbarProps = {
   onSearchChange: (value: string) => void;
   filters: RequestQuickFilters;
   specialtyOptions: string[];
+  workspaceOptions: Array<{ value: RequestWorkspaceFilter; label: string }>;
   pendingCount: number;
   totalCount: number;
   onFilterChange: (filters: RequestQuickFilters) => void;
@@ -31,6 +36,7 @@ function RequestsTableToolbar({
   onSearchChange,
   filters,
   specialtyOptions,
+  workspaceOptions,
   pendingCount,
   totalCount,
   onFilterChange
@@ -76,6 +82,21 @@ function RequestsTableToolbar({
           onChange={(value) => onFilterChange({ ...filters, specialty: value })}
           radius='md'
         />
+        {workspaceOptions.length ? (
+          <Select
+            className='doctors-mgmt-quick-select'
+            placeholder='Workspace'
+            data={workspaceOptions}
+            value={filters.workspace}
+            onChange={(value) =>
+              onFilterChange({
+                ...filters,
+                workspace: (value as RequestWorkspaceFilter) ?? filters.workspace
+              })
+            }
+            radius='md'
+          />
+        ) : null}
       </Group>
 
       <Group gap='xs' className='doctors-mgmt-table-toolbar__tools' wrap='nowrap'>

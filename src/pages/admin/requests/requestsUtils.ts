@@ -6,6 +6,7 @@ import {
 import type { OpinionRequest } from '../../../types/opinionRequest';
 
 export type RequestQueueFilter = 'pending' | 'all';
+export type RequestWorkspaceFilter = 'all' | 'global' | `clinic:${string}`;
 
 export type RequestStatusFilter =
   | 'all'
@@ -17,6 +18,7 @@ export type RequestStatusFilter =
 export type RequestQuickFilters = {
   queue: RequestQueueFilter;
   status: RequestStatusFilter;
+  workspace: RequestWorkspaceFilter;
   specialty: string | null;
   assignee: string | null;
 };
@@ -26,6 +28,7 @@ export function getDefaultRequestFilters(isAdmin: boolean): RequestQuickFilters 
   return {
     queue: isAdmin ? 'pending' : 'all',
     status: 'all',
+    workspace: 'all',
     specialty: null,
     assignee: null
   };
@@ -124,6 +127,16 @@ export function applyRequestQuickFilters(
 
     if (filters.status !== 'all' && requestStatusKey(request) !== filters.status) {
       return false;
+    }
+
+    if (isAdmin && filters.workspace !== 'all') {
+      if (filters.workspace === 'global' && request.clinic_id) return false;
+      if (
+        filters.workspace.startsWith('clinic:') &&
+        request.clinic_id !== filters.workspace.slice('clinic:'.length)
+      ) {
+        return false;
+      }
     }
 
     if (filters.specialty && request.doctor_specialty !== filters.specialty) return false;
