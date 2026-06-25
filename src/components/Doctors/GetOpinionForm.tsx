@@ -173,9 +173,13 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
     setSubmitting(false);
 
     if (error) {
-      setSubmitError(
-        `${error.message}. Run supabase/schema.sql (uploaded_files table) and npm run db:seed-records, then try again.`
-      );
+      const hint =
+        error.message.includes('doctor_id') || error.message.includes('Doctor not found')
+          ? ' Choose the doctor again from the list and try once more.'
+          : error.message.includes('record_id') || error.message.includes('foreign key')
+            ? ' Run supabase/migrations/020_opinion_request_files_access.sql in the Supabase SQL Editor, then try again.'
+            : '';
+      setSubmitError(`${error.message}${hint}`);
       return;
     }
 

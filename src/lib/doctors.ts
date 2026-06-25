@@ -92,15 +92,19 @@ export async function fetchPatientBrowseDoctorById(
   options?: { patientClinicId?: string | null }
 ) {
   const direct = await fetchDoctorById(id);
-  if (direct.data || direct.error) return direct;
+  if (direct.data) return direct;
 
   const browse = await fetchDoctors(200, options);
-  if (browse.error) return { data: null, error: browse.error };
+  if (browse.error) {
+    return direct.error ? { data: null, error: direct.error } : { data: null, error: browse.error };
+  }
 
-  return {
-    data: (browse.data ?? []).find((doctor) => doctor.id === id) ?? null,
-    error: null
-  };
+  const fromBrowse = (browse.data ?? []).find((doctor) => doctor.id === id) ?? null;
+  if (fromBrowse) {
+    return { data: fromBrowse, error: null };
+  }
+
+  return { data: null, error: direct.error };
 }
 
 export async function fetchDoctorByEmail(email: string) {

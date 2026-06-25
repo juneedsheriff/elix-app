@@ -17,7 +17,12 @@ import {
 } from './consultationInvoicePdf';
 import { doctorConsultationCurrency, getTierFeeUsd, parseConsultationTiers } from './consultationTiers';
 import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
-import { fetchDoctorByAuthUserId, fetchDoctorById, normalizeDoctor } from './doctors';
+import {
+  fetchDoctorByAuthUserId,
+  fetchDoctorById,
+  fetchPatientBrowseDoctorById,
+  normalizeDoctor
+} from './doctors';
 import { fetchPatientByAuthUserId } from './patients';
 import {
   consultationSummaryPdfMetaFromRequest,
@@ -751,6 +756,9 @@ async function resolveDoctorRecord(doctorId: string, context?: ResolveDoctorCont
 
   const byId = await fetchDoctorById(trimmedId);
   if (byId.data) return { doctor: byId.data, error: null };
+
+  const byBrowse = await fetchPatientBrowseDoctorById(trimmedId);
+  if (byBrowse.data) return { doctor: byBrowse.data, error: null };
 
   const byAuth = await fetchDoctorByAuthUserId(trimmedId);
   if (byAuth.data) return { doctor: byAuth.data, error: null };
