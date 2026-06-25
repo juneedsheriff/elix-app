@@ -5,7 +5,7 @@ import {
 } from '../../../lib/opinionRequests';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 
-export type RequestQueueFilter = 'pending' | 'all';
+export type RequestQueueFilter = 'all' | 'pending' | 'completed';
 export type RequestWorkspaceFilter = 'all' | 'global' | `clinic:${string}`;
 
 export type RequestStatusFilter =
@@ -28,7 +28,7 @@ export function getDefaultRequestFilters(isAdmin: boolean): RequestQuickFilters 
   return {
     queue: isAdmin ? 'pending' : 'all',
     status: 'all',
-    workspace: 'all',
+    workspace: isAdmin ? 'global' : 'all',
     specialty: null,
     assignee: null
   };
@@ -123,6 +123,11 @@ export function applyRequestQuickFilters(
     if (filters.queue === 'pending') {
       if (isAdmin && !isPendingAdminAssignment(request)) return false;
       if (!isAdmin && !isAssignedToPatientService(request)) return false;
+    }
+    if (filters.queue === 'completed') {
+      const isCompleted =
+        requestStatusKey(request) === 'closed' || request.consultation_stage === 'completed';
+      if (!isCompleted) return false;
     }
 
     if (filters.status !== 'all' && requestStatusKey(request) !== filters.status) {

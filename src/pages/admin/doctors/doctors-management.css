@@ -114,6 +114,84 @@
   padding-bottom: 0.25rem;
 }
 
+.elixhealth-workspace-tabs {
+  padding: 0.4rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 98%, #fff) 0%,
+    color-mix(in srgb, var(--brand-cyan) 4%, var(--surface)) 100%
+  );
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.elixhealth-workspace-tabs__root {
+  width: 100%;
+}
+
+.elixhealth-workspace-tabs__list {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.elixhealth-workspace-tabs__list::before {
+  display: none;
+}
+
+.elixhealth-workspace-tabs__tab {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+  padding: 0.55rem 0.95rem;
+  color: color-mix(in srgb, var(--text) 62%, transparent);
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.elixhealth-workspace-tabs__tab:hover:not([data-active]) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--brand-cyan) 9%, transparent);
+  border-color: color-mix(in srgb, var(--brand-cyan) 18%, transparent);
+}
+
+.elixhealth-workspace-tabs__tab[data-active] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-cyan) 0%, #0d9488 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.28);
+}
+
+.elixhealth-workspace-tabs__tab[data-active]:hover {
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand-cyan) 0%, #0f766e 100%);
+}
+
+[data-mantine-color-scheme='dark'] .elixhealth-workspace-tabs {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 94%, #0f172a) 0%,
+    color-mix(in srgb, var(--brand-cyan) 10%, var(--surface)) 100%
+  );
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+[data-mantine-color-scheme='dark'] .elixhealth-workspace-tabs__tab {
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+[data-mantine-color-scheme='dark'] .elixhealth-workspace-tabs__tab:hover:not([data-active]) {
+  background: color-mix(in srgb, var(--brand-cyan) 16%, transparent);
+}
+
 .doctors-mgmt-header {
   display: flex;
   align-items: flex-end;

@@ -32,6 +32,7 @@ import {
 } from './doctors/doctorsUtils';
 import { useDoctorsTableColumns } from './doctors/doctorsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import WorkspaceTabs from './WorkspaceTabs';
 import ClinicDoctorRequestsAdminPanel from './doctors/ClinicDoctorRequestsAdminPanel';
 import ClinicPseRequestDoctorModal from './doctors/ClinicPseRequestDoctorModal';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
@@ -81,6 +82,7 @@ export default function ElixHealthDoctorsPage() {
   const [pseExecutives, setPseExecutives] = useState<Admin[]>([]);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<DoctorQuickFilters>(DEFAULT_FILTERS);
+  const [workspaceTab, setWorkspaceTab] = useState<string>('global');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteDoctor, setDeleteDoctor] = useState<Doctor | null>(null);
   const [deletePendingCasesCount, setDeletePendingCasesCount] = useState<number | null>(null);
@@ -169,30 +171,98 @@ export default function ElixHealthDoctorsPage() {
     });
   }, [canRequestDoctor, isAdmin, refresh, staff.clinic_id]);
 
-  const analytics = useMemo(() => computeDoctorAnalytics(doctors), [doctors]);
+  const workspaceTabs = useMemo(() => {
+    if (!isAdmin) return [] as Array<{ value: string; label: string }>;
+
+    const clinicDoctorIds = new Map<string, Set<string>>();
+    const clinicNames = new Map<string, string>();
+    let globalCount = doctors.filter((doctor) => !doctor.clinic_id).length;
+
+    for (const doctor of doctors) {
+      const links = workspaceLinksByDoctorId.get(doctor.id) ?? [];
+      for (const link of links) {
+        clinicNames.set(link.clinicId, link.clinicName?.trim() || 'Clinic workspace');
+        const current = clinicDoctorIds.get(link.clinicId) ?? new Set<string>();
+        current.add(doctor.id);
+        clinicDoctorIds.set(link.clinicId, current);
+      }
+    }
+
+    const clinicEntries = [...clinicDoctorIds.entries()]
+      .map(([id, doctorIds]) => ({
+        id,
+        name: clinicNames.get(id) ?? 'Clinic workspace',
+        count: doctorIds.size
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const clinicNameCounts = new Map<string, number>();
+    for (const entry of clinicEntries) {
+      clinicNameCounts.set(entry.name, (clinicNameCounts.get(entry.name) ?? 0) + 1);
+    }
+
+    const clinicTabs = clinicEntries.map((entry) => {
+      const duplicateName = (clinicNameCounts.get(entry.name) ?? 0) > 1;
+      const needsIdHint = duplicateName || entry.name === 'Clinic workspace';
+      const idHint = needsIdHint ? ` · ${entry.id.slice(0, 8)}` : '';
+      return {
+        value: `clinic:${entry.id}`,
+        label: `${entry.name}${idHint} (${entry.count})`
+      };
+    });
+
+    return [{ value: 'global', label: `Global (${globalCount})` }, ...clinicTabs];
+  }, [doctors, isAdmin, workspaceLinksByDoctorId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!workspaceTabs.length) {
+      if (workspaceTab !== 'global') setWorkspaceTab('global');
+      return;
+    }
+    if (!workspaceTabs.some((tab) => tab.value === workspaceTab)) {
+      setWorkspaceTab('global');
+    }
+  }, [isAdmin, workspaceTab, workspaceTabs]);
+
+  const workspaceScopedDoctors = useMemo(() => {
+    if (!isAdmin) return doctors;
+    if (workspaceTab === 'global') {
+      return doctors.filter((doctor) => !doctor.clinic_id);
+    }
+    if (workspaceTab.startsWith('clinic:')) {
+      const clinicId = workspaceTab.slice('clinic:'.length);
+      return doctors.filter((doctor) =>
+        (workspaceLinksByDoctorId.get(doctor.id) ?? []).some((link) => link.clinicId === clinicId)
+      );
+    }
+    return doctors;
+  }, [doctors, isAdmin, workspaceLinksByDoctorId, workspaceTab]);
+
+  const analytics = useMemo(() => computeDoctorAnalytics(workspaceScopedDoctors), [workspaceScopedDoctors]);
 
   const specialtyOptions = useMemo(
-    () => uniqueSorted(doctors.map((doctor) => doctor.specialty)),
-    [doctors]
+    () => uniqueSorted(workspaceScopedDoctors.map((doctor) => doctor.specialty)),
+    [workspaceScopedDoctors]
   );
 
   const countryOptions = useMemo(
     () =>
       uniqueSorted(
-        doctors.map((doctor) => doctor.clinic_country ?? doctor.country)
+        workspaceScopedDoctors.map((doctor) => doctor.clinic_country ?? doctor.country)
       ),
-    [doctors]
+    [workspaceScopedDoctors]
   );
 
   const normalizedSearch = search.trim().toLowerCase();
 
   const filteredDoctors = useMemo(() => {
-    let list = applyDoctorQuickFilters(doctors, filters);
+    let list = applyDoctorQuickFilters(workspaceScopedDoctors, filters);
     if (normalizedSearch) {
       list = list.filter((doctor) => matchesSearch(doctor, normalizedSearch));
     }
     return list;
-  }, [doctors, filters, normalizedSearch]);
+  }, [filters, normalizedSearch, workspaceScopedDoctors]);
 
   const hasActiveFilters =
     Boolean(normalizedSearch) ||
@@ -344,7 +414,7 @@ export default function ElixHealthDoctorsPage() {
   return (
     <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
       <DoctorsPageHeader
-        totalCount={doctors.length}
+        totalCount={workspaceScopedDoctors.length}
         canEdit={canAddDoctor}
         canRequestPlatformDoctor={canRequestDoctor}
         onOpenFilters={() => setDrawerOpen(true)}
@@ -367,6 +437,10 @@ export default function ElixHealthDoctorsPage() {
         <Alert color='green' radius='md' onClose={() => setSuccessMessage(null)} withCloseButton>
           {successMessage}
         </Alert>
+      ) : null}
+
+      {isAdmin && workspaceTabs.length ? (
+        <WorkspaceTabs tabs={workspaceTabs} value={workspaceTab} onChange={setWorkspaceTab} />
       ) : null}
 
       <DoctorsAnalyticsCards analytics={analytics} loading={loading} />

@@ -22,6 +22,7 @@ import {
 } from './patients/patientsUtils';
 import { usePatientsTableColumns } from './patients/patientsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import WorkspaceTabs from './WorkspaceTabs';
 import AdminPatientCreateForm from './forms/AdminPatientCreateForm';
 import './doctors/doctors-management.css';
 
@@ -63,6 +64,7 @@ export default function ElixHealthPatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<PatientQuickFilters>(DEFAULT_FILTERS);
+  const [workspaceTab, setWorkspaceTab] = useState('global');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteRequestsPatient, setDeleteRequestsPatient] = useState<Patient | null>(null);
@@ -86,32 +88,103 @@ export default function ElixHealthPatientsPage() {
     void load();
   }, [load]);
 
-  const analytics = useMemo(() => computePatientAnalytics(patients), [patients]);
+  const workspaceTabs = useMemo(() => {
+    if (!isAdmin) return [] as Array<{ value: string; label: string }>;
+
+    const clinics = new Map<string, { name: string; count: number }>();
+    let globalCount = 0;
+
+    for (const patient of patients) {
+      if (!patient.clinic_id) {
+        globalCount += 1;
+        continue;
+      }
+
+      const current = clinics.get(patient.clinic_id);
+      if (current) {
+        current.count += 1;
+      } else {
+        clinics.set(patient.clinic_id, {
+          name: patient.pse_clinic_name?.trim() || 'Clinic workspace',
+          count: 1
+        });
+      }
+    }
+
+    const clinicEntries = [...clinics.entries()]
+      .map(([id, clinic]) => ({ id, name: clinic.name, count: clinic.count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const clinicNameCounts = new Map<string, number>();
+    for (const entry of clinicEntries) {
+      clinicNameCounts.set(entry.name, (clinicNameCounts.get(entry.name) ?? 0) + 1);
+    }
+
+    const clinicTabs = clinicEntries.map((entry) => {
+      const duplicateName = (clinicNameCounts.get(entry.name) ?? 0) > 1;
+      const needsIdHint = duplicateName || entry.name === 'Clinic workspace';
+      const idHint = needsIdHint ? ` · ${entry.id.slice(0, 8)}` : '';
+      return {
+        value: `clinic:${entry.id}`,
+        label: `${entry.name}${idHint} (${entry.count})`
+      };
+    });
+
+    return [{ value: 'global', label: `Global (${globalCount})` }, ...clinicTabs];
+  }, [isAdmin, patients]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!workspaceTabs.length) {
+      if (workspaceTab !== 'global') setWorkspaceTab('global');
+      return;
+    }
+    if (!workspaceTabs.some((tab) => tab.value === workspaceTab)) {
+      setWorkspaceTab('global');
+    }
+  }, [isAdmin, workspaceTab, workspaceTabs]);
+
+  const workspaceScopedPatients = useMemo(() => {
+    if (!isAdmin) return patients;
+    if (workspaceTab === 'global') {
+      return patients.filter((patient) => !patient.clinic_id);
+    }
+    if (workspaceTab.startsWith('clinic:')) {
+      const clinicId = workspaceTab.slice('clinic:'.length);
+      return patients.filter((patient) => patient.clinic_id === clinicId);
+    }
+    return patients;
+  }, [isAdmin, patients, workspaceTab]);
+
+  const analytics = useMemo(
+    () => computePatientAnalytics(workspaceScopedPatients),
+    [workspaceScopedPatients]
+  );
 
   const countryOptions = useMemo(
-    () => uniqueSorted(patients.map((patient) => patient.country)),
-    [patients]
+    () => uniqueSorted(workspaceScopedPatients.map((patient) => patient.country)),
+    [workspaceScopedPatients]
   );
 
   const cityOptions = useMemo(
-    () => uniqueSorted(patients.map((patient) => patient.city)),
-    [patients]
+    () => uniqueSorted(workspaceScopedPatients.map((patient) => patient.city)),
+    [workspaceScopedPatients]
   );
 
   const bloodGroupOptions = useMemo(
-    () => uniqueSorted(patients.map((patient) => patient.blood_group)),
-    [patients]
+    () => uniqueSorted(workspaceScopedPatients.map((patient) => patient.blood_group)),
+    [workspaceScopedPatients]
   );
 
   const normalizedSearch = search.trim().toLowerCase();
 
   const filteredPatients = useMemo(() => {
-    let list = applyPatientQuickFilters(patients, filters);
+    let list = applyPatientQuickFilters(workspaceScopedPatients, filters);
     if (normalizedSearch) {
       list = list.filter((patient) => matchesSearch(patient, normalizedSearch));
     }
     return list;
-  }, [patients, filters, normalizedSearch]);
+  }, [filters, normalizedSearch, workspaceScopedPatients]);
 
   const hasActiveFilters =
     Boolean(normalizedSearch) ||
@@ -195,7 +268,7 @@ export default function ElixHealthPatientsPage() {
   return (
     <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
       <PatientsPageHeader
-        totalCount={patients.length}
+        totalCount={workspaceScopedPatients.length}
         canEdit={canEdit || canAddPatient}
         onOpenFilters={() => setDrawerOpen(true)}
         onExport={handleExport}
@@ -212,6 +285,10 @@ export default function ElixHealthPatientsPage() {
         <Alert color='green' radius='md' onClose={() => setSuccessMessage(null)} withCloseButton>
           {successMessage}
         </Alert>
+      ) : null}
+
+      {isAdmin && workspaceTabs.length ? (
+        <WorkspaceTabs tabs={workspaceTabs} value={workspaceTab} onChange={setWorkspaceTab} />
       ) : null}
 
       <PatientsAnalyticsCards analytics={analytics} loading={loading} />

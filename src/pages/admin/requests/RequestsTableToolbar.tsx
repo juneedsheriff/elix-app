@@ -5,8 +5,7 @@ import { MRT_ShowHideColumnsButton, type MRT_TableInstance } from 'mantine-react
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import type {
   RequestQuickFilters,
-  RequestQueueFilter,
-  RequestWorkspaceFilter
+  RequestQueueFilter
 } from './requestsUtils';
 
 type RequestsTableToolbarProps = {
@@ -17,15 +16,16 @@ type RequestsTableToolbarProps = {
   onSearchChange: (value: string) => void;
   filters: RequestQuickFilters;
   specialtyOptions: string[];
-  workspaceOptions: Array<{ value: RequestWorkspaceFilter; label: string }>;
   pendingCount: number;
+  completedCount: number;
   totalCount: number;
   onFilterChange: (filters: RequestQuickFilters) => void;
 };
 
 const QUEUE_QUICK: { value: RequestQueueFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
   { value: 'pending', label: 'Pending' },
-  { value: 'all', label: 'All' }
+  { value: 'completed', label: 'Completed' }
 ];
 
 function RequestsTableToolbar({
@@ -36,17 +36,20 @@ function RequestsTableToolbar({
   onSearchChange,
   filters,
   specialtyOptions,
-  workspaceOptions,
   pendingCount,
+  completedCount,
   totalCount,
   onFilterChange
 }: RequestsTableToolbarProps) {
   const queueData = QUEUE_QUICK.map((option) => ({
     ...option,
-    label:
+    label: `${option.label} (${
       option.value === 'pending'
-        ? `${option.label} (${pendingCount})`
-        : `${option.label} (${totalCount})`
+        ? pendingCount
+        : option.value === 'completed'
+          ? completedCount
+          : totalCount
+    })`
   }));
 
   return (
@@ -82,21 +85,6 @@ function RequestsTableToolbar({
           onChange={(value) => onFilterChange({ ...filters, specialty: value })}
           radius='md'
         />
-        {workspaceOptions.length ? (
-          <Select
-            className='doctors-mgmt-quick-select'
-            placeholder='Workspace'
-            data={workspaceOptions}
-            value={filters.workspace}
-            onChange={(value) =>
-              onFilterChange({
-                ...filters,
-                workspace: (value as RequestWorkspaceFilter) ?? filters.workspace
-              })
-            }
-            radius='md'
-          />
-        ) : null}
       </Group>
 
       <Group gap='xs' className='doctors-mgmt-table-toolbar__tools' wrap='nowrap'>

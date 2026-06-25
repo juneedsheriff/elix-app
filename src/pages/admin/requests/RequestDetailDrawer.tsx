@@ -140,12 +140,13 @@ export default function RequestDetailDrawer({
 
 
   const isClosed = request.status === 'closed';
+  const isClinicRequest = Boolean(request.clinic_id);
 
   const isAssignedToMe = Boolean(request.assigned_to && request.assigned_to === staff.id);
 
   const canAssign = isAdmin && isPendingAdminAssignment(request);
 
-  const showAssignSection = canAssign && !isClosed;
+  const showAssignSection = canAssign && !isClosed && !isClinicRequest;
 
   const isClinicClaimPending =
     staffIsClinicPse && isPendingAdminAssignment(request) && !isClosed;
@@ -181,13 +182,19 @@ export default function RequestDetailDrawer({
     staffIsPse &&
     !isClosed &&
     (staffIsPlatformPse || isAssignedToMe);
-  const showWorkflowWizard = canCoordinate;
+
+  const adminClinicWorkflowView = staffIsAdmin && !staffIsPse && isClinicRequest;
+  const showWorkflowWizard = canCoordinate || adminClinicWorkflowView;
 
   const needsAssignmentForAdmin =
-    staffIsAdmin && !staffIsPse && !request.assigned_to && !isClosed;
+    staffIsAdmin && !staffIsPse && !isClinicRequest && !request.assigned_to && !isClosed;
 
   const adminViewingAssigned =
-    staffIsAdmin && !staffIsPse && Boolean(request.assigned_to) && !isClosed;
+    staffIsAdmin &&
+    !staffIsPse &&
+    !isClinicRequest &&
+    Boolean(request.assigned_to) &&
+    !isClosed;
 
   const statusColor = requestStatusColor(request);
 

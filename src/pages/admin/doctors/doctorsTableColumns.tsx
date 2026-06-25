@@ -390,6 +390,14 @@ export function useDoctorsTableColumns({
 
       return columns;
     },
-    [canEdit, grantedDoctorIds, isAdmin, onDeleteDoctor, onRemoveFromClinic, removingLinkKey, workspaceLinksByDoctorId]
+    [
+      canEdit,
+      grantedDoctorIds,
+      isAdmin,
+      onDeleteDoctor,
+      onRemoveFromClinic,
+      removingLinkKey,
+      workspaceLinksByDoctorId
+    ]
   );
 }

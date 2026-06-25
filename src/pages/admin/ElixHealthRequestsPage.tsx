@@ -16,6 +16,7 @@ import type { Doctor } from '../../types/doctor';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import type { Patient } from '../../types/patient';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+import WorkspaceTabs from './WorkspaceTabs';
 import RequestDetailDrawer from './requests/RequestDetailDrawer';
 import RequestsAnalyticsCards from './requests/RequestsAnalyticsCards';
 import RequestsDataTable from './requests/RequestsDataTable';
@@ -221,9 +222,25 @@ export default function ElixHealthRequestsPage() {
     });
   }, [refresh, isAdmin, isPse, staff.id]);
 
+  const workspaceScopedRequests = useMemo(
+    () =>
+      applyRequestQuickFilters(
+        requests,
+        {
+          queue: 'all',
+          status: 'all',
+          workspace: filters.workspace,
+          specialty: null,
+          assignee: null
+        },
+        isAdmin
+      ),
+    [filters.workspace, isAdmin, requests]
+  );
+
   const analytics = useMemo(
-    () => computeRequestAnalytics(requests, isAdmin),
-    [requests, isAdmin]
+    () => computeRequestAnalytics(workspaceScopedRequests, isAdmin),
+    [workspaceScopedRequests, isAdmin]
   );
 
   const specialtyOptions = useMemo(
@@ -238,20 +255,50 @@ export default function ElixHealthRequestsPage() {
 
   const workspaceOptions = useMemo(() => {
     if (!isAdmin) return [] as Array<{ value: RequestWorkspaceFilter; label: string }>;
-    const clinics = new Map<string, string>();
+    const clinics = new Map<string, { name: string; count: number }>();
+    let globalCount = 0;
+
     for (const request of requests) {
-      if (!request.clinic_id) continue;
-      clinics.set(request.clinic_id, request.clinic_name?.trim() || 'Clinic workspace');
+      if (!request.clinic_id) {
+        globalCount += 1;
+        continue;
+      }
+
+      const current = clinics.get(request.clinic_id);
+      if (current) {
+        current.count += 1;
+        continue;
+      }
+
+      clinics.set(request.clinic_id, {
+        name: request.clinic_name?.trim() || 'Clinic workspace',
+        count: 1
+      });
     }
-    const clinicOptions = [...clinics.entries()]
-      .map(([id, name]) => ({ value: `clinic:${id}` as RequestWorkspaceFilter, label: name }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-    return [
-      { value: 'all' as const, label: 'All workspaces' },
-      { value: 'global' as const, label: 'Global' },
-      ...clinicOptions
-    ];
+
+    const clinicEntries = [...clinics.entries()]
+      .map(([id, clinic]) => ({ id, name: clinic.name, count: clinic.count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const clinicNameCounts = new Map<string, number>();
+    for (const entry of clinicEntries) {
+      clinicNameCounts.set(entry.name, (clinicNameCounts.get(entry.name) ?? 0) + 1);
+    }
+
+    const clinicOptions = clinicEntries.map((entry) => {
+      const duplicateName = (clinicNameCounts.get(entry.name) ?? 0) > 1;
+      const needsIdHint = duplicateName || entry.name === 'Clinic workspace';
+      const idHint = needsIdHint ? ` · ${entry.id.slice(0, 8)}` : '';
+      return {
+        value: `clinic:${entry.id}` as RequestWorkspaceFilter,
+        label: `${entry.name}${idHint} (${entry.count})`
+      };
+    });
+
+    return [{ value: 'global' as const, label: `Global (${globalCount})` }, ...clinicOptions];
   }, [isAdmin, requests]);
+
+  const workspaceTabs = workspaceOptions;
 
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -497,6 +544,19 @@ export default function ElixHealthRequestsPage() {
         </Alert>
       ) : null}
 
+      {isAdmin && workspaceTabs.length ? (
+        <WorkspaceTabs
+          tabs={workspaceTabs}
+          value={filters.workspace}
+          onChange={(value) =>
+            setFilters((current) => ({
+              ...current,
+              workspace: value as RequestWorkspaceFilter
+            }))
+          }
+        />
+      ) : null}
+
       <RequestsAnalyticsCards
         analytics={analytics}
         pendingLabel={pendingCardLabel}
@@ -522,8 +582,8 @@ export default function ElixHealthRequestsPage() {
               onSearchChange={setSearch}
               filters={filters}
               specialtyOptions={specialtyOptions}
-              workspaceOptions={workspaceOptions}
               pendingCount={analytics.pendingQueue}
+              completedCount={analytics.closed}
               totalCount={analytics.total}
               onFilterChange={setFilters}
             />

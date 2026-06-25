@@ -217,10 +217,7 @@ const assignmentFields = `
 `;
 
 const clinicScopeFields = `
-  clinic_id,
-  clinic:pse_clinics!opinion_requests_clinic_id_fkey (
-    name
-  )
+  clinic_id
 `;
 
 const requestListSelectWithResponse = `
@@ -269,6 +266,7 @@ const requestListSelectWithResponseNoAssign = `
   assigned_to,
   assigned_at,
   coordination_notes,
+  ${clinicScopeFields},
   doctors (
     id,
     full_name,
@@ -322,6 +320,7 @@ const requestListSelectWithResponseLegacy = `
   doctor_response,
   responded_at,
   ${assignmentFields},
+  ${clinicScopeFields},
   doctors (
     id,
     full_name,
@@ -348,6 +347,7 @@ const requestListSelectWithResponseNoAssignLegacy = `
   doctor_name,
   doctor_response,
   responded_at,
+  ${clinicScopeFields},
   doctors (
     id,
     full_name,
@@ -577,21 +577,11 @@ function isMissingRequestedSpecialtyError(error: { message?: string } | null) {
 function isMissingClinicScopeError(error: { message?: string; code?: string } | null) {
   if (!error) return false;
   const msg = error.message?.toLowerCase() ?? '';
-  return (
-    msg.includes('clinic_id') ||
-    msg.includes('pse_clinics') ||
-    msg.includes('opinion_requests_clinic_id_fkey') ||
-    error.code === 'PGRST200'
-  );
+  return msg.includes('clinic_id') || error.code === '42703';
 }
 
 function stripClinicScopeFromSelect(select: string) {
-  return select
-    .replace(/,?\s*clinic_id\s*/g, '')
-    .replace(
-      /,?\s*clinic:pse_clinics!opinion_requests_clinic_id_fkey\s*\(\s*name\s*\)\s*/g,
-      ''
-    );
+  return select.replace(/,?\s*clinic_id\s*/g, '');
 }
 
 function isNullableDoctorIdBlocked(error: { message?: string } | null) {
@@ -642,7 +632,6 @@ type RequestListRow = {
   doctor_selection_mode?: DoctorSelectionMode | null;
   requested_specialty?: string | null;
   clinic_id?: string | null;
-  clinic?: { name: string } | { name: string }[] | null;
   consultation_stage?: string | null;
   selected_doctor_id?: string | null;
   patient_availability?: unknown | null;
@@ -1199,7 +1188,7 @@ function mapRequestRow(
     doctor_selection_mode: row.doctor_selection_mode ?? (row.doctor_id ? 'self_select' : 'needs_recommendation'),
     requested_specialty: row.requested_specialty ?? null,
     clinic_id: row.clinic_id ?? null,
-    clinic_name: Array.isArray(row.clinic) ? row.clinic[0]?.name ?? null : row.clinic?.name ?? null,
+    clinic_name: null,
     patient_email: patient?.email ?? null,
     doctor_response: row.doctor_response,
     responded_at: row.responded_at,
@@ -1523,26 +1512,153 @@ async function enrichRequestsWithPaymentLink(requests: OpinionRequest[]): Promis
 async function enrichRequestsWithAssigneeNames(
   requests: OpinionRequest[]
 ): Promise<OpinionRequest[]> {
-  const missingIds = [
+  const assigneeIds = [...new Set(requests.map((request) => request.assigned_to).filter(Boolean) as string[])];
+
+  if (!assigneeIds.length) return requests;
+
+  const selectAttempts = ['id, full_name, clinic_id, pse_clinics(name)', 'id, full_name, clinic_id', 'id, full_name'];
+  let rows: Array<{
+    id: string;
+    full_name?: string | null;
+    clinic_id?: string | null;
+    pse_clinics?: { name?: string | null } | { name?: string | null }[] | null;
+  }> | null = null;
+
+  for (const select of selectAttempts) {
+    const { data, error } = await supabase.from('admins').select(select).in('id', assigneeIds);
+    if (!error && data?.length) {
+      rows = data as typeof rows;
+      break;
+    }
+  }
+
+  if (!rows?.length) return requests;
+
+  const assigneeById = new Map(
+    rows.map((row) => {
+      const clinicRef = row.pse_clinics;
+      const clinicName = Array.isArray(clinicRef) ? clinicRef[0]?.name ?? null : clinicRef?.name ?? null;
+      return [
+        row.id,
+        {
+          name: row.full_name?.trim() || null,
+          clinicId: row.clinic_id ?? null,
+          clinicName
+        }
+      ];
+    })
+  );
+
+  return requests.map((request) => {
+    if (!request.assigned_to) return request;
+    const assignee = assigneeById.get(request.assigned_to);
+    if (!assignee) return request;
+
+    const assignedToName = request.assigned_to_name?.trim() || assignee.name;
+    const clinicId = request.clinic_id ?? assignee.clinicId ?? null;
+    const clinicName = request.clinic_name ?? assignee.clinicName ?? (clinicId ? 'Clinic workspace' : null);
+
+    if (
+      assignedToName === request.assigned_to_name &&
+      clinicId === request.clinic_id &&
+      clinicName === request.clinic_name
+    ) {
+      return request;
+    }
+
+    return {
+      ...request,
+      assigned_to_name: assignedToName,
+      clinic_id: clinicId,
+      clinic_name: clinicName
+    };
+  });
+}
+
+async function enrichRequestsWithClinicNames(
+  requests: OpinionRequest[]
+): Promise<OpinionRequest[]> {
+  const clinicIds = [...new Set(requests.map((request) => request.clinic_id).filter(Boolean) as string[])];
+  if (!clinicIds.length) return requests;
+
+  const { data, error } = await supabase.from('pse_clinics').select('id, name').in('id', clinicIds);
+  if (error || !data?.length) return requests;
+
+  const clinicNameById = new Map(
+    data.map((row) => [row.id as string, (row.name as string | null)?.trim() || 'Clinic workspace'])
+  );
+
+  return requests.map((request) => {
+    if (!request.clinic_id) return request;
+    if (request.clinic_name?.trim()) return request;
+    const clinicName = clinicNameById.get(request.clinic_id);
+    return clinicName ? { ...request, clinic_name: clinicName } : request;
+  });
+}
+
+async function enrichRequestsWithPatientClinic(
+  requests: OpinionRequest[]
+): Promise<OpinionRequest[]> {
+  const patientAuthUserIds = [
     ...new Set(
       requests
-        .filter((request) => request.assigned_to && !request.assigned_to_name?.trim())
-        .map((request) => request.assigned_to as string)
+        .filter((request) => !request.clinic_id && request.patient_id)
+        .map((request) => request.patient_id as string)
     )
   ];
 
-  if (!missingIds.length) return requests;
+  if (!patientAuthUserIds.length) return requests;
 
-  const { data, error } = await supabase.from('admins').select('id, full_name').in('id', missingIds);
+  const selectAttempts = [
+    'auth_user_id, clinic_id, pse_clinics(name)',
+    'auth_user_id, clinic_id'
+  ];
 
-  if (error || !data?.length) return requests;
+  let rows: Array<{
+    auth_user_id: string;
+    clinic_id?: string | null;
+    pse_clinics?: { name?: string | null } | { name?: string | null }[] | null;
+  }> | null = null;
 
-  const nameById = new Map(data.map((row) => [row.id, row.full_name as string]));
+  for (const select of selectAttempts) {
+    const { data, error } = await supabase
+      .from('patients')
+      .select(select)
+      .in('auth_user_id', patientAuthUserIds);
+
+    if (!error && data?.length) {
+      rows = data as typeof rows;
+      break;
+    }
+  }
+
+  if (!rows?.length) return requests;
+
+  const clinicByPatientAuthId = new Map(
+    rows.map((row) => {
+      const clinicRef = row.pse_clinics;
+      const clinicName = Array.isArray(clinicRef)
+        ? clinicRef[0]?.name ?? null
+        : clinicRef?.name ?? null;
+      return [
+        row.auth_user_id,
+        {
+          clinicId: row.clinic_id ?? null,
+          clinicName: clinicName?.trim() || null
+        }
+      ];
+    })
+  );
 
   return requests.map((request) => {
-    if (!request.assigned_to || request.assigned_to_name?.trim()) return request;
-    const name = nameById.get(request.assigned_to);
-    return name ? { ...request, assigned_to_name: name } : request;
+    if (request.clinic_id || !request.patient_id) return request;
+    const resolved = clinicByPatientAuthId.get(request.patient_id);
+    if (!resolved?.clinicId) return request;
+    return {
+      ...request,
+      clinic_id: resolved.clinicId,
+      clinic_name: request.clinic_name ?? resolved.clinicName ?? 'Clinic workspace'
+    };
   });
 }
 
@@ -2068,7 +2184,9 @@ export async function fetchOpinionRequestsForStaff(): Promise<FetchOpinionReques
     const mapped = (rows ?? []).map((row) => mapRequestRow(row, patientMap));
     const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
     const withRecords = await attachRequestRecords(withWorkflow);
-    const data = await enrichRequestsWithAssigneeNames(withRecords);
+    const withPatientClinic = await enrichRequestsWithPatientClinic(withRecords);
+    const withAssignees = await enrichRequestsWithAssigneeNames(withPatientClinic);
+    const data = await enrichRequestsWithClinicNames(withAssignees);
     return {
       data,
       error: null,
