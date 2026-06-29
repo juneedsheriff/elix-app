@@ -390,7 +390,8 @@ const ELIX_ID_PATTERN = /^elix-[a-z]{2}[0-9]{4}$/;
 async function getPatientElixId(
   userId: string,
   authHeader: string,
-  env: Env
+  env: Env,
+  useServiceRole = false
 ): Promise<string | null> {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
 
@@ -398,11 +399,7 @@ async function getPatientElixId(
   const url = `${base}/rest/v1/patients?auth_user_id=eq.${encodeURIComponent(userId)}&select=elix_id&limit=1`;
 
   const res = await fetch(url, {
-    headers: {
-      Authorization: authHeader,
-      apikey: env.SUPABASE_ANON_KEY,
-      Accept: 'application/json'
-    }
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
   });
 
   if (!res.ok) return null;
@@ -411,6 +408,180 @@ async function getPatientElixId(
   const elixId = rows[0]?.elix_id?.trim();
   if (!elixId || !ELIX_ID_PATTERN.test(elixId)) return null;
   return elixId;
+}
+
+type PatientVaultContext = {
+  patientAuthUserId: string;
+  patientRowId: string | null;
+  folder: string;
+};
+
+async function getPatientVaultContextForRequest(
+  requestId: string,
+  authHeader: string,
+  env: Env
+): Promise<PatientVaultContext | null> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
+
+  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const requestUrl = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=patient_id&limit=1`;
+  const requestRes = await fetch(requestUrl, {
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
+  });
+  if (!requestRes.ok) return null;
+
+  const requestRows = (await requestRes.json()) as { patient_id?: string | null }[];
+  const patientAuthUserId = requestRows[0]?.patient_id?.trim();
+  if (!patientAuthUserId) return null;
+
+  const patientUrl = `${base}/rest/v1/patients?auth_user_id=eq.${encodeURIComponent(patientAuthUserId)}&select=id,elix_id&limit=1`;
+  const patientRes = await fetch(patientUrl, {
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
+  });
+  if (!patientRes.ok) return null;
+
+  const patientRows = (await patientRes.json()) as { id?: string; elix_id?: string }[];
+  const patientRow = patientRows[0];
+  const elixId = patientRow?.elix_id?.trim();
+  const folder =
+    elixId && ELIX_ID_PATTERN.test(elixId) ? elixId : patientAuthUserId;
+
+  return {
+    patientAuthUserId,
+    patientRowId: patientRow?.id ?? null,
+    folder
+  };
+}
+
+const CONSULTATION_ORDER_CATEGORIES = new Set(['prescriptions', 'lab_results']);
+
+function consultationOrderStoragePrefix(
+  folder: string,
+  requestId: string,
+  recordCategory: string
+): string {
+  return `${folder}/consultation-orders/${requestId.trim()}/${recordCategory}/`;
+}
+
+async function canDoctorAccessRequest(
+  userId: string,
+  authHeader: string,
+  requestId: string,
+  env: Env
+): Promise<boolean> {
+  const doctorId = await getDoctorIdForAuthUser(userId, authHeader, env);
+  if (!doctorId) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&doctor_id=eq.${encodeURIComponent(doctorId)}&select=id&limit=1`;
+  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+  const res = await fetch(url, {
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
+  });
+  if (!res.ok) return false;
+
+  const rows = (await res.json()) as unknown[];
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function canDoctorUploadConsultationOrderPath(
+  userId: string,
+  authHeader: string,
+  storagePath: string,
+  env: Env
+): Promise<boolean> {
+  const match = storagePath.match(/^([^/]+)\/consultation-orders\/([^/]+)\/(prescriptions|lab_results)\//);
+  if (!match) return false;
+
+  const folder = match[1];
+  const requestId = match[2];
+  const recordCategory = match[3];
+  if (!CONSULTATION_ORDER_CATEGORIES.has(recordCategory)) return false;
+
+  if (!(await canDoctorAccessRequest(userId, authHeader, requestId, env))) return false;
+
+  const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+  if (!patientContext || patientContext.folder !== folder) return false;
+
+  return true;
+}
+
+async function removePreviousConsultationOrderRecords(
+  folder: string,
+  requestId: string,
+  recordCategory: string,
+  env: Env,
+  authHeader: string
+): Promise<void> {
+  if (!env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_URL) return;
+
+  const prefix = consultationOrderStoragePrefix(folder, requestId, recordCategory);
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const queryUrl = `${base}/rest/v1/uploaded_files?storage_path=like.${encodeURIComponent(prefix + '%')}&select=id,storage_path`;
+  const res = await fetch(queryUrl, {
+    headers: supabaseRestHeaders(authHeader, env, true)
+  });
+  if (!res.ok) return;
+
+  const rows = (await res.json()) as { id?: string; storage_path?: string }[];
+  if (!Array.isArray(rows) || rows.length === 0) return;
+
+  for (const row of rows) {
+    if (row.storage_path?.trim()) {
+      await env.MEDICAL_RECORDS.delete(row.storage_path.trim());
+    }
+  }
+
+  const ids = rows.map((row) => row.id).filter(Boolean);
+  if (ids.length === 0) return;
+
+  const deleteUrl = `${base}/rest/v1/uploaded_files?id=in.(${ids.map((id) => `"${id}"`).join(',')})`;
+  await fetch(deleteUrl, {
+    method: 'DELETE',
+    headers: supabaseRestHeaders(authHeader, env, true)
+  });
+}
+
+async function insertConsultationOrderVaultRecord(
+  env: Env,
+  authHeader: string,
+  input: {
+    patientAuthUserId: string;
+    patientRowId: string | null;
+    fileName: string;
+    mimeType: string;
+    fileSizeBytes: number;
+    storagePath: string;
+    recordCategory: string;
+    summary: string;
+  }
+): Promise<boolean> {
+  if (!env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_URL) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const res = await fetch(`${base}/rest/v1/uploaded_files`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(authHeader, env, true),
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify({
+      user_id: input.patientAuthUserId,
+      patient_id: input.patientRowId,
+      file_name: input.fileName,
+      mime_type: input.mimeType,
+      file_size_bytes: input.fileSizeBytes,
+      storage_bucket: env.R2_BUCKET_NAME || 'medical-records',
+      storage_path: input.storagePath,
+      summary: input.summary,
+      record_category: input.recordCategory,
+      external_url: null
+    })
+  });
+
+  return res.ok;
 }
 
 async function getAllowedPathPrefixes(
@@ -587,6 +758,142 @@ export default {
         );
       }
 
+      if (pathname === '/v1/consultation-order/upload-url' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          contentLength?: number;
+          fileName?: string;
+          recordCategory?: string;
+        };
+
+        if (!body.requestId?.trim()) {
+          return jsonResponse({ error: 'requestId is required' }, 400, origin, env);
+        }
+
+        const recordCategory = body.recordCategory?.trim() ?? '';
+        if (!CONSULTATION_ORDER_CATEGORIES.has(recordCategory)) {
+          return jsonResponse(
+            { error: 'recordCategory must be prescriptions or lab_results' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const contentLength = Number(body.contentLength ?? 0);
+        if (!contentLength || contentLength > 10 * 1024 * 1024) {
+          return jsonResponse({ error: 'File must be between 1 byte and 10 MB' }, 400, origin, env);
+        }
+
+        const rawFileName = body.fileName?.trim() || 'consultation-order.pdf';
+        if (!rawFileName.toLowerCase().endsWith('.pdf')) {
+          return jsonResponse({ error: 'Consultation order files must be PDF.' }, 400, origin, env);
+        }
+
+        const requestId = body.requestId.trim();
+        if (!(await canDoctorAccessRequest(user.id, authHeader, requestId, env))) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+        if (!patientContext) {
+          return jsonResponse({ error: 'Patient vault folder could not be resolved.' }, 400, origin, env);
+        }
+
+        await removePreviousConsultationOrderRecords(
+          patientContext.folder,
+          requestId,
+          recordCategory,
+          env,
+          authHeader
+        );
+
+        const storagePath = storagePathFor(
+          `${patientContext.folder}/consultation-orders/${requestId}/${recordCategory}`,
+          rawFileName
+        );
+
+        return jsonResponse(
+          {
+            uploadUrl: `${workerOrigin(request)}/v1/records/object`,
+            storagePath,
+            storageBucket: env.R2_BUCKET_NAME || 'medical-records'
+          },
+          200,
+          origin,
+          env
+        );
+      }
+
+      if (pathname === '/v1/consultation-order/register' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          storagePath?: string;
+          fileName?: string;
+          mimeType?: string;
+          fileSizeBytes?: number;
+          recordCategory?: string;
+          summary?: string;
+        };
+
+        if (!body.requestId?.trim() || !body.storagePath?.trim() || !body.fileName?.trim()) {
+          return jsonResponse(
+            { error: 'requestId, storagePath, and fileName are required' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const recordCategory = body.recordCategory?.trim() ?? '';
+        if (!CONSULTATION_ORDER_CATEGORIES.has(recordCategory)) {
+          return jsonResponse(
+            { error: 'recordCategory must be prescriptions or lab_results' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const requestId = body.requestId.trim();
+        const storagePath = body.storagePath.trim();
+
+        if (!(await canDoctorUploadConsultationOrderPath(user.id, authHeader, storagePath, env))) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return jsonResponse(
+            { error: 'Service role is not configured for vault record registration.' },
+            500,
+            origin,
+            env
+          );
+        }
+
+        const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+        if (!patientContext) {
+          return jsonResponse({ error: 'Patient vault folder could not be resolved.' }, 400, origin, env);
+        }
+
+        const inserted = await insertConsultationOrderVaultRecord(env, authHeader, {
+          patientAuthUserId: patientContext.patientAuthUserId,
+          patientRowId: patientContext.patientRowId,
+          fileName: body.fileName.trim(),
+          mimeType: body.mimeType?.trim() || 'application/pdf',
+          fileSizeBytes: Number(body.fileSizeBytes ?? 0),
+          storagePath,
+          recordCategory,
+          summary: body.summary?.trim() || recordCategory
+        });
+
+        if (!inserted) {
+          return jsonResponse({ error: 'Could not register vault record.' }, 500, origin, env);
+        }
+
+        return jsonResponse({ ok: true }, 200, origin, env);
+      }
+
       if (pathname === '/v1/records/upload-url' && request.method === 'POST') {
         const body = (await request.json()) as {
           fileName?: string;
@@ -654,6 +961,16 @@ export default {
               user.id,
               authHeader,
               requestId,
+              storagePath,
+              env
+            );
+            if (!canUpload) {
+              throw new Error('Forbidden');
+            }
+          } else if (storagePath.includes('/consultation-orders/')) {
+            const canUpload = await canDoctorUploadConsultationOrderPath(
+              user.id,
+              authHeader,
               storagePath,
               env
             );

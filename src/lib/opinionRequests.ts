@@ -28,6 +28,7 @@ import {
   consultationSummaryPdfMetaFromRequest,
   generateConsultationSummaryPdfBlob
 } from './consultationSummaryPdf';
+import { syncConsultationOrdersToPatientVault } from './consultationVaultRecords';
 import {
   createConsultationInvoiceUploadUrl,
   createConsultationSummaryUploadUrl,
@@ -3541,6 +3542,21 @@ export async function pseReleaseToDoctor(requestId: string) {
   return { data, error: null };
 }
 
+type ConsultationSummaryPatientRow = ConsultationSummary & {
+  doctor?: { full_name: string | null; specialty: string | null } | null;
+  request?: { scheduled_at: string | null; doctor_name: string | null } | null;
+};
+
+function mapPatientConsultationSummary(row: ConsultationSummaryPatientRow): ConsultationSummary {
+  const { doctor, request, ...summary } = row;
+  return {
+    ...summary,
+    doctor_name: doctor?.full_name ?? request?.doctor_name ?? null,
+    doctor_specialty: doctor?.specialty ?? null,
+    scheduled_at: request?.scheduled_at ?? null
+  };
+}
+
 export async function fetchPatientConsultationSummaries(patientAuthUserId: string) {
   const { data, error } = await supabase
     .from('consultation_summaries')
@@ -3560,15 +3576,17 @@ export async function fetchPatientConsultationSummaries(patientAuthUserId: strin
       prescription,
       pdf_storage_path,
       created_at,
-      updated_at
+      updated_at,
+      doctor:doctors(full_name, specialty),
+      request:opinion_requests(scheduled_at, doctor_name)
     `
     )
     .eq('patient_auth_user_id', patientAuthUserId)
     .order('created_at', { ascending: false })
-    .returns<ConsultationSummary[]>();
+    .returns<ConsultationSummaryPatientRow[]>();
 
   if (error) return { data: null, error };
-  return { data: data ?? [], error: null };
+  return { data: (data ?? []).map(mapPatientConsultationSummary), error: null };
 }
 
 const CONSULTATION_SUMMARY_SELECT = `
@@ -3728,6 +3746,21 @@ export async function saveDoctorConsultation(
       error: { message: normalizeStorageAuthError(finalize.error.message) }
     };
   }
+
+  const vaultSync = await syncConsultationOrdersToPatientVault({
+    request,
+    doctor,
+    prescription: input.prescription,
+    labsDiagnostics: input.labs_diagnostics,
+    issuedAt: new Date(now)
+  });
+  if (vaultSync.error) {
+    return {
+      data: null,
+      error: { message: normalizeStorageAuthError(vaultSync.error.message) }
+    };
+  }
+
   return { data, error: null };
 }
 

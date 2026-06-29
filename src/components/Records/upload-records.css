@@ -759,6 +759,24 @@
   line-height: 1.4;
 }
 
+.urv-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.urv-summary-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.38rem 0.7rem;
+  font-size: 0.76rem;
+  border-radius: 10px;
+}
+
 [data-theme='dark'] .urv-vault-banner {
   background: linear-gradient(
     145deg,

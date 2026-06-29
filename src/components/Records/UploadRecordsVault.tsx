@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
   CloudUpload,
+  Download,
   FolderOpen,
   Link2,
   Loader2,
@@ -23,6 +24,10 @@ import {
 } from 'lucide-react';
 import RecordFileTypeIcon, { recordFileIconType } from './RecordFileTypeIcon';
 import { fetchPatientConsultationSummaries } from '../../lib/opinionRequests';
+import {
+  downloadLabOrderPdf,
+  downloadPrescriptionOrderPdf
+} from '../../lib/consultationOrdersPdf';
 import {
   getPendingOpinionRequest,
   navigateToResumePendingOpinionRequest
@@ -115,6 +120,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   const [filterMenuStyle, setFilterMenuStyle] = useState<CSSProperties>({});
   const [recordPendingDelete, setRecordPendingDelete] = useState<MedicalRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState(false);
+  const [downloadingOrderKey, setDownloadingOrderKey] = useState<string | null>(null);
 
   const canUpload = Boolean(userId && configured && isR2StorageConfigured());
   const showTabs = !loading && records.length > 0;
@@ -412,6 +418,37 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
     if (deletingRecord) return;
     setRecordPendingDelete(null);
   };
+
+  const downloadOrder = useCallback(
+    async (summary: ConsultationSummary, type: 'prescription' | 'lab') => {
+      const text =
+        type === 'prescription'
+          ? summary.prescription?.trim() ?? ''
+          : summary.labs_diagnostics?.trim() ?? '';
+      if (!text) return;
+
+      const key = `${summary.id}:${type}`;
+      setDownloadingOrderKey(key);
+      try {
+        const meta = {
+          patientId: summary.patient_auth_user_id,
+          requestId: summary.request_id,
+          doctorName: summary.doctor_name,
+          doctorSpecialty: summary.doctor_specialty,
+          scheduledAt: summary.scheduled_at,
+          issuedAt: new Date(summary.updated_at || summary.created_at)
+        };
+        if (type === 'prescription') {
+          await downloadPrescriptionOrderPdf(text, meta);
+        } else {
+          await downloadLabOrderPdf(text, meta);
+        }
+      } finally {
+        setDownloadingOrderKey(null);
+      }
+    },
+    []
+  );
 
   const confirmDelete = async () => {
     if (!recordPendingDelete || deletingRecord) return;
@@ -879,17 +916,57 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
               Structured notes and prescriptions from completed consultations
             </p>
             <ul className='urv-summary-list'>
-              {summaries.map((summary) => (
-                <li key={summary.id} className='urv-summary-item'>
-                  <strong>{summary.chief_complaint ?? 'Consultation'}</strong>
-                  <span>
-                    {summary.prescription
-                      ? 'Prescription: ' + summary.prescription
-                      : summary.assessment_plan ?? ''}
-                  </span>
-                  <span>{new Date(summary.created_at).toLocaleString()}</span>
-                </li>
-              ))}
+              {summaries.map((summary) => {
+                const hasPrescription = Boolean(summary.prescription?.trim());
+                const hasLabOrder = Boolean(summary.labs_diagnostics?.trim());
+                const consultationDate = summary.scheduled_at ?? summary.created_at;
+                const doctorLabel = summary.doctor_name?.trim() || 'Consultation';
+                return (
+                  <li key={summary.id} className='urv-summary-item'>
+                    <strong>{doctorLabel}</strong>
+                    <span>
+                      {hasPrescription && hasLabOrder
+                        ? 'Prescription and lab order'
+                        : hasPrescription
+                          ? 'Prescription'
+                          : hasLabOrder
+                            ? 'Lab order'
+                            : summary.assessment_plan ?? summary.chief_complaint ?? ''}
+                    </span>
+                    <span>{new Date(consultationDate).toLocaleDateString()}</span>
+                    {hasPrescription || hasLabOrder ? (
+                      <div className='urv-summary-actions'>
+                        {hasPrescription ? (
+                          <button
+                            type='button'
+                            className='secondary-btn urv-summary-action-btn'
+                            onClick={() => void downloadOrder(summary, 'prescription')}
+                            disabled={downloadingOrderKey === `${summary.id}:prescription`}
+                          >
+                            <Download size={14} aria-hidden />
+                            {downloadingOrderKey === `${summary.id}:prescription`
+                              ? 'Preparing…'
+                              : 'Prescription'}
+                          </button>
+                        ) : null}
+                        {hasLabOrder ? (
+                          <button
+                            type='button'
+                            className='secondary-btn urv-summary-action-btn'
+                            onClick={() => void downloadOrder(summary, 'lab')}
+                            disabled={downloadingOrderKey === `${summary.id}:lab`}
+                          >
+                            <Download size={14} aria-hidden />
+                            {downloadingOrderKey === `${summary.id}:lab`
+                              ? 'Preparing…'
+                              : 'Lab Order'}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}

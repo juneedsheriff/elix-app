@@ -44,6 +44,10 @@ export type ConsultationSummary = {
   request_id: string;
   doctor_id: string;
   patient_auth_user_id: string | null;
+  /** Enriched from doctors / opinion_requests when fetched for patient records. */
+  doctor_name?: string | null;
+  doctor_specialty?: string | null;
+  scheduled_at?: string | null;
   chief_complaint: string | null;
   history_present_illness: string | null;
   vital_signs: string | null;

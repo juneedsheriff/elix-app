@@ -18,6 +18,27 @@ function safeFileName(value: string): string {
   return value.replace(/[^\w.-]+/g, '_').slice(0, 40);
 }
 
+function formatDateForFilename(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function buildOrderDownloadFilename(
+  type: 'prescription' | 'lab',
+  meta: ConsultationOrderPdfMeta
+): string {
+  const prefix = type === 'prescription' ? 'Prescription' : 'Lab-Order';
+  const doctorPart = safeFileName(meta.doctorName?.trim() || 'Doctor');
+  const issuedAt =
+    meta.issuedAt ??
+    (meta.scheduledAt ? new Date(meta.scheduledAt) : null) ??
+    new Date();
+  const datePart = formatDateForFilename(issuedAt);
+  return `${prefix}-${doctorPart}-${datePart}.pdf`;
+}
+
 async function buildOrderPdf(
   title: 'PRESCRIPTION' | 'LAB ORDER',
   bodyText: string,
@@ -152,22 +173,20 @@ export async function downloadPrescriptionOrderPdf(
   meta: ConsultationOrderPdfMeta
 ) {
   const blob = await generatePrescriptionOrderPdfBlob(prescriptionText, meta);
-  const baseName = safeFileName(meta.patientName ?? 'patient');
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `prescription-${baseName}.pdf`;
+  anchor.download = buildOrderDownloadFilename('prescription', meta);
   anchor.click();
   URL.revokeObjectURL(url);
 }
 
 export async function downloadLabOrderPdf(labOrderText: string, meta: ConsultationOrderPdfMeta) {
   const blob = await generateLabOrderPdfBlob(labOrderText, meta);
-  const baseName = safeFileName(meta.patientName ?? 'patient');
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `lab-order-${baseName}.pdf`;
+  anchor.download = buildOrderDownloadFilename('lab', meta);
   anchor.click();
   URL.revokeObjectURL(url);
 }

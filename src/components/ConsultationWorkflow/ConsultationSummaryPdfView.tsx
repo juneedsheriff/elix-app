@@ -90,7 +90,8 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
     doctorName: request.doctor_name,
     doctorSpecialty: request.doctor_specialty,
     scheduledAt: request.scheduled_at,
-    requestId: request.id
+    requestId: request.id,
+    issuedAt: new Date(summary.updated_at || summary.created_at)
   };
 
   const handleDownload = async () => {

@@ -144,6 +144,41 @@ export async function createConsultationSummaryUploadUrl(
   );
 }
 
+export async function createConsultationOrderUploadUrl(
+  requestId: string,
+  contentLength: number,
+  fileName: string,
+  recordCategory: 'prescriptions' | 'lab_results'
+) {
+  return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
+    '/v1/consultation-order/upload-url',
+    {
+      method: 'POST',
+      json: {
+        requestId,
+        contentLength,
+        fileName,
+        recordCategory
+      }
+    }
+  );
+}
+
+export async function registerConsultationOrderVaultRecord(input: {
+  requestId: string;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  recordCategory: 'prescriptions' | 'lab_results';
+  summary: string;
+}) {
+  return r2ApiRequest<{ ok: boolean }>('/v1/consultation-order/register', {
+    method: 'POST',
+    json: input
+  });
+}
+
 export async function downloadMedicalRecordBlob(
   storagePath: string,
   options?: MedicalRecordDownloadOptions
