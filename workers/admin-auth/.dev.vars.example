@@ -2,3 +2,6 @@ SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ALLOWED_ORIGIN=http://localhost:3000
 ALLOW_EMAILLESS_PATIENT_SIGNUP=true
+RESEND_API_KEY=re_...
+SMTP_ADMIN_EMAIL=support@app.elixclinix.com
+SMTP_SENDER_NAME=ElixClinix

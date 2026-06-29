@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import MetricCard from '../../components/ui/MetricCard';
 import SectionCard from '../../components/ui/SectionCard';
+import { formatDoctorWelcomeName } from '../../lib/doctors';
 import { fetchDoctorOpinionRequests, isAwaitingDoctorReply } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
@@ -61,9 +62,17 @@ export default function DoctorDashboardPage({ doctorProfile, dbConnected, onNavi
   const awaitingResponse = pending;
   const recent = requests.slice(0, 5);
   const rating = doctorProfile?.rating?.toFixed(1) ?? '—';
+  const welcomeName = formatDoctorWelcomeName(doctorProfile?.full_name);
 
   return (
     <div className='screen-grid'>
+      <header className='doctor-dashboard-welcome' aria-label='Welcome'>
+        <h1 className='doctor-dashboard-welcome__title'>Welcome, {welcomeName}!</h1>
+        {doctorProfile?.specialty ? (
+          <p className='doctor-dashboard-welcome__subtitle muted'>{doctorProfile.specialty}</p>
+        ) : null}
+      </header>
+
       <SectionCard title='Doctor operating console' subtitle='Prioritize urgent cases and maximize quality outcomes'>
         <div className='metrics-grid'>
           <MetricCard

@@ -6,6 +6,9 @@ type Env = {
   SUPABASE_SERVICE_ROLE_KEY: string;
   ALLOWED_ORIGIN?: string;
   ALLOW_EMAILLESS_PATIENT_SIGNUP?: string;
+  RESEND_API_KEY?: string;
+  SMTP_ADMIN_EMAIL?: string;
+  SMTP_SENDER_NAME?: string;
 };
 
 type Role = 'doctor' | 'patient';
@@ -17,7 +20,23 @@ type ManageBody = {
   password?: string;
 };
 
+type EnableLoginOptions = {
+  forcePasswordChange?: boolean;
+};
+
 const BAN_DURATION = '876000h';
+
+const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+function generateTemporaryPassword(length = 8): string {
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  let output = '';
+  for (let i = 0; i < length; i += 1) {
+    output += TEMP_PASSWORD_ALPHABET[bytes[i] % TEMP_PASSWORD_ALPHABET.length];
+  }
+  return output;
+}
 
 function corsHeaders(origin: string | null, env: Env): HeadersInit {
   const allowed = env.ALLOWED_ORIGIN?.trim();
@@ -234,7 +253,7 @@ async function resolveProfileAuthUserId(
   return { authUserId, fullName: null };
 }
 
-function resolveStaffRole(value: unknown): CreateStaffBody['role'] {
+function resolveStaffRole(value: unknown): NonNullable<CreateStaffBody['role']> {
   if (value === 'administrator') return 'administrator';
   if (value === 'patient_service_executive_clinic') return 'patient_service_executive_clinic';
   return 'patient_service_executive';
@@ -285,7 +304,7 @@ async function createStaffMember(body: CreateStaffBody, env: Env) {
   const { data: existingRow } = await admin.from('admins').select('id, role, auth_user_id').ilike('email', email).maybeSingle();
 
   if (existingRow?.role) {
-    const conflict = staffRoleConflictMessage(existingRow.role, role);
+    const conflict = staffRoleConflictMessage(String(existingRow.role), role);
     if (conflict) return { error: conflict };
   }
 
@@ -478,7 +497,10 @@ async function manageStaffMember(
         password?: string;
         user_metadata: { full_name: string; role: string };
       } = {
-        user_metadata: { full_name: fullName, role: staffAuthMetadataRole(staff.role as CreateStaffBody['role']) }
+        user_metadata: {
+          full_name: fullName,
+          role: staffAuthMetadataRole(staff.role as NonNullable<CreateStaffBody['role']>)
+        }
       };
       if (email !== staff.email.toLowerCase()) authPatch.email = email;
       if (password) authPatch.password = password;
@@ -547,7 +569,7 @@ async function loadProfile(role: Role, profileId: string, env: Env): Promise<Pro
   const { data, error } = await serviceClient(env).from(table).select(cols).eq('id', profileId).maybeSingle();
 
   if (error || !data) return null;
-  return data as ProfileRow;
+  return data as unknown as ProfileRow;
 }
 
 async function findUserByEmail(email: string, admin: SupabaseClient): Promise<string | null> {
@@ -557,7 +579,58 @@ async function findUserByEmail(email: string, admin: SupabaseClient): Promise<st
   return match?.id ?? null;
 }
 
-async function enableLogin(profile: ProfileRow, role: Role, password: string, env: Env): Promise<{ error?: string }> {
+async function sendTemporaryPasswordEmail(
+  toEmail: string,
+  patientName: string,
+  temporaryPassword: string,
+  env: Env
+): Promise<{ error?: string }> {
+  const apiKey = env.RESEND_API_KEY?.trim();
+  const senderEmail = env.SMTP_ADMIN_EMAIL?.trim();
+  const senderName = env.SMTP_SENDER_NAME?.trim() || 'ElixClinix';
+  if (!apiKey || !senderEmail) {
+    return {
+      error:
+        'Login enabled, but welcome email was not sent (missing RESEND_API_KEY or SMTP_ADMIN_EMAIL in admin-auth worker).'
+    };
+  }
+
+  const appUrl = env.ALLOWED_ORIGIN?.trim() || 'https://app.elixclinix.com';
+  const safeName = patientName.trim() || 'Patient';
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: `${senderName} <${senderEmail}>`,
+      to: [toEmail],
+      subject: 'Your ElixClinix login is ready',
+      html: `
+        <p>Hi ${safeName},</p>
+        <p>Your clinic created your ElixClinix account.</p>
+        <p><strong>Temporary password:</strong> ${temporaryPassword}</p>
+        <p>Sign in at <a href="${appUrl}">${appUrl}</a>. On first login, you will be asked to change your password.</p>
+      `
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    return { error: `Login enabled, but email failed to send: ${message || `HTTP ${response.status}`}` };
+  }
+
+  return {};
+}
+
+async function enableLogin(
+  profile: ProfileRow,
+  role: Role,
+  password: string,
+  env: Env,
+  options?: EnableLoginOptions
+): Promise<{ error?: string }> {
   const email = profile.email?.trim().toLowerCase();
   if (!email) return { error: 'Profile email is required to enable login.' };
   if (password.length < 6) return { error: 'Password must be at least 6 characters.' };
@@ -565,6 +638,7 @@ async function enableLogin(profile: ProfileRow, role: Role, password: string, en
   const table = role === 'doctor' ? 'doctors' : 'patients';
   const admin = serviceClient(env);
   let authUserId = profile.auth_user_id;
+  const forcePasswordChange = options?.forcePasswordChange ?? false;
 
   if (!authUserId) {
     const { data, error } = await admin.auth.admin.createUser({
@@ -574,7 +648,9 @@ async function enableLogin(profile: ProfileRow, role: Role, password: string, en
       user_metadata: {
         role,
         [`${role}_id`]: profile.id,
-        full_name: profile.full_name
+        full_name: profile.full_name,
+        force_password_change: forcePasswordChange,
+        temporary_password: forcePasswordChange
       }
     });
 
@@ -592,9 +668,24 @@ async function enableLogin(profile: ProfileRow, role: Role, password: string, en
 
   if (!authUserId) return { error: 'Could not resolve auth user id.' };
 
+  const { data: existingAuth, error: existingAuthError } = await admin.auth.admin.getUserById(authUserId);
+  if (existingAuthError) return { error: existingAuthError.message };
+  const existingMetadata =
+    existingAuth.user?.user_metadata && typeof existingAuth.user.user_metadata === 'object'
+      ? (existingAuth.user.user_metadata as Record<string, unknown>)
+      : {};
+
   const { error: updateError } = await admin.auth.admin.updateUserById(authUserId, {
     password,
-    ban_duration: 'none'
+    ban_duration: 'none',
+    user_metadata: {
+      ...existingMetadata,
+      role,
+      [`${role}_id`]: profile.id,
+      full_name: profile.full_name,
+      force_password_change: forcePasswordChange,
+      temporary_password: forcePasswordChange
+    }
   });
   if (updateError) return { error: updateError.message };
 
@@ -630,7 +721,22 @@ async function setPassword(profile: ProfileRow, password: string, env: Env): Pro
   if (!profile.auth_user_id) return { error: 'No auth account linked. Enable login first.' };
   if (password.length < 6) return { error: 'Password must be at least 6 characters.' };
 
-  const { error } = await serviceClient(env).auth.admin.updateUserById(profile.auth_user_id, { password });
+  const admin = serviceClient(env);
+  const { data: existingAuth, error: existingAuthError } = await admin.auth.admin.getUserById(profile.auth_user_id);
+  if (existingAuthError) return { error: existingAuthError.message };
+  const existingMetadata =
+    existingAuth.user?.user_metadata && typeof existingAuth.user.user_metadata === 'object'
+      ? (existingAuth.user.user_metadata as Record<string, unknown>)
+      : {};
+
+  const { error } = await admin.auth.admin.updateUserById(profile.auth_user_id, {
+    password,
+    user_metadata: {
+      ...existingMetadata,
+      force_password_change: false,
+      temporary_password: false
+    }
+  });
   if (error) return { error: error.message };
   return {};
 }
@@ -649,6 +755,31 @@ async function getAccountStatus(role: Role, profileId: string, env: Env) {
     hasAuth,
     loginEnabled: enabled,
     loginDisabled: profile.login_disabled
+  };
+}
+
+async function provisionPatientLogin(profileId: string, env: Env) {
+  const profile = await loadProfile('patient', profileId, env);
+  if (!profile) return { error: 'Patient profile not found.' };
+
+  const temporaryPassword = generateTemporaryPassword(8);
+  const enable = await enableLogin(profile, 'patient', temporaryPassword, env, {
+    forcePasswordChange: true
+  });
+  if (enable.error) return { error: enable.error };
+
+  const emailResult = await sendTemporaryPasswordEmail(
+    profile.email.trim().toLowerCase(),
+    profile.full_name,
+    temporaryPassword,
+    env
+  );
+
+  const status = await getAccountStatus('patient', profile.id, env);
+  return {
+    status,
+    emailSent: !emailResult.error,
+    warning: emailResult.error
   };
 }
 
@@ -803,6 +934,32 @@ export default {
     const adminId = await verifyAdmin(request, env);
     if (!adminId) {
       return json({ error: 'Unauthorized. Sign in as an active admin.' }, 401, origin, env);
+    }
+
+    if (request.method === 'POST' && pathname === '/patient/provision-login') {
+      let body: { profileId?: string };
+      try {
+        body = (await request.json()) as { profileId?: string };
+      } catch {
+        return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+      }
+
+      const profileId = body.profileId?.trim();
+      if (!profileId) {
+        return json({ error: 'profileId is required.' }, 400, origin, env);
+      }
+
+      const result = await provisionPatientLogin(profileId, env);
+      if (result.error) {
+        return json({ error: result.error }, 400, origin, env);
+      }
+
+      return json(
+        { ok: true, status: result.status ?? null, emailSent: result.emailSent, warning: result.warning },
+        200,
+        origin,
+        env
+      );
     }
 
     if (request.method === 'GET' && pathname === '/status') {

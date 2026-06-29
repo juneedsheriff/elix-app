@@ -71,7 +71,7 @@ export default function ElixHealthOverviewPage() {
   if (error) {
     const hint = error.toLowerCase().includes('infinite recursion')
       ? ' Run npm run db:apply-doctors-rls-fix (migration 057).'
-      : ' Check that required Supabase migrations are applied.';
+      : ' Check that required ElixClinix database updates are applied.';
     return (
       <p className='auth-error' role='alert'>
         {error}.{hint}
@@ -90,7 +90,7 @@ export default function ElixHealthOverviewPage() {
         <MetricCard
           title='Linked doctors'
           value={String(linkedDoctors)}
-          subtitle='With Supabase Auth login'
+          subtitle='With ElixClinix login'
           icon={KeyRound}
         />
         <MetricCard

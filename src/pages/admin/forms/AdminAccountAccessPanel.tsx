@@ -4,6 +4,7 @@ import {
   fetchAccountAuthStatus,
   loginStatusLabel,
   manageAccountAuth,
+  provisionPatientLogin,
   type AccountAuthStatus,
   type AccountRole
 } from '../../../lib/adminAuth';
@@ -107,11 +108,43 @@ export default function AdminAccountAccessPanel({
     }
   };
 
+  const resendTemporaryPassword = async () => {
+    if (role !== 'patient') return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { data, error: resendError } = await provisionPatientLogin(profileId);
+      if (resendError || !data) {
+        setError(resendError ?? 'Could not resend temporary password email.');
+        return;
+      }
+      if (data.status) {
+        setStatus(data.status);
+      } else {
+        await load();
+      }
+      setPassword('');
+      setConfirmPassword('');
+      setMessage(
+        data.emailSent
+          ? 'Temporary password regenerated and emailed to the patient.'
+          : (data.warning ??
+            'Temporary password regenerated, but email was not sent. Check worker email configuration.')
+      );
+      onAuthChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not resend temporary password email.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className='elixhealth-auth-panel'>
       <h3 className='elixhealth-form-section-title'>Login access</h3>
       <p className='muted'>
-        Manage Supabase Auth for <strong>{profileEmail}</strong>. Disabled users cannot sign in until re-enabled.
+        Manage ElixClinix login for <strong>{profileEmail}</strong>. Disabled users cannot sign in until re-enabled.
       </p>
 
       {loading ? (
@@ -195,6 +228,16 @@ export default function AdminAccountAccessPanel({
             onClick={() => void runAction('set_password')}
           >
             Change password
+          </button>
+        ) : null}
+        {role === 'patient' ? (
+          <button
+            type='button'
+            className='secondary-btn'
+            disabled={busy || loading}
+            onClick={() => void resendTemporaryPassword()}
+          >
+            Resend temporary password email
           </button>
         ) : null}
       </div>

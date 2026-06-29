@@ -285,7 +285,7 @@ export default function PatientDashboardPage({
         {!dbConnected ? (
           <div className='pd-alert pd-alert--error' role='alert'>
             <p className='pd-alert__body'>
-              Connect Supabase in <code>.env.local</code> to load live stats.
+              ElixClinix is not configured. Add credentials in <code>.env.local</code> to load live stats.
             </p>
           </div>
         ) : null}

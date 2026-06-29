@@ -24,7 +24,7 @@ import {
 import { startEmaillessPatientSignup } from '../lib/patientSignupPreconfirm';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { fetchDoctorByAuthUserId, fetchDoctorByEmail, fetchDoctorById } from '../lib/doctors';
-import { ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
+import { claimPatientProfileForLogin, ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
 import { fetchAdminByAuthUserId } from '../lib/admins';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Doctor } from '../types/doctor';
@@ -51,7 +51,12 @@ type SupabaseContextValue = {
     email: string,
     password: string,
     options?: SignInOptions
-  ) => Promise<{ error: AuthError | null; doctor: Doctor | null; patient: Patient | null }>;
+  ) => Promise<{
+    error: AuthError | null;
+    doctor: Doctor | null;
+    patient: Patient | null;
+    mustChangePassword: boolean;
+  }>;
   signUp: (
     email: string,
     password: string,
@@ -64,7 +69,7 @@ type SupabaseContextValue = {
   }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: AuthError | null }>;
-  updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
+  updatePassword: (newPassword: string, options?: { clearForcePasswordChange?: boolean }) => Promise<{ error: AuthError | null }>;
   resendSignupConfirmation: (email: string) => Promise<{ error: AuthError | null }>;
   sendSignupEmailOtp: (email: string, fullName: string) => Promise<SendSignupEmailOtpResult>;
   resendSignupEmailOtp: (email: string) => Promise<{ error: AuthError | null }>;
@@ -220,13 +225,14 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string, options?: SignInOptions) => {
     if (!isSupabaseConfigured) {
       return {
-        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
+        error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError,
         doctor: null,
-        patient: null
+        patient: null,
+        mustChangePassword: false
       };
     }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error, doctor: null, patient: null };
+    if (error) return { error, doctor: null, patient: null, mustChangePassword: false };
 
     const user = data.user;
     const doctor = user ? await resolveDoctorForUser(user) : null;
@@ -234,7 +240,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     let patient = user && !admin ? await resolvePatientForUser(user) : null;
 
     if (options?.patientLoginOnly) {
-      if (doctor || admin || !patient) {
+      if (doctor || admin) {
         await supabase.auth.signOut();
         return {
           error: {
@@ -243,7 +249,56 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
             status: 403
           } as AuthError,
           doctor: null,
-          patient: null
+          patient: null,
+          mustChangePassword: false
+        };
+      }
+
+      if (!patient) {
+        const claimed = await claimPatientProfileForLogin();
+        patient = claimed.data;
+        if (!patient && claimed.error) {
+          await supabase.auth.signOut();
+          return {
+            error: {
+              message: claimed.error.message,
+              name: 'AuthError',
+              status: 500
+            } as AuthError,
+            doctor: null,
+            patient: null,
+            mustChangePassword: false
+          };
+        }
+      }
+
+      if (patient?.login_disabled) {
+        await supabase.auth.signOut();
+        return {
+          error: {
+            message:
+              'Your patient login is not enabled yet. Ask your clinic to enable login for your account.',
+            name: 'AuthError',
+            status: 403
+          } as AuthError,
+          doctor: null,
+          patient: null,
+          mustChangePassword: false
+        };
+      }
+
+      if (!patient) {
+        await supabase.auth.signOut();
+        return {
+          error: {
+            message:
+              'No registration found. Use the email your clinic registered for you, or ask them to enable patient login.',
+            name: 'AuthError',
+            status: 403
+          } as AuthError,
+          doctor: null,
+          patient: null,
+          mustChangePassword: false
         };
       }
     } else if (user && !doctor && !patient && !admin) {
@@ -258,7 +313,8 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
             status: 500
           } as AuthError,
           doctor: null,
-          patient: null
+          patient: null,
+          mustChangePassword: false
         };
       }
     }
@@ -266,13 +322,20 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     setSession(data.session);
     setDoctorProfile(doctor);
     setPatientProfile(admin ? null : patient);
-    return { error: null, doctor, patient };
+    const mustChangePassword = Boolean(
+      options?.patientLoginOnly &&
+      patient &&
+      user?.user_metadata &&
+      typeof user.user_metadata === 'object' &&
+      (user.user_metadata as Record<string, unknown>).force_password_change
+    );
+    return { error: null, doctor, patient, mustChangePassword };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, profile?: Partial<PatientUpsertInput>) => {
     if (!isSupabaseConfigured) {
       return {
-        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
+        error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError,
         patient: null,
         needsEmailConfirmation: false,
         profileSaved: false
@@ -359,7 +422,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
   const requestPasswordReset = useCallback(async (email: string) => {
     if (!isSupabaseConfigured) {
-      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+      return { error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError };
     }
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: getAuthRedirectUrl('/')
@@ -367,17 +430,29 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
-  const updatePassword = useCallback(async (newPassword: string) => {
+  const updatePassword = useCallback(async (
+    newPassword: string,
+    options?: { clearForcePasswordChange?: boolean }
+  ) => {
     if (!isSupabaseConfigured) {
-      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+      return { error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError };
     }
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    const clearForcePasswordChange = options?.clearForcePasswordChange ?? true;
+    const currentUser = session?.user;
+    const existingMeta =
+      currentUser?.user_metadata && typeof currentUser.user_metadata === 'object'
+        ? (currentUser.user_metadata as Record<string, unknown>)
+        : {};
+    const metadataPatch = clearForcePasswordChange
+      ? { ...existingMeta, force_password_change: false, temporary_password: false }
+      : existingMeta;
+    const { error } = await supabase.auth.updateUser({ password: newPassword, data: metadataPatch });
     return { error };
-  }, []);
+  }, [session?.user]);
 
   const resendSignupConfirmation = useCallback(async (email: string) => {
     if (!isSupabaseConfigured) {
-      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+      return { error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError };
     }
     const { error } = await supabase.auth.resend({
       type: 'signup',
@@ -389,7 +464,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
   const sendSignupEmailOtp = useCallback(async (email: string, fullName: string): Promise<SendSignupEmailOtpResult> => {
     if (!isSupabaseConfigured) {
-      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+      return { error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError };
     }
 
     const trimmedEmail = email.trim();
@@ -460,7 +535,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
   const resendSignupEmailOtp = useCallback(async (email: string) => {
     if (!isSupabaseConfigured) {
-      return { error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError };
+      return { error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError };
     }
 
     const trimmedEmail = email.trim();
@@ -496,7 +571,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!isSupabaseConfigured) {
       return {
-        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError
+        error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError
       };
     }
 
@@ -552,7 +627,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   ) => {
     if (!isSupabaseConfigured) {
       return {
-        error: { message: 'Supabase is not configured', name: 'AuthError', status: 500 } as AuthError,
+        error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError,
         patient: null
       };
     }

@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { createPatientForAdmin, type AdminPatientUpdateInput } from '../../../lib/admins';
+import { provisionPatientLogin } from '../../../lib/adminAuth';
 import { FieldLabel } from './adminDoctorFormUi';
 
 type AdminPatientCreateFormProps = {
   clinicId: string;
-  onCreated: () => void;
+  onCreated: (result?: { warning?: string }) => void;
   onCancel: () => void;
 };
 
@@ -50,7 +51,7 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
 
     setBusy(true);
     setError(null);
-    const { error: createError } = await createPatientForAdmin(form, { clinicId });
+    const { data: createdPatient, error: createError } = await createPatientForAdmin(form, { clinicId });
     setBusy(false);
 
     if (createError) {
@@ -58,7 +59,30 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
       return;
     }
 
-    onCreated();
+    if (!createdPatient?.id) {
+      setError('Patient was created, but login setup could not start. Open the patient profile to enable login.');
+      return;
+    }
+
+    setBusy(true);
+    const { data: provisionData, error: provisionError } = await provisionPatientLogin(createdPatient.id);
+    setBusy(false);
+
+    if (provisionError) {
+      onCreated({
+        warning:
+          `Patient created, but auto login setup failed: ${provisionError}. ` +
+          'Open the patient profile to enable login manually.'
+      });
+      return;
+    }
+
+    onCreated({
+      warning: provisionData?.emailSent
+        ? undefined
+        : (provisionData?.warning ??
+          'Patient login was enabled, but the welcome email could not be sent. Share a temporary password by resetting it from the patient profile.')
+    });
   };
 
   return (
@@ -70,7 +94,7 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
       ) : null}
 
       <p className='muted elixhealth-form-intro'>
-        Add a patient to your clinic workspace. Enable login later from the patient profile.
+        Add a patient to your clinic workspace. Login is enabled automatically and a temporary password is emailed.
       </p>
 
       <fieldset disabled={busy} className='elixhealth-form-fieldset'>

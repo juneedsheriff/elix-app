@@ -76,6 +76,26 @@ export async function fetchPatientById(id: string) {
   return selectPatient((columns) => supabase.from('patients').select(columns).eq('id', id));
 }
 
+/** Link a clinic/staff-created patient row to the current auth session (RLS-safe). */
+export async function claimPatientProfileForLogin() {
+  const { data, error } = await supabase.rpc('claim_patient_profile_for_login').maybeSingle<Patient>();
+  if (error) {
+    const missingRpc =
+      error.message.includes('claim_patient_profile_for_login') || error.code === '42883';
+    if (missingRpc) {
+      return {
+        data: null,
+        error: {
+          message:
+            'Patient login linking is not configured. Run supabase/migrations/065_claim_clinic_patient_login.sql.'
+        }
+      };
+    }
+    return { data: null, error };
+  }
+  return { data: withFallbackElixId(normalizePatientRow(data)), error: null };
+}
+
 export function defaultPatientNameFromUser(user: User): string {
   const meta = user.user_metadata?.full_name;
   if (typeof meta === 'string' && meta.trim()) return meta.trim();
@@ -92,6 +112,10 @@ export async function ensurePatientProfile(user: User, input?: Partial<PatientUp
   if (!user.email) {
     return { data: null, error: { message: 'User email is required for patient profile.' }, created: false };
   }
+
+  const claimed = await claimPatientProfileForLogin();
+  if (claimed.data) return { data: claimed.data, error: null, created: false };
+  if (claimed.error) return { data: null, error: claimed.error, created: false };
 
   const email = (input?.email ?? user.email).trim();
   const byEmail = await fetchPatientByEmail(email);

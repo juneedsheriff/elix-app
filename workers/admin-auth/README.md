@@ -1,6 +1,7 @@
 # Elix Admin Auth Worker
 
 Secures admin-only Supabase Auth operations (enable/disable login, set password) for doctors and patients.
+Also supports clinic patient auto-provisioning (enable login + generate temporary password + send welcome email).
 
 ## Setup
 
@@ -11,7 +12,18 @@ Secures admin-only Supabase Auth operations (enable/disable login, set password)
 cd workers/admin-auth
 npx wrangler secret put SUPABASE_ANON_KEY
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+npx wrangler secret put RESEND_API_KEY
 ```
+
+From the repo root (reads `RESEND_API_KEY` from `.env.local`):
+
+```bash
+npm run worker:admin-auth:secrets
+```
+
+Set worker vars (wrangler.toml or dashboard):
+- `SMTP_ADMIN_EMAIL` (verified sender)
+- `SMTP_SENDER_NAME` (e.g. ElixClinix)
 
 3. Deploy:
 
@@ -31,3 +43,4 @@ For local dev, run `npm run worker:admin-auth:dev` and use `http://127.0.0.1:878
 
 - `GET /status?role=doctor|patient&profileId=<uuid>` — login status (admin JWT required)
 - `POST /manage` — body: `{ role, profileId, action: "enable"|"disable"|"set_password", password? }`
+- `POST /patient/provision-login` — body: `{ profileId }` (patient only): enables login with temporary password, marks first-login password change required, and sends welcome email.

@@ -75,6 +75,7 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [passwordRecovery, setPasswordRecovery] = useState(() => isPasswordRecoveryCallback());
+  const [forcePasswordChange, setForcePasswordChange] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
 
@@ -216,6 +217,7 @@ function App() {
     if (hashError) {
       setStage('auth');
       setPasswordRecovery(false);
+      setForcePasswordChange(false);
       setAuthError(authHashErrorMessage(hashError.code, hashError.description));
       setAuthSuccess(null);
       clearAuthHashFromUrl();
@@ -225,6 +227,7 @@ function App() {
     if (isPasswordRecoveryCallback()) {
       setStage('auth');
       setPasswordRecovery(true);
+      setForcePasswordChange(false);
       setAuthError(null);
       setAuthSuccess('Choose a new password below.');
       return;
@@ -240,6 +243,7 @@ function App() {
       if (event === 'PASSWORD_RECOVERY') {
         setStage('auth');
         setPasswordRecovery(true);
+        setForcePasswordChange(false);
         setAuthError(null);
         setAuthSuccess('Choose a new password below.');
         clearAuthHashFromUrl();
@@ -259,6 +263,7 @@ function App() {
     setAuthError(null);
     setAuthSuccess(null);
     setPasswordRecovery(false);
+    setForcePasswordChange(false);
     setAuthView('signin');
   };
 
@@ -279,7 +284,7 @@ function App() {
       return;
     }
     setAuthBusy(true);
-    const { error, doctor, patient } = await signIn(email.trim(), password, {
+    const { error, doctor, patient, mustChangePassword } = await signIn(email.trim(), password, {
       patientLoginOnly: loginMode === 'patient'
     });
     setAuthBusy(false);
@@ -302,6 +307,16 @@ function App() {
     const screen = resolveScreenForRole(nextRole, saved ?? fromUrl);
     setActiveScreen(screen);
 
+    if (nextRole === 'patient' && mustChangePassword) {
+      setStage('auth');
+      setPasswordRecovery(true);
+      setForcePasswordChange(true);
+      setPassword('');
+      setAuthError(null);
+      setAuthSuccess('Set a new password to continue to your dashboard.');
+      return;
+    }
+
     if (nextRole === 'patient' && patient && !isPatientProfileComplete(patient)) {
       setStage('profile-setup');
       setAuthError(null);
@@ -315,7 +330,7 @@ function App() {
 
   const handleForgotPassword = async () => {
     if (!configured) {
-      setAuthError('Connect Supabase in .env.local first.');
+      setAuthError('ElixClinix is not configured. Add credentials to .env.local first.');
       setAuthSuccess(null);
       return;
     }
@@ -358,7 +373,7 @@ function App() {
     }
     setAuthBusy(true);
     setAuthError(null);
-    const { error } = await updatePassword(newPassword);
+    const { error } = await updatePassword(newPassword, { clearForcePasswordChange: true });
     setAuthBusy(false);
     if (error) {
       setAuthError(error.message);
@@ -366,8 +381,26 @@ function App() {
     }
     setPasswordRecovery(false);
     setPassword('');
+    clearAuthHashFromUrl();
+
+    if (forcePasswordChange) {
+      setForcePasswordChange(false);
+      const refreshed = await refreshPatientProfile();
+      if (refreshed && !isPatientProfileComplete(refreshed)) {
+        setStage('profile-setup');
+        setAuthSuccess(null);
+        return;
+      }
+      const screen = resolveScreenForRole('patient', parseAppScreenPath(location.pathname) ?? 'patient-dashboard');
+      setActiveScreen(screen);
+      setStage('app');
+      setAuthSuccess(null);
+      navigate(appScreenPath(screen), { replace: true });
+      return;
+    }
+
     setAuthSuccess('Password updated. Sign in with your new password.');
-    void signOut();
+    await signOut();
   };
 
   const handleResendConfirmation = async () => {
@@ -387,6 +420,7 @@ function App() {
 
   const handleSignOut = async () => {
     clearAuthSurface();
+    setForcePasswordChange(false);
     await signOut();
     setStage('auth');
     navigate('/auth', { replace: true });
@@ -550,6 +584,10 @@ function App() {
           onResendConfirmation={() => void handleResendConfirmation()}
           onSetNewPassword={(newPassword, confirmPassword) => void handleSetNewPassword(newPassword, confirmPassword)}
           onCancelPasswordRecovery={() => {
+            if (forcePasswordChange) {
+              void signOut();
+              setForcePasswordChange(false);
+            }
             setPasswordRecovery(false);
             setAuthSuccess(null);
             setAuthError(null);

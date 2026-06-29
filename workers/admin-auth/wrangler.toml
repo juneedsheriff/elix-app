@@ -7,6 +7,9 @@ SUPABASE_URL = "https://juwlzcxlekqttpdqqijv.supabase.co"
 ALLOWED_ORIGIN = "https://app.elixclinix.com"
 # Custom SMTP is configured — signup requires email verification (see npm run test:auth-signup-email).
 ALLOW_EMAILLESS_PATIENT_SIGNUP = "false"
+# SMTP sender used for clinic patient welcome emails (temporary password).
+SMTP_ADMIN_EMAIL = "support@app.elixclinix.com"
+SMTP_SENDER_NAME = "ElixClinix"
 # Local dev: copy .dev.vars.example → .dev.vars (secrets + ALLOWED_ORIGIN=http://localhost:3000)
 
 [dev]

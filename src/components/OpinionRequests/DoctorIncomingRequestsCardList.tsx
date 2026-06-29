@@ -10,8 +10,9 @@ import type { OpinionRequest } from '../../types/opinionRequest';
 import DoctorCaseDetailsModal from './DoctorCaseDetailsModal';
 import DoctorConsultationNotesModal from './DoctorConsultationNotesModal';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
+import './doctor-incoming-requests-table.css';
 
-type DoctorIncomingRequestsMobileListProps = {
+type DoctorIncomingRequestsCardListProps = {
   data: OpinionRequest[];
   search: string;
   onSearchChange: (value: string) => void;
@@ -29,7 +30,7 @@ function doctorStatusLabel(status: string): string {
   return 'Submitted';
 }
 
-export default function DoctorIncomingRequestsMobileList({
+export default function DoctorIncomingRequestsCardList({
   data,
   search,
   onSearchChange,
@@ -39,7 +40,7 @@ export default function DoctorIncomingRequestsMobileList({
   returnScreen,
   onOpenError,
   onRequestUpdated
-}: DoctorIncomingRequestsMobileListProps) {
+}: DoctorIncomingRequestsCardListProps) {
   const [caseDetailsRequest, setCaseDetailsRequest] = useState<OpinionRequest | null>(null);
   const [consultationNotesRequest, setConsultationNotesRequest] = useState<OpinionRequest | null>(null);
 
@@ -73,24 +74,24 @@ export default function DoctorIncomingRequestsMobileList({
 
   return (
     <>
-      <div className='doctor-cases-mobile-toolbar'>
-        <label className='doctor-cases-mobile-search'>
+      <div className='doctor-cases-cards-toolbar'>
+        <label className='doctor-cases-cards-search'>
           <IconSearch size={18} stroke={1.5} aria-hidden />
           <input
             type='search'
             value={search}
             onChange={(event) => onSearchChange(event.currentTarget.value)}
-            placeholder='Search cases…'
+            placeholder='Search by patient, email, or message…'
             aria-label='Search incoming requests'
           />
         </label>
-        <p className='doctor-cases-mobile-count muted'>
+        <p className='doctor-cases-cards-count muted'>
           {data.length} case{data.length === 1 ? '' : 's'}
         </p>
       </div>
 
       {data.length === 0 ? (
-        <div className='doctor-cases-mobile-empty'>
+        <div className='doctor-cases-cards-empty'>
           <p className='muted'>
             {hasActiveFilters
               ? 'No cases match your search.'
@@ -103,14 +104,14 @@ export default function DoctorIncomingRequestsMobileList({
           ) : null}
         </div>
       ) : (
-        <ul className='doctor-request-list doctor-request-list--mobile-cards'>
+        <ul className='doctor-request-list doctor-incoming-cards-grid'>
           {data.map((request) => {
             const meetingLink = request.meeting_link?.trim();
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);
 
             return (
-              <li key={request.id} className='doctor-request-card doctor-incoming-mobile-card'>
+              <li key={request.id} className='doctor-request-card doctor-incoming-card'>
                 <div className='doctor-request-head'>
                   <strong>{request.patient_name ?? 'Patient'}</strong>
                   <span className={`tag status-${request.status}`}>{doctorStatusLabel(request.status)}</span>
@@ -129,8 +130,8 @@ export default function DoctorIncomingRequestsMobileList({
                 ) : null}
 
                 {meetingLink ? (
-                  <div className='doctor-incoming-mobile-card__meeting'>
-                    <p className='doctor-incoming-mobile-card__meeting-label'>
+                  <div className='doctor-incoming-card__meeting'>
+                    <p className='doctor-incoming-card__meeting-label'>
                       <Video size={15} aria-hidden /> Video consultation
                     </p>
                     {request.scheduled_at ? (
@@ -143,17 +144,17 @@ export default function DoctorIncomingRequestsMobileList({
                       href={meetingLink}
                       target='_blank'
                       rel='noreferrer'
-                      className='text-btn doctor-incoming-mobile-card__join'
+                      className='text-btn doctor-incoming-card__join'
                     >
                       Join meeting
                     </a>
                   </div>
                 ) : null}
 
-                <div className='doctor-incoming-mobile-card__actions'>
+                <div className='doctor-incoming-card__actions'>
                   <button
                     type='button'
-                    className='secondary-btn doctor-incoming-mobile-card__btn'
+                    className='secondary-btn doctor-incoming-card__btn'
                     onClick={() => setCaseDetailsRequest(request)}
                   >
                     <ClipboardList size={16} aria-hidden />
@@ -163,7 +164,7 @@ export default function DoctorIncomingRequestsMobileList({
                   {hasNotes ? (
                     <button
                       type='button'
-                      className='secondary-btn doctor-incoming-mobile-card__btn'
+                      className='secondary-btn doctor-incoming-card__btn'
                       onClick={() => setConsultationNotesRequest(request)}
                     >
                       <FileText size={16} aria-hidden />
@@ -178,7 +179,7 @@ export default function DoctorIncomingRequestsMobileList({
                       returnScreen={returnScreen}
                     />
                   ) : request.doctor_response?.trim() ? (
-                    <span className='tag status-closed'>Responded</span>
+                    <span className='tag status-closed doctor-incoming-card__responded'>Responded</span>
                   ) : null}
                 </div>
               </li>

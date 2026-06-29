@@ -393,9 +393,14 @@ export default function ElixHealthPatientsPage() {
           <AdminPatientCreateForm
             clinicId={staff.clinic_id}
             onCancel={() => setAddModalOpen(false)}
-            onCreated={() => {
+            onCreated={(result) => {
               setAddModalOpen(false);
-              setSuccessMessage('Patient created.');
+              setSuccessMessage(
+                result?.warning
+                  ? 'Patient created. Login was enabled, but check warning details.'
+                  : 'Patient created. Login enabled and credentials emailed.'
+              );
+              setActionMessage(result?.warning ?? null);
               void load();
             }}
           />

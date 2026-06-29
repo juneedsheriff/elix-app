@@ -26,7 +26,7 @@ export default function ElixHealthLogin({ configured, busy, error, onSignIn }: E
 
         {!configured ? (
           <p className='auth-error' role='alert'>
-            Supabase is not configured. Add VITE_SUPABASE_* to .env.local.
+            ElixClinix is not configured. Add VITE_SUPABASE_* to .env.local.
           </p>
         ) : null}
 

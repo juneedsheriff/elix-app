@@ -284,7 +284,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
       return;
     }
     if (!configured) {
-      setStatusMessage('Connect Supabase to enable uploads.');
+      setStatusMessage('ElixClinix is not configured. Uploads are unavailable.');
       return;
     }
     if (!isR2StorageConfigured()) {
@@ -353,7 +353,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
       return;
     }
     if (!configured) {
-      setStatusMessage('Connect Supabase to enable uploads.');
+      setStatusMessage('ElixClinix is not configured. Uploads are unavailable.');
       return;
     }
     const trimmed = dicomDriveUrl.trim();

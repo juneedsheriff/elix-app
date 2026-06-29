@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
+import DoctorIncomingRequestsCardList from './DoctorIncomingRequestsCardList';
 import DoctorIncomingRequestsTable from './DoctorIncomingRequestsTable';
-import DoctorIncomingRequestsMobileList from './DoctorIncomingRequestsMobileList';
 import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
 import {
   fetchDoctorOpinionRequests,
@@ -162,7 +162,7 @@ export default function OpinionRequestsPanel({
 
         {!configured ? (
           <p className='auth-error' role='alert'>
-            Connect Supabase in <code>.env.local</code> to load requests.
+            ElixClinix is not configured. Add credentials in <code>.env.local</code> to load requests.
           </p>
         ) : null}
 
@@ -225,25 +225,22 @@ export default function OpinionRequestsPanel({
         {!loading && !error && requests.length > 0 ? (
           <>
             {view === 'doctor' ? (
-              <>
-                <div className='doctor-cases-desktop'>
-                  <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
-                    <DoctorIncomingRequestsTable
-                      data={visibleRequests}
-                      isLoading={loading}
-                      search={doctorSearch}
-                      onSearchChange={setDoctorSearch}
-                      hasActiveFilters={Boolean(doctorSearch.trim())}
-                      onClearFilters={() => setDoctorSearch('')}
-                      onNavigate={onNavigate}
-                      returnScreen={doctorReturnScreen}
-                      onOpenError={showOpenRecordError}
-                      onRequestUpdated={patchDoctorRequest}
-                    />
-                  </div>
-                </div>
-                <div className='doctor-cases-mobile'>
-                  <DoctorIncomingRequestsMobileList
+              isElixHealthWorkspace ? (
+                <DoctorIncomingRequestsTable
+                  data={visibleRequests}
+                  isLoading={loading}
+                  search={doctorSearch}
+                  onSearchChange={setDoctorSearch}
+                  hasActiveFilters={Boolean(doctorSearch.trim())}
+                  onClearFilters={() => setDoctorSearch('')}
+                  onNavigate={onNavigate}
+                  returnScreen={doctorReturnScreen}
+                  onOpenError={showOpenRecordError}
+                  onRequestUpdated={patchDoctorRequest}
+                />
+              ) : (
+                <div className='doctor-cases-cards'>
+                  <DoctorIncomingRequestsCardList
                     data={visibleRequests}
                     search={doctorSearch}
                     onSearchChange={setDoctorSearch}
@@ -255,7 +252,7 @@ export default function OpinionRequestsPanel({
                     onRequestUpdated={patchDoctorRequest}
                   />
                 </div>
-              </>
+              )
             ) : null}
           </>
         ) : null}

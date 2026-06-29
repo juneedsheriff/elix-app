@@ -1,8 +1,20 @@
-.doctor-cases-table-shell {
-  min-height: 28rem;
+/* Doctor incoming requests — card layout (all breakpoints) */
+
+.doctor-cases-cards {
+  min-width: 0;
+  margin-top: 0.35rem;
 }
 
-/* Elix Health workspace: fill viewport and scroll the table body */
+.doctor-cases-workspace .doctor-cases-cards {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Elix Health workspace: fill viewport */
 .doctor-cases-workspace.screen-grid {
   flex: 1;
   min-height: 0;
@@ -23,72 +35,19 @@
 .doctor-cases-workspace__card .case-review-consultation-banner,
 .doctor-cases-workspace__card .doctor-status,
 .doctor-cases-workspace__card .auth-error,
-.doctor-cases-workspace__card .muted {
+.doctor-cases-workspace__card .muted,
+.doctor-cases-workspace__card .doctor-cases-cards-toolbar {
   flex-shrink: 0;
 }
 
-.doctor-cases-workspace .doctor-cases-desktop {
-  flex: 1;
-  min-height: 0;
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.doctor-cases-workspace .elixhealth-datatable-card {
-  flex: 1;
-  min-height: 0;
-}
-
-.doctor-cases-workspace .doctors-mgmt-table-card > * {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.doctor-cases-workspace .doctor-cases-table-shell {
-  min-height: 0;
-  flex: 1;
-}
-
-.doctor-cases-workspace .doctor-cases-mobile {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  margin-top: 0;
-}
-
-.doctor-cases-table-toolbar__inner {
-  align-items: center;
-}
-
-.doctor-cases-table-toolbar__count {
-  align-self: center;
-  font-size: 0.875rem;
-  white-space: nowrap;
-}
-
-.doctor-cases-desktop {
-  display: none;
-  margin-top: 0.35rem;
-  min-width: 0;
-}
-
-.doctor-cases-mobile {
-  display: block;
-  min-width: 0;
-  margin-top: 0.35rem;
-}
-
-.doctor-cases-mobile-toolbar {
+.doctor-cases-cards-toolbar {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.85rem;
 }
 
-.doctor-cases-mobile-search {
+.doctor-cases-cards-search {
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -98,7 +57,7 @@
   background: var(--surface);
 }
 
-.doctor-cases-mobile-search input {
+.doctor-cases-cards-search input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -107,42 +66,57 @@
   color: var(--text);
 }
 
-.doctor-cases-mobile-search input:focus {
+.doctor-cases-cards-search input:focus {
   outline: none;
 }
 
-.doctor-cases-mobile-count {
+.doctor-cases-cards-count {
   margin: 0;
   font-size: 0.82rem;
 }
 
-.doctor-cases-mobile-empty {
+.doctor-cases-cards-empty {
   display: grid;
   gap: 0.75rem;
   justify-items: start;
   padding: 0.5rem 0;
 }
 
-.doctor-incoming-mobile-card {
+.doctor-incoming-cards-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doctor-incoming-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: color-mix(in srgb, var(--surface) 92%, var(--brand-cyan) 8%);
+  box-shadow: var(--shadow);
 }
 
-.doctor-incoming-mobile-card .doctor-request-head {
+.doctor-incoming-card .doctor-request-head {
   align-items: flex-start;
   flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.doctor-incoming-mobile-card .doctor-request-message {
+.doctor-incoming-card .doctor-request-message {
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  flex: 1;
 }
 
-.doctor-incoming-mobile-card__meeting {
+.doctor-incoming-card__meeting {
   display: grid;
   gap: 0.35rem;
   margin-top: 0.55rem;
@@ -152,7 +126,7 @@
   background: color-mix(in srgb, #4285f4 6%, var(--surface));
 }
 
-.doctor-incoming-mobile-card__meeting-label {
+.doctor-incoming-card__meeting-label {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -161,18 +135,19 @@
   font-weight: 600;
 }
 
-.doctor-incoming-mobile-card__join {
+.doctor-incoming-card__join {
   justify-self: start;
 }
 
-.doctor-incoming-mobile-card__actions {
+.doctor-incoming-card__actions {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  margin-top: 0.85rem;
+  margin-top: auto;
+  padding-top: 0.85rem;
 }
 
-.doctor-incoming-mobile-card__btn {
+.doctor-incoming-card__btn {
   width: 100%;
   justify-content: center;
   display: inline-flex;
@@ -180,18 +155,14 @@
   gap: 0.4rem;
 }
 
-.doctor-incoming-mobile-card__actions .doctor-respond-cta,
-.doctor-incoming-mobile-card__actions .primary-btn {
+.doctor-incoming-card__actions .doctor-respond-cta,
+.doctor-incoming-card__actions .primary-btn {
   width: 100%;
   justify-content: center;
 }
 
-.doctor-request-list--mobile-cards {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.doctor-incoming-card__responded {
+  align-self: flex-start;
 }
 
 .doctors-screen .section-card {
@@ -209,17 +180,56 @@
   word-break: break-word;
 }
 
-@media (min-width: 768px) {
-  .doctor-cases-desktop {
-    display: block;
+.case-review-consultation-banner .doctor-respond-cta {
+  max-width: none;
+}
+
+@media (min-width: 640px) {
+  .doctor-cases-cards-toolbar {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
   }
 
-  .doctor-cases-mobile {
-    display: none;
+  .doctor-cases-cards-search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .doctor-cases-cards-count {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .doctor-incoming-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 767px) {
+@media (min-width: 1100px) {
+  .doctor-incoming-cards-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .doctor-incoming-card__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .doctor-incoming-card__btn {
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .doctor-incoming-card__actions .doctor-respond-cta,
+  .doctor-incoming-card__actions .primary-btn {
+    width: auto;
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 639px) {
   .doctors-screen .section-card {
     padding: 0.85rem;
     border-radius: 16px;
@@ -230,8 +240,22 @@
   }
 
   .case-review-consultation-banner .doctor-respond-cta {
-    max-width: none;
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Legacy table shell — kept for Elix Health workspace table if re-used elsewhere */
+.doctor-cases-table-shell {
+  min-height: 28rem;
+}
+
+.doctor-cases-table-toolbar__inner {
+  align-items: center;
+}
+
+.doctor-cases-table-toolbar__count {
+  align-self: center;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }

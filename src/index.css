@@ -1646,7 +1646,7 @@ select {
 }
 
 .doctor-request-card {
-  padding: 0.85rem 0;
+ 
   border-bottom: 1px solid var(--border);
 }
 
@@ -1741,6 +1741,31 @@ select {
 
 .doctor-dashboard-queue li {
   padding: 0.5rem 0;
+}
+
+.doctor-dashboard-welcome {
+  padding: 1.1rem 1.15rem;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 28%, var(--border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-cyan) 10%, var(--surface)),
+    color-mix(in srgb, var(--brand-green, #83c847) 8%, var(--surface))
+  );
+  box-shadow: var(--shadow);
+}
+
+.doctor-dashboard-welcome__title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.doctor-dashboard-welcome__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
 }
 
 .doctor-dashboard-cta {

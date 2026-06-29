@@ -157,6 +157,20 @@ export async function manageAccountAuth(
   });
 }
 
+export type PatientProvisionLoginResult = {
+  ok: boolean;
+  status: AccountAuthStatus | null;
+  emailSent: boolean;
+  warning?: string;
+};
+
+export async function provisionPatientLogin(profileId: string) {
+  return adminAuthFetch<PatientProvisionLoginResult>('/patient/provision-login', {
+    method: 'POST',
+    body: JSON.stringify({ profileId })
+  });
+}
+
 export function loginStatusLabel(status: AccountAuthStatus | null, authUserId?: string | null, loginDisabled?: boolean): string {
   if (status) {
     if (!status.hasAuth) return 'No login';

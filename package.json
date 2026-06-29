@@ -14,6 +14,7 @@
     "worker:records:secrets": "node scripts/sync-worker-secrets.mjs",
     "worker:admin-auth:dev": "npm run dev --prefix workers/admin-auth",
     "worker:admin-auth:deploy": "npm run deploy --prefix workers/admin-auth",
+    "worker:admin-auth:secrets": "node scripts/sync-admin-auth-resend-secret.mjs",
     "db:apply-login-disabled": "node scripts/apply-login-disabled.mjs",
     "db:migrate-records-to-r2": "node scripts/migrate-records-to-r2.mjs",
     "db:migrate-r2-to-elix-id": "node scripts/migrate-r2-to-elix-id.mjs",

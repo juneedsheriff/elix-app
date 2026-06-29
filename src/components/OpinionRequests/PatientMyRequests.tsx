@@ -413,7 +413,7 @@ export default function PatientMyRequests({
 
           {!configured ? (
             <p className='pmr-alert pmr-alert--error' role='alert'>
-              Connect Supabase in <code>.env.local</code> to load requests.
+              ElixClinix is not configured. Add credentials in <code>.env.local</code> to load requests.
             </p>
           ) : null}
 

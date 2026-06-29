@@ -93,7 +93,7 @@ export function formatAuthEmailError(error: AuthError): string {
   const lower = message.toLowerCase();
 
   if (error.status === 429 || lower.includes('rate limit')) {
-    return 'Too many verification emails were sent. Wait about an hour, then tap Resend code. In Supabase, check Authentication → Rate Limits or set up custom SMTP.';
+    return 'Too many verification emails were sent. Wait about an hour, then tap Resend code, or ask your administrator to review email rate limits.';
   }
 
   if (lower.includes('email_address_invalid') || (lower.includes('invalid') && lower.includes('email'))) {
@@ -105,7 +105,7 @@ export function formatAuthEmailError(error: AuthError): string {
   }
 
   if (isConfirmationEmailSendError(error)) {
-    return 'We could not send a verification email. If this address is already registered, use another email or sign in. Otherwise wait a few minutes and try again, or ask your administrator to configure Supabase email (Authentication → SMTP).';
+    return 'We could not send a verification email. If this address is already registered, use another email or sign in. Otherwise wait a few minutes and try again, or ask your administrator to configure ElixClinix email delivery.';
   }
 
   return message;

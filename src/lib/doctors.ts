@@ -19,6 +19,16 @@ export function normalizeDoctor(row: Doctor): Doctor {
   return normalizeDoctorProfile(row);
 }
 
+/** Greeting label for dashboards, e.g. "Dr. Subhash". */
+export function formatDoctorWelcomeName(fullName: string | null | undefined): string {
+  const trimmed = fullName?.trim();
+  if (!trimmed) return 'Doctor';
+
+  const withoutTitle = trimmed.replace(/^dr\.?\s*/i, '').trim();
+  const firstName = (withoutTitle || trimmed).split(/\s+/)[0] ?? trimmed;
+  return `Dr. ${firstName}`;
+}
+
 /** Doctors visible in patient browse (is_visible true or unset). */
 function applyPatientBrowseVisibilityFilter<T extends { or: (filters: string) => T }>(query: T): T {
   return query.or('is_visible.is.null,is_visible.eq.true');
