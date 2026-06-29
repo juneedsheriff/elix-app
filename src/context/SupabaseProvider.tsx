@@ -650,38 +650,47 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    const { data, error } = await supabase.auth.updateUser({
-      password,
-      data: {
-        role: 'patient',
-        full_name: profile.full_name ?? profile.email?.split('@')[0] ?? 'Patient'
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password,
+        data: {
+          role: 'patient',
+          full_name: profile.full_name ?? profile.email?.split('@')[0] ?? 'Patient'
+        }
+      });
+
+      if (error) return { error, patient: null };
+
+      const user = data.user;
+      if (!user) {
+        return {
+          error: { message: 'Could not save password.', name: 'AuthError', status: 500 } as AuthError,
+          patient: null
+        };
       }
-    });
 
-    if (error) return { error, patient: null };
+      const ensured = await ensurePatientProfile(user, profile);
+      if (ensured.error) {
+        return {
+          error: {
+            message: `Password saved but patient profile failed: ${ensured.error.message}`,
+            name: 'AuthError',
+            status: 500
+          } as AuthError,
+          patient: null
+        };
+      }
 
-    const user = data.user;
-    if (!user) {
+      if (ensured.data) setPatientProfile(ensured.data);
+      return { error: null, patient: ensured.data };
+    } catch (unknownError) {
+      const message =
+        unknownError instanceof Error ? unknownError.message : 'Could not complete signup.';
       return {
-        error: { message: 'Could not save password.', name: 'AuthError', status: 500 } as AuthError,
+        error: { message, name: 'AuthError', status: 500 } as AuthError,
         patient: null
       };
     }
-
-    const ensured = await ensurePatientProfile(user, profile);
-    if (ensured.error) {
-      return {
-        error: {
-          message: `Password saved but patient profile failed: ${ensured.error.message}`,
-          name: 'AuthError',
-          status: 500
-        } as AuthError,
-        patient: null
-      };
-    }
-
-    if (ensured.data) setPatientProfile(ensured.data);
-    return { error: null, patient: ensured.data };
   }, []);
 
   const verifySignupOtp = useCallback(async (

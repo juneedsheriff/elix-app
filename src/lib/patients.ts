@@ -14,7 +14,9 @@ const patientColumnsLegacy =
 
 function withFallbackElixId(patient: Patient | null): Patient | null {
   if (!patient || patient.elix_id) return patient;
-  const suffix = patient.id.replace(/-/g, '').slice(0, 6).toLowerCase();
+  const id = patient.id;
+  if (typeof id !== 'string' || !id.trim()) return patient;
+  const suffix = id.replace(/-/g, '').slice(0, 6).toLowerCase();
   return { ...patient, elix_id: `elix-${suffix.padEnd(6, '0').slice(0, 6)}` };
 }
 
@@ -93,6 +95,9 @@ export async function claimPatientProfileForLogin() {
     }
     return { data: null, error };
   }
+  if (!data?.id) {
+    return { data: null, error: null };
+  }
   return { data: withFallbackElixId(normalizePatientRow(data)), error: null };
 }
 
@@ -109,15 +114,14 @@ export async function ensurePatientProfile(user: User, input?: Partial<PatientUp
   if (byAuth.data) return { data: byAuth.data, error: null, created: false };
   if (byAuth.error) return { data: null, error: byAuth.error, created: false };
 
-  if (!user.email) {
+  const email = (input?.email ?? user.email ?? '').trim();
+  if (!email) {
     return { data: null, error: { message: 'User email is required for patient profile.' }, created: false };
   }
 
   const claimed = await claimPatientProfileForLogin();
   if (claimed.data) return { data: claimed.data, error: null, created: false };
   if (claimed.error) return { data: null, error: claimed.error, created: false };
-
-  const email = (input?.email ?? user.email).trim();
   const byEmail = await fetchPatientByEmail(email);
 
   if (byEmail.data) {
