@@ -3,7 +3,7 @@ import { Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { IconExternalLink, IconFileText } from '@tabler/icons-react';
 import ImageLightboxGallery, { type LightboxImageItem } from '../common/ImageLightboxGallery';
 import { isImageFileName } from '../../lib/imageFiles';
-import { openMedicalRecordByPath } from '../../lib/records';
+import { getMedicalRecordDownloadUrl, openMedicalRecordByPath } from '../../lib/records';
 import type { OpinionRequestFile } from '../../types/opinionRequest';
 
 type RequestRecordsGalleryProps = {
