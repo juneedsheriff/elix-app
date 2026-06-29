@@ -587,6 +587,7 @@ export function hasConsultationSummary(summary: ConsultationSummary | null | und
       summary.history_present_illness?.trim() ||
       summary.vital_signs?.trim() ||
       summary.current_medications?.trim() ||
+      summary.past_medical_history?.trim() ||
       summary.labs_diagnostics?.trim() ||
       summary.assessment_plan?.trim() ||
       summary.prescription?.trim()

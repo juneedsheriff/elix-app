@@ -238,6 +238,7 @@ export default function DoctorConsultationPage({
       history_present_illness: values.history_present_illness.trim() || null,
       vital_signs: values.vital_signs.trim() || null,
       current_medications: values.current_medications.trim() || null,
+      past_medical_history: values.past_medical_history.trim() || null,
       labs_diagnostics: values.labs_diagnostics.trim() || null,
       assessment_plan: values.assessment_plan.trim(),
       prescription: values.prescription.trim() || null

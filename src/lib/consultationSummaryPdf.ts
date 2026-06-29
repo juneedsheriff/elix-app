@@ -24,6 +24,7 @@ const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'history_present_illness', label: 'History of present illness' },
   { key: 'vital_signs', label: 'Vital signs' },
   { key: 'current_medications', label: 'Current medications' },
+  { key: 'past_medical_history', label: 'Past medical history' },
   { key: 'labs_diagnostics', label: 'Labs / diagnostics' },
   { key: 'assessment_plan', label: 'Assessment & plan' },
   { key: 'prescription', label: 'Prescription' }

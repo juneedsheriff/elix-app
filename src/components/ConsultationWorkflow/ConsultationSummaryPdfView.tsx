@@ -5,6 +5,10 @@ import {
   downloadConsultationSummaryPdf,
   getConsultationSummarySections
 } from '../../lib/consultationSummaryPdf';
+import {
+  downloadLabOrderPdf,
+  downloadPrescriptionOrderPdf
+} from '../../lib/consultationOrdersPdf';
 import { isImageFileName } from '../../lib/imageFiles';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import { normalizeStorageAuthError } from '../../lib/supabaseSession';
@@ -21,6 +25,8 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [prescriptionDownloading, setPrescriptionDownloading] = useState(false);
+  const [labOrderDownloading, setLabOrderDownloading] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
   const sections = getConsultationSummarySections(summary);
   const storedPath = summary.pdf_storage_path?.trim() ?? '';
@@ -29,6 +35,8 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const storedIsPdf = storedFileName.toLowerCase().endsWith('.pdf');
   const storedIsImage = isImageFileName(storedFileName);
   const hasStructuredPreview = sections.length > 0;
+  const hasPrescriptionOrder = Boolean(summary.prescription?.trim());
+  const hasLabOrder = Boolean(summary.labs_diagnostics?.trim());
 
   useEffect(() => {
     if (!storedPath) {
@@ -76,6 +84,14 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   }, []);
 
   const meta = consultationSummaryPdfMetaFromRequest(request);
+  const orderMeta = {
+    patientName: request.patient_name,
+    patientId: request.patient_id,
+    doctorName: request.doctor_name,
+    doctorSpecialty: request.doctor_specialty,
+    scheduledAt: request.scheduled_at,
+    requestId: request.id
+  };
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -95,6 +111,26 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
 
   const handleOpenInNewTab = () => {
     if (pdfUrl) window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handlePrescriptionDownload = async () => {
+    if (!summary.prescription?.trim()) return;
+    setPrescriptionDownloading(true);
+    try {
+      await downloadPrescriptionOrderPdf(summary.prescription, orderMeta);
+    } finally {
+      setPrescriptionDownloading(false);
+    }
+  };
+
+  const handleLabOrderDownload = async () => {
+    if (!summary.labs_diagnostics?.trim()) return;
+    setLabOrderDownloading(true);
+    try {
+      await downloadLabOrderPdf(summary.labs_diagnostics, orderMeta);
+    } finally {
+      setLabOrderDownloading(false);
+    }
   };
 
   return (
@@ -126,6 +162,39 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
           </button>
         </div>
       </div>
+
+      {hasPrescriptionOrder || hasLabOrder ? (
+        <div className='consultation-summary-pdf__toolbar'>
+          <span className='consultation-summary-pdf__toolbar-label'>
+            <FileText size={18} aria-hidden />
+            Patient orders
+          </span>
+          <div className='consultation-summary-pdf__toolbar-actions'>
+            {hasPrescriptionOrder ? (
+              <button
+                type='button'
+                className='secondary-btn consultation-summary-pdf__download'
+                disabled={prescriptionDownloading}
+                onClick={() => void handlePrescriptionDownload()}
+              >
+                <Download size={16} aria-hidden />
+                {prescriptionDownloading ? 'Preparing…' : 'Prescription'}
+              </button>
+            ) : null}
+            {hasLabOrder ? (
+              <button
+                type='button'
+                className='secondary-btn consultation-summary-pdf__download'
+                disabled={labOrderDownloading}
+                onClick={() => void handleLabOrderDownload()}
+              >
+                <Download size={16} aria-hidden />
+                {labOrderDownloading ? 'Preparing…' : 'Lab Order'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {hasStoredPdf ? (
         <div className='consultation-summary-pdf__viewer' aria-label='Stored consultation notes file'>

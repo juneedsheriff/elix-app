@@ -5,6 +5,7 @@ export const CONSULTATION_SUMMARY_FIELDS = [
   { key: 'history_present_illness', label: 'History of Present Illness' },
   { key: 'vital_signs', label: 'Vital Signs' },
   { key: 'current_medications', label: 'Current Medications' },
+  { key: 'past_medical_history', label: 'Past Medical History' },
   { key: 'labs_diagnostics', label: 'Labs/Diagnostics' },
   { key: 'assessment_plan', label: 'Assessment & Plan' },
   { key: 'prescription', label: 'Prescription' }
@@ -20,6 +21,7 @@ export function emptyConsultationSummaryValues(): ConsultationSummaryFormValues 
     history_present_illness: '',
     vital_signs: '',
     current_medications: '',
+    past_medical_history: '',
     labs_diagnostics: '',
     assessment_plan: '',
     prescription: ''
@@ -36,6 +38,7 @@ export function consultationSummaryToFormValues(
     history_present_illness: summary.history_present_illness?.trim() ?? '',
     vital_signs: summary.vital_signs?.trim() ?? '',
     current_medications: summary.current_medications?.trim() ?? '',
+    past_medical_history: summary.past_medical_history?.trim() ?? '',
     labs_diagnostics: summary.labs_diagnostics?.trim() ?? '',
     assessment_plan: summary.assessment_plan?.trim() ?? '',
     prescription: summary.prescription?.trim() ?? ''

@@ -3554,6 +3554,7 @@ export async function fetchPatientConsultationSummaries(patientAuthUserId: strin
       history_present_illness,
       vital_signs,
       current_medications,
+      past_medical_history,
       labs_diagnostics,
       assessment_plan,
       prescription,
@@ -3579,6 +3580,7 @@ const CONSULTATION_SUMMARY_SELECT = `
   history_present_illness,
   vital_signs,
   current_medications,
+  past_medical_history,
   labs_diagnostics,
   assessment_plan,
   prescription,
@@ -3695,6 +3697,7 @@ export async function saveDoctorConsultation(
     history_present_illness: input.history_present_illness,
     vital_signs: input.vital_signs,
     current_medications: input.current_medications,
+    past_medical_history: input.past_medical_history,
     labs_diagnostics: input.labs_diagnostics,
     assessment_plan: input.assessment_plan,
     prescription: input.prescription,
@@ -3710,8 +3713,10 @@ export async function saveDoctorConsultation(
 
   if (error) {
     const hint =
-      error.message?.includes('pdf_storage_path') || error.code === '42703'
-        ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
+      error.message?.includes('past_medical_history')
+        ? ' Run supabase/migrations/066_consultation_summary_past_medical_history.sql in the Supabase SQL Editor.'
+        : error.message?.includes('pdf_storage_path') || error.code === '42703'
+          ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
         : '';
     return { data: null, error: { message: normalizeStorageAuthError(`${error.message}${hint}`) } };
   }
@@ -3894,6 +3899,7 @@ export async function saveDoctorConsultationUpload(
     history_present_illness: null,
     vital_signs: null,
     current_medications: null,
+    past_medical_history: null,
     labs_diagnostics: null,
     assessment_plan: null,
     prescription: null,
@@ -3909,8 +3915,10 @@ export async function saveDoctorConsultationUpload(
 
   if (error) {
     const hint =
-      error.message?.includes('pdf_storage_path') || error.code === '42703'
-        ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
+      error.message?.includes('past_medical_history')
+        ? ' Run supabase/migrations/066_consultation_summary_past_medical_history.sql in the Supabase SQL Editor.'
+        : error.message?.includes('pdf_storage_path') || error.code === '42703'
+          ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
         : '';
     return { data: null, error: { message: normalizeStorageAuthError(`${error.message}${hint}`) } };
   }

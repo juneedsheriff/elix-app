@@ -48,6 +48,7 @@ export type ConsultationSummary = {
   history_present_illness: string | null;
   vital_signs: string | null;
   current_medications: string | null;
+  past_medical_history: string | null;
   labs_diagnostics: string | null;
   assessment_plan: string | null;
   prescription: string | null;
