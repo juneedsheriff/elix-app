@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   Badge,
   Button,
   Drawer,
@@ -28,7 +29,7 @@ import {
 
 } from '@tabler/icons-react';
 
-import { isPendingAdminAssignment, staffRequestStatusLabel } from '../../../lib/opinionRequests';
+import { hasPseCoordinationStarted, isPendingAdminAssignment, staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import OpinionRequestActivityPage from '../../../components/OpinionRequests/OpinionRequestActivityPage';
 import OpinionRequestAuditLink from '../../../components/OpinionRequests/OpinionRequestAuditLink';
 
@@ -82,6 +83,12 @@ type RequestDetailDrawerProps = {
 
   onSuccess: (message: string) => void;
 
+  coordinationUnlocked?: boolean;
+
+  feedbackMessage?: string | null;
+
+  feedbackSuccess?: string | null;
+
 };
 
 
@@ -116,7 +123,13 @@ export default function RequestDetailDrawer({
 
   onError,
 
-  onSuccess
+  onSuccess,
+
+  coordinationUnlocked = false,
+
+  feedbackMessage,
+
+  feedbackSuccess
 
 }: RequestDetailDrawerProps) {
 
@@ -141,6 +154,9 @@ export default function RequestDetailDrawer({
 
   const isClosed = request.status === 'closed';
   const isClinicRequest = Boolean(request.clinic_id);
+  const pseCoordinationStarted =
+    hasPseCoordinationStarted(request) || (isAdmin && coordinationUnlocked);
+  const adminViewer = isAdmin && !staffIsPse;
 
   const isAssignedToMe = Boolean(request.assigned_to && request.assigned_to === staff.id);
 
@@ -183,18 +199,20 @@ export default function RequestDetailDrawer({
     !isClosed &&
     (staffIsPlatformPse || isAssignedToMe);
 
-  const adminClinicWorkflowView = staffIsAdmin && !staffIsPse && isClinicRequest;
-  const showWorkflowWizard = canCoordinate || adminClinicWorkflowView;
+  const canViewClosedWorkflow =
+    isClosed &&
+    (staffIsAdmin || (staffIsPse && (staffIsPlatformPse || isAssignedToMe)));
+
+  const adminWorkflowView =
+    adminViewer && !isClosed && (isClinicRequest || pseCoordinationStarted);
+
+  const showWorkflowWizard = canCoordinate || adminWorkflowView || canViewClosedWorkflow;
 
   const needsAssignmentForAdmin =
-    staffIsAdmin && !staffIsPse && !isClinicRequest && !request.assigned_to && !isClosed;
+    adminViewer && !isClinicRequest && !pseCoordinationStarted && !isClosed;
 
   const adminViewingAssigned =
-    staffIsAdmin &&
-    !staffIsPse &&
-    !isClinicRequest &&
-    Boolean(request.assigned_to) &&
-    !isClosed;
+    adminViewer && !isClinicRequest && pseCoordinationStarted && !isClosed;
 
   const statusColor = requestStatusColor(request);
 
@@ -316,6 +334,19 @@ export default function RequestDetailDrawer({
 
             </div>
 
+          ) : adminViewer && pseCoordinationStarted ? (
+
+            <div className='request-detail-drawer__closed-banner' role='status'>
+
+              <IconUserCheck size={16} stroke={1.75} aria-hidden />
+
+              <Text size='sm'>
+                Assigned to {assignedExecutiveName ?? 'a Patient Service Executive'}. Coordination
+                steps are read-only for administrators.
+              </Text>
+
+            </div>
+
           ) : null}
 
         </header>
@@ -335,6 +366,16 @@ export default function RequestDetailDrawer({
             />
           ) : (
             <>
+          {feedbackMessage ? (
+            <Alert color='red' radius='md' mb='md'>
+              {feedbackMessage}
+            </Alert>
+          ) : null}
+          {feedbackSuccess ? (
+            <Alert color='green' radius='md' mb='md'>
+              {feedbackSuccess}
+            </Alert>
+          ) : null}
           {needsAssignmentForAdmin ? (
 
             <section className='request-detail-drawer__notice request-detail-drawer__notice--warn'>

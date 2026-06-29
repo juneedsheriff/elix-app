@@ -201,12 +201,13 @@ export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseReques
       columns.push({
         id: 'actions',
         header: '',
-        size: 80,
-        minSize: 70,
+        size: 130,
+        minSize: 120,
         enableSorting: false,
         enableColumnFilter: false,
+        enablePinning: true,
         Cell: ({ row }) => (
-          <Group gap={4} wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>
+          <Group gap='xs' wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>
             <Tooltip label='View request'>
               <ActionIcon
                 variant='subtle'

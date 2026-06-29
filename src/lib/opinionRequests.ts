@@ -417,9 +417,20 @@ export function isPatientRequestCompleted(
 
 /** Request submitted by patient but not yet assigned by admin. */
 export function isPendingAdminAssignment(
-  request: Pick<OpinionRequest, 'status' | 'assigned_to'>
+  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'consultation_stage'>
 ): boolean {
-  return request.status === 'submitted' && !request.assigned_to;
+  if (request.status !== 'submitted') return false;
+  if (request.assigned_to) return false;
+  if (request.consultation_stage && request.consultation_stage !== 'new') return false;
+  return true;
+}
+
+/** PSE coordination has started (assigned executive or workflow past "new"). */
+export function hasPseCoordinationStarted(
+  request: Pick<OpinionRequest, 'assigned_to' | 'consultation_stage'>
+): boolean {
+  if (request.assigned_to) return true;
+  return Boolean(request.consultation_stage && request.consultation_stage !== 'new');
 }
 
 /** @deprecated Use isPendingAdminAssignment */
@@ -430,9 +441,9 @@ export function isPendingAdminApproval(
 }
 
 export function isAssignedToPatientService(
-  request: Pick<OpinionRequest, 'status' | 'assigned_to'>
+  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'consultation_stage'>
 ): boolean {
-  return request.status === 'submitted' && Boolean(request.assigned_to);
+  return request.status === 'submitted' && hasPseCoordinationStarted(request);
 }
 
 export function consultationStageLabel(stage: ConsultationStage | null | undefined) {

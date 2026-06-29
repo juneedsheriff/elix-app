@@ -300,6 +300,7 @@ export function useDoctorsTableColumns({
         enableSorting: false,
         enableColumnFilter: false,
         enableGlobalFilter: false,
+        enablePinning: true,
         Cell: ({ row }) => {
           const doctor = row.original;
           const isPlatformGranted = grantedDoctorIds?.has(doctor.id) ?? false;

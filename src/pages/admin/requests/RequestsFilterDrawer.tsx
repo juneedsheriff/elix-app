@@ -22,6 +22,7 @@ type RequestsFilterDrawerProps = {
 const QUEUE_OPTIONS: { value: RequestQueueFilter; label: string }[] = [
   { value: 'all', label: 'All requests' },
   { value: 'pending', label: 'Pending requests' },
+  { value: 'assigned', label: 'Assigned to PSE' },
   { value: 'completed', label: 'Completed requests' }
 ];
 

@@ -6,6 +6,7 @@ import {
   deleteOpinionRequestForAdmin,
   fetchOpinionRequestsForStaff,
   isPendingAdminAssignment,
+  hasPseCoordinationStarted,
   staffRequestStatusLabel,
   subscribeStaffOpinionRequestUpdates
 } from '../../lib/opinionRequests';
@@ -77,6 +78,7 @@ export default function ElixHealthRequestsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<OpinionRequest | null>(null);
   const [assigneeId, setAssigneeId] = useState('');
+  const [coordinationUnlockedId, setCoordinationUnlockedId] = useState<string | null>(null);
   const assigneeDraftRef = useRef<Map<string, string>>(new Map());
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const stageSnapshotRef = useRef<Map<string, string | null>>(new Map());
@@ -168,7 +170,10 @@ export default function ElixHealthRequestsPage() {
           assigned_to: updated.assigned_to ?? current.assigned_to,
           assigned_to_name: updated.assigned_to_name ?? current.assigned_to_name,
           assigned_at: updated.assigned_at ?? current.assigned_at,
-          consultation_stage: updated.consultation_stage ?? current.consultation_stage,
+          consultation_stage:
+            hasPseCoordinationStarted(current) && !hasPseCoordinationStarted(updated)
+              ? current.consultation_stage ?? updated.consultation_stage
+              : updated.consultation_stage ?? current.consultation_stage,
           message: updated.message ?? current.message,
           requested_specialty: updated.requested_specialty ?? current.requested_specialty,
           patient_case_details: updated.patient_case_details ?? current.patient_case_details,
@@ -467,7 +472,10 @@ export default function ElixHealthRequestsPage() {
     setActionMessage(null);
     setSuccessMessage(null);
 
-    const { error: assignError } = await assignOpinionRequest(selectedRequest.id, assigneeId);
+    const { data: assignData, error: assignError } = await assignOpinionRequest(
+      selectedRequest.id,
+      assigneeId
+    );
     setBusyId(null);
 
     if (assignError) {
@@ -476,14 +484,14 @@ export default function ElixHealthRequestsPage() {
     }
 
     const executive = executives.find((e) => e.id === assigneeId);
-    const assignedAt = new Date().toISOString();
+    const assignedAt = assignData?.assigned_at ?? new Date().toISOString();
     const executiveName = executive?.full_name ?? 'Patient Service Executive';
     const assignedRequest: OpinionRequest = {
       ...selectedRequest,
-      assigned_to: assigneeId,
+      assigned_to: assignData?.assigned_to ?? assigneeId,
       assigned_to_name: executiveName,
       assigned_at: assignedAt,
-      consultation_stage: 'assigned'
+      consultation_stage: assignData?.consultation_stage ?? 'assigned'
     };
 
     setRequests((prev) =>
@@ -491,17 +499,16 @@ export default function ElixHealthRequestsPage() {
     );
     assigneeDraftRef.current.set(selectedRequest.id, assigneeId);
     setAssigneeId(assigneeId);
-    setSelectedRequest(null);
-    setDrawerOpen(false);
+    setSelectedRequest(assignedRequest);
+    setCoordinationUnlockedId(selectedRequest.id);
     setSuccessMessage(
-      `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executiveName}.`
+      `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executiveName}. You can review coordination steps below.`
     );
-    void refresh();
   };
 
   const pageTitle = isPse ? 'My assigned requests' : 'Opinion requests';
   const pageSubtitle = isAdmin
-    ? `${analytics.pendingQueue} pending assignment · ${analytics.total} total`
+    ? `${analytics.pendingQueue} pending assignment · ${analytics.assignedQueue} assigned · ${analytics.total} total`
     : `${analytics.pendingQueue} awaiting coordination · ${analytics.total} assigned to you`;
   const pendingCardLabel = isAdmin ? 'Pending Assignment' : 'Awaiting Coordination';
 
@@ -560,7 +567,8 @@ export default function ElixHealthRequestsPage() {
       <RequestsAnalyticsCards
         analytics={analytics}
         pendingLabel={pendingCardLabel}
-        showPatientSelections={isPse || isAdmin}
+        showPatientSelections={isPse}
+        showAssigned={isAdmin}
         loading={loading}
       />
 
@@ -583,8 +591,10 @@ export default function ElixHealthRequestsPage() {
               filters={filters}
               specialtyOptions={specialtyOptions}
               pendingCount={analytics.pendingQueue}
+              assignedCount={analytics.assignedQueue}
               completedCount={analytics.closed}
               totalCount={analytics.total}
+              showAssignedQueue={isAdmin}
               onFilterChange={setFilters}
             />
           )}
@@ -606,10 +616,14 @@ export default function ElixHealthRequestsPage() {
       <RequestDetailDrawer
         request={selectedRequest}
         opened={drawerOpen}
+        coordinationUnlocked={selectedRequest?.id === coordinationUnlockedId}
+        feedbackMessage={actionMessage}
+        feedbackSuccess={successMessage}
         onClose={() => {
           if (selectedRequest && assigneeId) {
             assigneeDraftRef.current.set(selectedRequest.id, assigneeId);
           }
+          setCoordinationUnlockedId(null);
           setDrawerOpen(false);
         }}
         isAdmin={isAdmin}

@@ -233,6 +233,7 @@ export function usePatientsTableColumns({
         enableSorting: false,
         enableColumnFilter: false,
         enableGlobalFilter: false,
+        enablePinning: true,
         Cell: ({ row }) => {
           const patient = row.original;
           const editPath = patientEditUrl(patient.id);

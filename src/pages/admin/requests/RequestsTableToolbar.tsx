@@ -17,14 +17,17 @@ type RequestsTableToolbarProps = {
   filters: RequestQuickFilters;
   specialtyOptions: string[];
   pendingCount: number;
+  assignedCount: number;
   completedCount: number;
   totalCount: number;
+  showAssignedQueue?: boolean;
   onFilterChange: (filters: RequestQuickFilters) => void;
 };
 
 const QUEUE_QUICK: { value: RequestQueueFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'pending', label: 'Pending' },
+  { value: 'assigned', label: 'Assigned' },
   { value: 'completed', label: 'Completed' }
 ];
 
@@ -37,18 +40,26 @@ function RequestsTableToolbar({
   filters,
   specialtyOptions,
   pendingCount,
+  assignedCount,
   completedCount,
   totalCount,
+  showAssignedQueue = false,
   onFilterChange
 }: RequestsTableToolbarProps) {
-  const queueData = QUEUE_QUICK.map((option) => ({
+  const queueOptions = showAssignedQueue
+    ? QUEUE_QUICK
+    : QUEUE_QUICK.filter((option) => option.value !== 'assigned');
+
+  const queueData = queueOptions.map((option) => ({
     ...option,
     label: `${option.label} (${
       option.value === 'pending'
         ? pendingCount
-        : option.value === 'completed'
-          ? completedCount
-          : totalCount
+        : option.value === 'assigned'
+          ? assignedCount
+          : option.value === 'completed'
+            ? completedCount
+            : totalCount
     })`
   }));
 

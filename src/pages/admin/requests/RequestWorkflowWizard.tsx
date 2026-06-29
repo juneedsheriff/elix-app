@@ -10,6 +10,7 @@ import {
   getWizardSteps,
   canPseSendPaymentLink,
   hasConsultationSummary,
+  isConsultationNotesComplete,
   readPseWizardStoredStep,
   resolvePsePaymentQuote,
   resolveWizardStepOnUpdate,
@@ -134,6 +135,9 @@ export default function RequestWorkflowWizard({
     [request, recommendations.length, summary]
   );
 
+  const isClosedRequest = request.status === 'closed';
+  const isReadOnlyView = !canCoordinate;
+
   const suggestedStep = useMemo(() => getSuggestedActiveStep(progressCtx, 'pse'), [progressCtx]);
   const maxNavigableStep = useMemo(
     () => getMaxCompletedStepIndex(progressCtx, 'pse') + 1,
@@ -141,13 +145,14 @@ export default function RequestWorkflowWizard({
   );
 
   useEffect(() => {
+    if (isClosedRequest && !canCoordinate) return;
     const next = resolveWizardStepOnUpdate(request.id, suggestedStep, stepStateRef.current, {
       audience: 'pse',
       maxNavigableStep
     });
     stepStateRef.current = next;
     setExpandedStep(next.step);
-  }, [request.id, suggestedStep, maxNavigableStep]);
+  }, [request.id, suggestedStep, maxNavigableStep, isClosedRequest, canCoordinate]);
 
   useEffect(() => {
     return subscribeOpinionRequestLiveUpdates(request.id, (hint) => {
@@ -173,6 +178,11 @@ export default function RequestWorkflowWizard({
     [request, doctors, recommendations]
   );
 
+  const canNavigateStep = (index: number) =>
+    isClosedRequest || isReadOnlyView
+      ? index >= 0 && index < wizardSteps.length
+      : canPseNavigateToStep(index, progressCtx);
+
   const setExpandedStepTracked = (index: number | null) => {
     if (index !== null) {
       writePseWizardStoredStep(request.id, index);
@@ -181,13 +191,29 @@ export default function RequestWorkflowWizard({
     setExpandedStep(index);
   };
 
+  useEffect(() => {
+    if (!isClosedRequest || canCoordinate) return;
+    const lastIndex = wizardSteps.length - 1;
+    const target = isConsultationNotesComplete(progressCtx)
+      ? lastIndex
+      : Math.max(getMaxCompletedStepIndex(progressCtx, 'pse'), 0);
+    setExpandedStepTracked(target);
+  }, [
+    isClosedRequest,
+    canCoordinate,
+    request.id,
+    progressCtx.hasSummary,
+    progressCtx.recommendationsCount,
+    wizardSteps.length
+  ]);
+
   const toggleStep = (index: number) => {
-    if (!canPseNavigateToStep(index, progressCtx)) return;
+    if (!canNavigateStep(index)) return;
     setExpandedStepTracked(expandedStep === index ? null : index);
   };
 
   const goToStep = (index: number) => {
-    if (!canPseNavigateToStep(index, progressCtx)) return;
+    if (!canNavigateStep(index)) return;
     setExpandedStepTracked(index);
   };
 
@@ -426,9 +452,11 @@ export default function RequestWorkflowWizard({
                 {request.assigned_to_name}
               </Text>
             ) : null}
-            <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(1)}>
-              Continue to case details →
-            </Button>
+            {canCoordinate ? (
+              <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(1)}>
+                Continue to case details →
+              </Button>
+            ) : null}
           </Stack>
         );
       case 1:
@@ -653,15 +681,29 @@ export default function RequestWorkflowWizard({
           <Stack gap='sm' className='request-workflow-step'>
             {hasConsultationSummary(summary) && summary ? (
               <ConsultationSummaryPdfView summary={summary} request={request} />
+            ) : request.doctor_response?.trim() ? (
+              <>
+                <Text fw={600} size='sm'>
+                  Doctor response
+                </Text>
+                <Text size='sm'>{request.doctor_response}</Text>
+                {request.responded_at ? (
+                  <Text size='xs' c='dimmed'>
+                    Submitted {new Date(request.responded_at).toLocaleString()}
+                  </Text>
+                ) : null}
+              </>
             ) : (
               <Text size='sm' c='dimmed'>
                 No consultation summary yet. The doctor submits notes after the appointment is
                 completed.
               </Text>
             )}
-            <Button variant='subtle' size='xs' onClick={() => void loadMeta()}>
-              Refresh
-            </Button>
+            {canCoordinate ? (
+              <Button variant='subtle' size='xs' onClick={() => void loadMeta()}>
+                Refresh
+              </Button>
+            ) : null}
           </Stack>
         );
       default:
@@ -677,7 +719,7 @@ export default function RequestWorkflowWizard({
       steps={wizardSteps}
       expandedIndex={expandedStep}
       suggestedIndex={suggestedStep}
-      canNavigate={(index) => canPseNavigateToStep(index, progressCtx)}
+      canNavigate={canNavigateStep}
       onToggle={toggleStep}
       renderPanel={renderStepContent}
     />

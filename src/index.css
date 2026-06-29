@@ -4014,6 +4014,11 @@ body:has(.elixhealth-app),
   height: 100%;
   display: flex !important;
   flex-direction: column !important;
+  --mrt-base-background-color: var(--surface);
+  --mrt-pinned-column-background-color: var(--surface);
+  --mrt-striped-row-background-color: var(--surface-soft);
+  --mrt-row-hover-background-color: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface));
+  --mrt-striped-row-hover-background-color: color-mix(in srgb, var(--brand-cyan) 6%, var(--surface-soft));
 }
 
 .elixhealth-mrt-paper .mrt-top-toolbar {
@@ -4055,6 +4060,13 @@ body:has(.elixhealth-app),
 
 .elixhealth-mrt-paper table {
   min-width: max-content;
+}
+
+/* Pinned actions column — doctors, patients, requests (admin + PSE).
+   MRT sets data-column-pinned="right" and position:sticky via mantine-react-table/styles.css. */
+.elixhealth-mrt-paper th[data-column-pinned='right'][data-first-right-pinned]::before,
+.elixhealth-mrt-paper td[data-column-pinned='right'][data-first-right-pinned]::before {
+  box-shadow: -8px 0 14px rgba(15, 47, 70, 0.1) inset !important;
 }
 
 .elixhealth-mrt-head-cell,

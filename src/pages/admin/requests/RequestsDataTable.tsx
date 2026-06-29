@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -6,6 +6,10 @@ import {
   type MRT_TableInstance
 } from 'mantine-react-table';
 import type { OpinionRequest } from '../../../types/opinionRequest';
+import {
+  adminMgmtTableColumnPinning,
+  adminMgmtTablePinningOptions
+} from '../components/adminMgmtTablePinning';
 import RequestsEmptyState from './RequestsEmptyState';
 
 export type RequestsTableToolbarRenderProps = {
@@ -55,12 +59,14 @@ function RequestsDataTable({
     };
   }, [fullScreen]);
 
+  const columnPinning = useMemo(() => ({ ...adminMgmtTableColumnPinning }), []);
+
   const table = useMantineReactTable({
     columns,
     data,
-    state: { isLoading },
+    state: { isLoading, columnPinning },
+    ...adminMgmtTablePinningOptions,
     layoutMode: 'grid-no-grow',
-    enableColumnPinning: false,
     enableColumnActions: true,
     enableColumnFilters: true,
     enableColumnFilterModes: false,
@@ -80,7 +86,8 @@ function RequestsDataTable({
     positionPagination: 'bottom',
     initialState: {
       density: 'comfortable',
-      pagination: { pageSize: 25, pageIndex: 0 }
+      pagination: { pageSize: 25, pageIndex: 0 },
+      columnPinning: adminMgmtTableColumnPinning
     },
     mantinePaperProps: {
       shadow: 'none',

@@ -560,6 +560,10 @@ body.doctors-mgmt-table-fullscreen-open {
   text-transform: capitalize;
 }
 
+.doctors-mgmt-actions {
+  gap: 0.625rem;
+}
+
 .doctors-mgmt-action {
   transition:
     transform 140ms ease,

@@ -2,6 +2,7 @@ import { MantineProvider, createTheme, localStorageColorSchemeManager } from '@m
 import { DatesProvider } from '@mantine/dates';
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
+import 'mantine-react-table/styles.css';
 import type { ReactNode } from 'react';
 import 'dayjs/locale/en';
 

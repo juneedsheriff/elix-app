@@ -5,7 +5,8 @@ import {
   IconClock,
   IconStethoscope,
   IconCircleCheck,
-  IconCalendarUser
+  IconCalendarUser,
+  IconUserCheck
 } from '@tabler/icons-react';
 import type { RequestAnalytics } from './requestsUtils';
 
@@ -13,6 +14,7 @@ type RequestsAnalyticsCardsProps = {
   analytics: RequestAnalytics;
   pendingLabel: string;
   showPatientSelections?: boolean;
+  showAssigned?: boolean;
   loading?: boolean;
 };
 
@@ -51,9 +53,10 @@ function RequestsAnalyticsCards({
   analytics,
   pendingLabel,
   showPatientSelections = false,
+  showAssigned = false,
   loading
 }: RequestsAnalyticsCardsProps) {
-  const cards = showPatientSelections
+  let cards = showPatientSelections
     ? CARDS.map((card) =>
         card.key === 'pending'
           ? {
@@ -66,8 +69,30 @@ function RequestsAnalyticsCards({
       )
     : CARDS;
 
+  if (showAssigned) {
+    const pendingIndex = cards.findIndex((card) => card.key === 'pending');
+    const assignedCard = {
+      key: 'assigned',
+      label: 'Assigned to PSE',
+      icon: IconUserCheck,
+      gradient: 'doctors-mgmt-stat--specialties',
+      value: (a: RequestAnalytics) => a.assignedQueue.toLocaleString()
+    };
+    cards =
+      pendingIndex >= 0
+        ? [
+            ...cards.slice(0, pendingIndex + 1),
+            assignedCard,
+            ...cards.slice(pendingIndex + 1)
+          ]
+        : [...cards, assignedCard];
+  }
+
   return (
-    <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} className='doctors-mgmt-stats'>
+    <SimpleGrid
+      cols={{ base: 1, xs: 2, lg: showAssigned ? 5 : 4 }}
+      className='doctors-mgmt-stats'
+    >
       {cards.map(({ key, label, icon: Icon, gradient, value }) => (
         <Paper
           key={key}

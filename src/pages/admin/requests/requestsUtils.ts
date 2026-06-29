@@ -1,11 +1,12 @@
 import {
+  hasPseCoordinationStarted,
   isAssignedToPatientService,
   isPendingAdminAssignment,
   staffRequestStatusLabel
 } from '../../../lib/opinionRequests';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 
-export type RequestQueueFilter = 'all' | 'pending' | 'completed';
+export type RequestQueueFilter = 'all' | 'pending' | 'assigned' | 'completed';
 export type RequestWorkspaceFilter = 'all' | 'global' | `clinic:${string}`;
 
 export type RequestStatusFilter =
@@ -37,6 +38,7 @@ export function getDefaultRequestFilters(isAdmin: boolean): RequestQuickFilters 
 export type RequestAnalytics = {
   total: number;
   pendingQueue: number;
+  assignedQueue: number;
   patientSelectionsToReview: number;
   withDoctor: number;
   closed: number;
@@ -70,7 +72,9 @@ export function requestStatusKey(
 ): RequestStatusFilter {
   if (request.doctor_response?.trim() || request.status === 'closed') return 'closed';
   if (request.status === 'in_review') return 'with_doctor';
-  if (request.status === 'submitted' && request.assigned_to) return 'with_patient_service';
+  if (request.status === 'submitted' && hasPseCoordinationStarted(request)) {
+    return 'with_patient_service';
+  }
   if (request.status === 'submitted') return 'pending_assignment';
   return 'all';
 }
@@ -100,6 +104,7 @@ export function computeRequestAnalytics(
     pendingQueue: isAdmin
       ? requests.filter(isPendingAdminAssignment).length
       : requests.filter(isAssignedToPatientService).length,
+    assignedQueue: isAdmin ? requests.filter(isAssignedToPatientService).length : 0,
     patientSelectionsToReview: requests.filter(needsScheduleReview).length,
     withDoctor: requests.filter((r) => r.status === 'in_review').length,
     closed: requests.filter(
@@ -123,6 +128,9 @@ export function applyRequestQuickFilters(
     if (filters.queue === 'pending') {
       if (isAdmin && !isPendingAdminAssignment(request)) return false;
       if (!isAdmin && !isAssignedToPatientService(request)) return false;
+    }
+    if (filters.queue === 'assigned') {
+      if (!isAssignedToPatientService(request)) return false;
     }
     if (filters.queue === 'completed') {
       const isCompleted =
