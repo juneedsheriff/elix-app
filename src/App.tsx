@@ -284,10 +284,30 @@ function App() {
       return;
     }
     setAuthBusy(true);
-    const { error, doctor, patient, mustChangePassword } = await signIn(email.trim(), password, {
-      patientLoginOnly: loginMode === 'patient'
-    });
-    setAuthBusy(false);
+    let error: { message: string } | null = null;
+    let doctor: Awaited<ReturnType<typeof signIn>>['doctor'] = null;
+    let patient: Awaited<ReturnType<typeof signIn>>['patient'] = null;
+    let mustChangePassword = false;
+
+    try {
+      const result = await signIn(email.trim(), password, {
+        patientLoginOnly: loginMode === 'patient'
+      });
+      error = result.error;
+      doctor = result.doctor;
+      patient = result.patient;
+      mustChangePassword = result.mustChangePassword;
+    } catch (signInError) {
+      error = {
+        message:
+          signInError instanceof Error
+            ? `Sign in failed: ${signInError.message}`
+            : 'Sign in failed due to an unexpected error.'
+      };
+    } finally {
+      setAuthBusy(false);
+    }
+
     if (error) {
       setAuthError(error.message);
       return;

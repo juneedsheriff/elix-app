@@ -223,45 +223,93 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string, options?: SignInOptions) => {
-    if (!isSupabaseConfigured) {
-      return {
-        error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError,
-        doctor: null,
-        patient: null,
-        mustChangePassword: false
-      };
-    }
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error, doctor: null, patient: null, mustChangePassword: false };
-
-    const user = data.user;
-    const doctor = user ? await resolveDoctorForUser(user) : null;
-    const admin = user ? (await fetchAdminByAuthUserId(user.id)).data : null;
-    let patient = user && !admin ? await resolvePatientForUser(user) : null;
-
-    if (options?.patientLoginOnly) {
-      if (doctor || admin) {
-        await supabase.auth.signOut();
+    try {
+      if (!isSupabaseConfigured) {
         return {
-          error: {
-            message: 'No registration found.',
-            name: 'AuthError',
-            status: 403
-          } as AuthError,
+          error: { message: 'ElixClinix is not configured', name: 'AuthError', status: 500 } as AuthError,
           doctor: null,
           patient: null,
           mustChangePassword: false
         };
       }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { error, doctor: null, patient: null, mustChangePassword: false };
 
-      if (!patient) {
-        const claimed = await claimPatientProfileForLogin();
-        patient = claimed.data;
-        if (!patient && claimed.error) {
+      const user = data.user;
+      const doctor = user ? await resolveDoctorForUser(user) : null;
+      const admin = user ? (await fetchAdminByAuthUserId(user.id)).data : null;
+      let patient = user && !admin ? await resolvePatientForUser(user) : null;
+
+      if (options?.patientLoginOnly) {
+        if (doctor || admin) {
           await supabase.auth.signOut();
           return {
             error: {
-              message: claimed.error.message,
+              message: 'No registration found.',
+              name: 'AuthError',
+              status: 403
+            } as AuthError,
+            doctor: null,
+            patient: null,
+            mustChangePassword: false
+          };
+        }
+
+        if (!patient) {
+          const claimed = await claimPatientProfileForLogin();
+          patient = claimed.data;
+          if (!patient && claimed.error) {
+            await supabase.auth.signOut();
+            return {
+              error: {
+                message: claimed.error.message,
+                name: 'AuthError',
+                status: 500
+              } as AuthError,
+              doctor: null,
+              patient: null,
+              mustChangePassword: false
+            };
+          }
+        }
+
+        if (patient?.login_disabled) {
+          await supabase.auth.signOut();
+          return {
+            error: {
+              message:
+                'Your patient login is not enabled yet. Ask your clinic to enable login for your account.',
+              name: 'AuthError',
+              status: 403
+            } as AuthError,
+            doctor: null,
+            patient: null,
+            mustChangePassword: false
+          };
+        }
+
+        if (!patient) {
+          await supabase.auth.signOut();
+          return {
+            error: {
+              message:
+                'No registration found. Use the email your clinic registered for you, or ask them to enable patient login.',
+              name: 'AuthError',
+              status: 403
+            } as AuthError,
+            doctor: null,
+            patient: null,
+            mustChangePassword: false
+          };
+        }
+      } else if (user && !doctor && !patient && !admin) {
+        const ensured = await ensurePatientProfile(user);
+        patient = ensured.data;
+        if (!patient && ensured.error) {
+          await supabase.auth.signOut();
+          return {
+            error: {
+              message: `Signed in but patient profile failed: ${ensured.error.message}`,
               name: 'AuthError',
               status: 500
             } as AuthError,
@@ -272,64 +320,34 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (patient?.login_disabled) {
-        await supabase.auth.signOut();
-        return {
-          error: {
-            message:
-              'Your patient login is not enabled yet. Ask your clinic to enable login for your account.',
-            name: 'AuthError',
-            status: 403
-          } as AuthError,
-          doctor: null,
-          patient: null,
-          mustChangePassword: false
-        };
-      }
-
-      if (!patient) {
-        await supabase.auth.signOut();
-        return {
-          error: {
-            message:
-              'No registration found. Use the email your clinic registered for you, or ask them to enable patient login.',
-            name: 'AuthError',
-            status: 403
-          } as AuthError,
-          doctor: null,
-          patient: null,
-          mustChangePassword: false
-        };
-      }
-    } else if (user && !doctor && !patient && !admin) {
-      const ensured = await ensurePatientProfile(user);
-      patient = ensured.data;
-      if (!patient && ensured.error) {
-        await supabase.auth.signOut();
-        return {
-          error: {
-            message: `Signed in but patient profile failed: ${ensured.error.message}`,
-            name: 'AuthError',
-            status: 500
-          } as AuthError,
-          doctor: null,
-          patient: null,
-          mustChangePassword: false
-        };
-      }
+      setSession(data.session);
+      setDoctorProfile(doctor);
+      setPatientProfile(admin ? null : patient);
+      const mustChangePassword = Boolean(
+        options?.patientLoginOnly &&
+        patient &&
+        user?.user_metadata &&
+        typeof user.user_metadata === 'object' &&
+        (user.user_metadata as Record<string, unknown>).force_password_change
+      );
+      return { error: null, doctor, patient, mustChangePassword };
+    } catch (unknownError) {
+      const message =
+        unknownError instanceof Error
+          ? unknownError.message
+          : 'Unexpected sign-in failure. Please try again.';
+      await supabase.auth.signOut();
+      return {
+        error: {
+          message,
+          name: 'AuthError',
+          status: 500
+        } as AuthError,
+        doctor: null,
+        patient: null,
+        mustChangePassword: false
+      };
     }
-
-    setSession(data.session);
-    setDoctorProfile(doctor);
-    setPatientProfile(admin ? null : patient);
-    const mustChangePassword = Boolean(
-      options?.patientLoginOnly &&
-      patient &&
-      user?.user_metadata &&
-      typeof user.user_metadata === 'object' &&
-      (user.user_metadata as Record<string, unknown>).force_password_change
-    );
-    return { error: null, doctor, patient, mustChangePassword };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, profile?: Partial<PatientUpsertInput>) => {
