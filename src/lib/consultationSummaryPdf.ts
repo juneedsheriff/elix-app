@@ -10,6 +10,7 @@ import type { ConsultationSummary } from '../types/opinionRequest';
 export type ConsultationSummaryPdfMeta = {
   patientName?: string | null;
   patientEmail?: string | null;
+  patientId?: string | null;
   doctor?: Doctor | null;
   doctorName?: string | null;
   doctorSpecialty?: string | null;
@@ -40,6 +41,10 @@ function doctorDisplayName(meta: ConsultationSummaryPdfMeta): string | null {
 function doctorSpecialty(meta: ConsultationSummaryPdfMeta): string | null {
   if (meta.doctor?.specialty?.trim()) return meta.doctor.specialty.trim();
   return meta.doctorSpecialty?.trim() ?? null;
+}
+
+function shortId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
 }
 
 async function buildConsultationSummaryPdf(
@@ -118,7 +123,7 @@ async function buildConsultationSummaryPdf(
 
   addLine('Patient', 11, true);
   if (meta.patientName) addLine(meta.patientName, 11);
-  if (meta.patientEmail) addLine(meta.patientEmail, 10);
+  if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 10);
   y += 8;
 
   addLine('Consultation provider', 11, true);
@@ -174,6 +179,7 @@ async function buildConsultationSummaryPdf(
 export function consultationSummaryPdfMetaFromRequest(
   request: {
     id?: string;
+    patient_id?: string | null;
     patient_name?: string | null;
     patient_email?: string | null;
     doctor_name?: string | null;
@@ -183,6 +189,7 @@ export function consultationSummaryPdfMetaFromRequest(
   doctor?: Doctor | null
 ): ConsultationSummaryPdfMeta {
   return {
+    patientId: request.patient_id,
     patientName: request.patient_name,
     patientEmail: request.patient_email,
     doctor: doctor ?? null,

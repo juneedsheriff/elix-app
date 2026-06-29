@@ -3,7 +3,7 @@ import { ELIX_LOGO_SRC } from './brandAssets';
 
 export const ELIX_BRAND = {
   legalName: 'ElixClinix',
-  tagline: 'Doctor consultation & teleconsultation platform',
+  tagline: 'Doctor consultation & video consultation platform',
   email: 'support@elixhealth.com',
   website: 'www.elixhealth.com'
 } as const;
