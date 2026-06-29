@@ -229,8 +229,15 @@ export default function ChatPatientOnboarding({
 
   const finishProfile = async (draft: typeof profileDraft) => {
     setTyping(true);
-    const { error } = await onCompleteProfile(draft);
-    setTyping(false);
+    let error: string | null = null;
+    try {
+      const result = await onCompleteProfile(draft);
+      error = result.error;
+    } catch (unknownError) {
+      error = unknownError instanceof Error ? unknownError.message : 'Unexpected error while saving profile.';
+    } finally {
+      setTyping(false);
+    }
 
     if (error) {
       setLocalError(error);
@@ -346,8 +353,17 @@ export default function ChatPatientOnboarding({
       setEmail(value);
 
       setTyping(true);
-      const { error, skipVerification } = await onSendEmailOtp(value, fullName);
-      setTyping(false);
+      let error: string | null = null;
+      let skipVerification = false;
+      try {
+        const result = await onSendEmailOtp(value, fullName);
+        error = result.error;
+        skipVerification = Boolean(result.skipVerification);
+      } catch (unknownError) {
+        error = unknownError instanceof Error ? unknownError.message : 'Could not send verification code.';
+      } finally {
+        setTyping(false);
+      }
 
       if (error) {
         setLocalError(error);
@@ -381,8 +397,15 @@ export default function ChatPatientOnboarding({
       pushUser('••••••••');
 
       setTyping(true);
-      const { error } = await onSetPassword(value, fullName, email);
-      setTyping(false);
+      let error: string | null = null;
+      try {
+        const result = await onSetPassword(value, fullName, email);
+        error = result.error;
+      } catch (unknownError) {
+        error = unknownError instanceof Error ? unknownError.message : 'Could not save your password.';
+      } finally {
+        setTyping(false);
+      }
 
       if (error) {
         setLocalError(error);
@@ -406,8 +429,15 @@ export default function ChatPatientOnboarding({
 
     pushUser(code);
     setTyping(true);
-    const { error } = await onVerifyEmailCode(email, code, fullName);
-    setTyping(false);
+    let error: string | null = null;
+    try {
+      const result = await onVerifyEmailCode(email, code, fullName);
+      error = result.error;
+    } catch (unknownError) {
+      error = unknownError instanceof Error ? unknownError.message : 'Verification failed.';
+    } finally {
+      setTyping(false);
+    }
 
     if (error) {
       setLocalError(error);

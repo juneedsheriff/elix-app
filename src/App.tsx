@@ -476,15 +476,25 @@ function App() {
 
   const handleSetSignupPassword = async (password: string, fullName: string, emailAddress: string) => {
     setAuthBusy(true);
-    const { error } = await completeSignupWithPassword(password, {
-      full_name: fullName,
-      email: emailAddress,
-      preferred_language: language
-    });
-    setAuthBusy(false);
-    if (error) return { error: error.message };
-    await refreshPatientProfile();
-    return { error: null };
+    try {
+      const { error } = await completeSignupWithPassword(password, {
+        full_name: fullName,
+        email: emailAddress,
+        preferred_language: language
+      });
+      if (error) return { error: error.message };
+      await refreshPatientProfile();
+      return { error: null };
+    } catch (unknownError) {
+      return {
+        error:
+          unknownError instanceof Error
+            ? `Could not complete signup: ${unknownError.message}`
+            : 'Could not complete signup due to an unexpected error.'
+      };
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
   const handleCompleteProfile = async (input: {
