@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Group, Modal, Stack, Text } from '@mantine/core';
-import { fetchAllPatientsForAdmin } from '../../lib/admins';
+import { fetchAllPatientsForAdmin, deletePatientForAdmin } from '../../lib/admins';
 import {
   countOpinionRequestsForPatient,
   deleteAllOpinionRequestsForPatientForAdmin
@@ -70,6 +70,9 @@ export default function ElixHealthPatientsPage() {
   const [deleteRequestsPatient, setDeleteRequestsPatient] = useState<Patient | null>(null);
   const [deleteRequestsCount, setDeleteRequestsCount] = useState<number | null>(null);
   const [deleteRequestsBusy, setDeleteRequestsBusy] = useState(false);
+  const [deletePatient, setDeletePatient] = useState<Patient | null>(null);
+  const [deletePatientRequestsCount, setDeletePatientRequestsCount] = useState<number | null>(null);
+  const [deletePatientBusy, setDeletePatientBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -234,10 +237,49 @@ export default function ElixHealthPatientsPage() {
     );
   }, [deleteRequestsPatient]);
 
+  const openDeletePatient = useCallback(async (patient: Patient) => {
+    setDeletePatient(patient);
+    setDeletePatientRequestsCount(null);
+    if (patient.auth_user_id) {
+      const { count, error: countError } = await countOpinionRequestsForPatient(patient.auth_user_id);
+      if (countError) {
+        setActionMessage(countError.message);
+        setDeletePatient(null);
+        return;
+      }
+      setDeletePatientRequestsCount(count);
+    } else {
+      setDeletePatientRequestsCount(0);
+    }
+  }, []);
+
+  const confirmDeletePatient = useCallback(async () => {
+    const patient = deletePatient;
+    if (!patient) return;
+
+    setDeletePatientBusy(true);
+    setActionMessage(null);
+    const { error: deleteError } = await deletePatientForAdmin(patient.id);
+    setDeletePatientBusy(false);
+
+    if (deleteError) {
+      setActionMessage(deleteError.message);
+      return;
+    }
+
+    setDeletePatient(null);
+    setDeletePatientRequestsCount(null);
+    setPatients((current) => current.filter((row) => row.id !== patient.id));
+    setSuccessMessage(
+      `${patient.full_name} was removed from active patient listings and login was disabled.`
+    );
+  }, [deletePatient]);
+
   const columns = usePatientsTableColumns({
     canEdit,
     isAdmin,
-    onDeleteAllRequests: isAdmin ? (patient) => void openDeleteAllRequests(patient) : undefined
+    onDeleteAllRequests: isAdmin ? (patient) => void openDeleteAllRequests(patient) : undefined,
+    onDeletePatient: isAdmin ? (patient) => void openDeletePatient(patient) : undefined
   });
 
   const clearFilters = useCallback(() => {
@@ -376,6 +418,63 @@ export default function ElixHealthPatientsPage() {
               onClick={() => void confirmDeleteAllRequests()}
             >
               Delete all
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={Boolean(deletePatient)}
+        onClose={() => {
+          if (!deletePatientBusy) {
+            setDeletePatient(null);
+            setDeletePatientRequestsCount(null);
+          }
+        }}
+        title='Delete patient?'
+        radius='lg'
+        centered
+        classNames={{ content: 'doctors-mgmt-modal' }}
+      >
+        <Stack gap='md'>
+          <Text size='sm'>
+            {deletePatient ? (
+              <>
+                Delete <strong>{deletePatient.full_name}</strong>? This removes them from active
+                patient listings and disables their login. Medical records in the vault and existing
+                opinion requests are not deleted
+                {deletePatientRequestsCount !== null && deletePatientRequestsCount > 0 ? (
+                  <>
+                    {' '}
+                    ({deletePatientRequestsCount} open request
+                    {deletePatientRequestsCount === 1 ? '' : 's'} remain in the system).
+                  </>
+                ) : (
+                  '.'
+                )}
+              </>
+            ) : null}
+          </Text>
+          <Group justify='flex-end' gap='sm'>
+            <Button
+              variant='default'
+              radius='md'
+              disabled={deletePatientBusy}
+              onClick={() => {
+                setDeletePatient(null);
+                setDeletePatientRequestsCount(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              color='red'
+              radius='md'
+              loading={deletePatientBusy}
+              disabled={deletePatientRequestsCount === null}
+              onClick={() => void confirmDeletePatient()}
+            >
+              Delete patient
             </Button>
           </Group>
         </Stack>

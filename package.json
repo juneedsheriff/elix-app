@@ -70,6 +70,7 @@
     "db:apply-grant-doctor-to-clinic": "node scripts/apply-grant-doctor-to-clinic.mjs",
     "db:apply-clinic-doctors-realtime": "node scripts/apply-clinic-doctors-realtime.mjs",
     "db:apply-admin-clinic-patients": "node scripts/apply-admin-clinic-patients.mjs",
+    "db:apply-patient-soft-delete": "node scripts/apply-patient-soft-delete.mjs",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "db:seed-pse": "node scripts/seed-pse.mjs"
   },

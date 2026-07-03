@@ -33,6 +33,7 @@ type UsePatientsTableColumnsOptions = {
   canEdit: boolean;
   isAdmin: boolean;
   onDeleteAllRequests?: (patient: Patient) => void;
+  onDeletePatient?: (patient: Patient) => void;
 };
 
 function displayCell(value: string | null | undefined) {
@@ -48,7 +49,8 @@ function formatDate(iso: string | null | undefined) {
 export function usePatientsTableColumns({
   canEdit,
   isAdmin,
-  onDeleteAllRequests
+  onDeleteAllRequests,
+  onDeletePatient
 }: UsePatientsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<Patient>[]>(
     () => [
@@ -228,8 +230,8 @@ export function usePatientsTableColumns({
       {
         id: 'actions',
         header: '',
-        size: 110,
-        minSize: 100,
+        size: 130,
+        minSize: 120,
         enableSorting: false,
         enableColumnFilter: false,
         enableGlobalFilter: false,
@@ -238,7 +240,7 @@ export function usePatientsTableColumns({
           const patient = row.original;
           const editPath = patientEditUrl(patient.id);
           return (
-            <Group gap={4} wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>
+            <Group gap='xs' wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>
               <Tooltip label={canEdit ? 'Edit profile' : 'View profile'}>
                 <ActionIcon
                   component={Link}
@@ -253,6 +255,21 @@ export function usePatientsTableColumns({
                   {canEdit ? <IconPencil size={18} /> : <IconEye size={18} />}
                 </ActionIcon>
               </Tooltip>
+              {isAdmin && onDeletePatient ? (
+                <Tooltip label='Delete patient'>
+                  <ActionIcon
+                    variant='subtle'
+                    color='red'
+                    radius='md'
+                    size='lg'
+                    className='doctors-mgmt-action'
+                    aria-label={`Delete ${patient.full_name}`}
+                    onClick={() => onDeletePatient(patient)}
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              ) : null}
               <Menu position='bottom-end' withinPortal shadow='md' radius='md'>
                 <Menu.Target>
                   <ActionIcon
@@ -298,6 +315,15 @@ export function usePatientsTableColumns({
                       Delete all opinion requests
                     </Menu.Item>
                   ) : null}
+                  {isAdmin && onDeletePatient ? (
+                    <Menu.Item
+                      color='red'
+                      leftSection={<IconTrash size={16} />}
+                      onClick={() => onDeletePatient(patient)}
+                    >
+                      Delete patient
+                    </Menu.Item>
+                  ) : null}
                 </Menu.Dropdown>
               </Menu>
             </Group>
@@ -305,6 +331,6 @@ export function usePatientsTableColumns({
         }
       }
     ],
-    [canEdit, isAdmin, onDeleteAllRequests]
+    [canEdit, isAdmin, onDeleteAllRequests, onDeletePatient]
   );
 }

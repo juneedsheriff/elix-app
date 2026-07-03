@@ -211,6 +211,7 @@ export async function fetchAllPatientsForAdmin() {
   const withClinic = await supabase
     .from('patients')
     .select(patientAdminColumnsWithClinic)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (!withClinic.error) {
@@ -218,6 +219,10 @@ export async function fetchAllPatientsForAdmin() {
       data: (withClinic.data ?? []).map((row) => mapPatientAdminRow(row as PatientAdminRow)),
       error: null
     };
+  }
+
+  if (!/deleted_at|column/.test(withClinic.error.message)) {
+    return { data: null, error: withClinic.error };
   }
 
   const result = await supabase
@@ -339,6 +344,41 @@ export async function deleteDoctorForAdmin(id: string) {
     .is('deleted_at', null);
 
   if (updateError) return { error: updateError };
+  return { error: null };
+}
+
+export async function deletePatientForAdmin(id: string) {
+  const payload = {
+    login_disabled: true,
+    deleted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  let { error: updateError, count } = await supabase
+    .from('patients')
+    .update(payload, { count: 'exact' })
+    .eq('id', id)
+    .is('deleted_at', null);
+
+  if (updateError && /deleted_at|column/.test(updateError.message)) {
+    ({ error: updateError, count } = await supabase
+      .from('patients')
+      .update(
+        { login_disabled: true, updated_at: payload.updated_at },
+        { count: 'exact' }
+      )
+      .eq('id', id));
+  }
+
+  if (updateError) return { error: updateError };
+  if (count === 0) {
+    return {
+      error: {
+        message:
+          'No patient row was updated. The patient may already be deleted, or run migration 067_patient_soft_delete.sql (npm run db:apply-patient-soft-delete).'
+      }
+    };
+  }
   return { error: null };
 }
 

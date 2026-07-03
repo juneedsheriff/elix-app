@@ -106,7 +106,7 @@ async function verifyStaffAuthUserId(request: Request, env: Env): Promise<{ user
   const userId = await getUserIdFromToken(token, env);
   if (!userId) return null;
 
-  const { data, error } = await userClient(env, token)
+  const { data, error } = await serviceClient(env)
     .from('admins')
     .select('id')
     .eq('auth_user_id', userId)
@@ -117,40 +117,45 @@ async function verifyStaffAuthUserId(request: Request, env: Env): Promise<{ user
   return { userId, staffId: data.id as string };
 }
 
-async function verifyAdmin(request: Request, env: Env): Promise<string | null> {
+type StaffCaller = {
+  userId: string;
+  staffId: string;
+  role: string;
+  clinicId: string | null;
+};
+
+async function verifyStaffCaller(request: Request, env: Env): Promise<StaffCaller | null> {
   const auth = request.headers.get('Authorization');
   if (!auth?.startsWith('Bearer ')) return null;
   const token = auth.slice(7);
   const userId = await getUserIdFromToken(token, env);
   if (!userId) return null;
 
-  const { data, error } = await userClient(env, token)
+  const { data, error } = await serviceClient(env)
     .from('admins')
-    .select('id')
+    .select('id, role, clinic_id')
     .eq('auth_user_id', userId)
     .eq('is_active', true)
     .maybeSingle();
 
-  if (error || !data) return null;
-  return userId;
+  if (error || !data?.id) return null;
+  return {
+    userId,
+    staffId: data.id as string,
+    role: String(data.role ?? ''),
+    clinicId: (data.clinic_id as string | null | undefined) ?? null
+  };
+}
+
+async function verifyAdmin(request: Request, env: Env): Promise<string | null> {
+  const caller = await verifyStaffCaller(request, env);
+  return caller?.userId ?? null;
 }
 
 async function verifyAdministrator(request: Request, env: Env): Promise<string | null> {
-  const auth = request.headers.get('Authorization');
-  if (!auth?.startsWith('Bearer ')) return null;
-  const token = auth.slice(7);
-  const userId = await getUserIdFromToken(token, env);
-  if (!userId) return null;
-
-  const { data, error } = await userClient(env, token)
-    .from('admins')
-    .select('id, role')
-    .eq('auth_user_id', userId)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (error || !data || data.role !== 'administrator') return null;
-  return userId;
+  const caller = await verifyStaffCaller(request, env);
+  if (!caller || caller.role !== 'administrator') return null;
+  return caller.userId;
 }
 
 type StaffRow = {
@@ -557,16 +562,39 @@ type ProfileRow = {
   login_disabled: boolean;
   phone?: string | null;
   mobile_no?: string | null;
+  clinic_id?: string | null;
 };
+
+function canManagePatientAuth(caller: StaffCaller, patient: Pick<ProfileRow, 'clinic_id'>): boolean {
+  if (caller.role === 'administrator') return true;
+  if (caller.role === 'patient_service_executive_clinic') {
+    return Boolean(patient.clinic_id && caller.clinicId && patient.clinic_id === caller.clinicId);
+  }
+  if (caller.role === 'patient_service_executive') {
+    return patient.clinic_id == null;
+  }
+  return false;
+}
+
+function canManageDoctorAuth(caller: StaffCaller): boolean {
+  return caller.role === 'administrator';
+}
 
 async function loadProfile(role: Role, profileId: string, env: Env): Promise<ProfileRow | null> {
   const table = role === 'doctor' ? 'doctors' : 'patients';
-  const cols =
+  const colsWithClinic =
+    role === 'doctor'
+      ? 'id,email,full_name,auth_user_id,login_disabled,mobile_no,phone,clinic_id'
+      : 'id,email,full_name,auth_user_id,login_disabled,phone,clinic_id';
+  const colsLegacy =
     role === 'doctor'
       ? 'id,email,full_name,auth_user_id,login_disabled,mobile_no,phone'
       : 'id,email,full_name,auth_user_id,login_disabled,phone';
 
-  const { data, error } = await serviceClient(env).from(table).select(cols).eq('id', profileId).maybeSingle();
+  let { data, error } = await serviceClient(env).from(table).select(colsWithClinic).eq('id', profileId).maybeSingle();
+  if (error && /clinic_id|column/.test(error.message)) {
+    ({ data, error } = await serviceClient(env).from(table).select(colsLegacy).eq('id', profileId).maybeSingle());
+  }
 
   if (error || !data) return null;
   return data as unknown as ProfileRow;
@@ -931,8 +959,8 @@ export default {
       return json({ ok: true, staff: result.staff }, 200, origin, env);
     }
 
-    const adminId = await verifyAdmin(request, env);
-    if (!adminId) {
+    const caller = await verifyStaffCaller(request, env);
+    if (!caller) {
       return json({ error: 'Unauthorized. Sign in as an active admin.' }, 401, origin, env);
     }
 
@@ -947,6 +975,12 @@ export default {
       const profileId = body.profileId?.trim();
       if (!profileId) {
         return json({ error: 'profileId is required.' }, 400, origin, env);
+      }
+
+      const patient = await loadProfile('patient', profileId, env);
+      if (!patient) return json({ error: 'Profile not found.' }, 404, origin, env);
+      if (!canManagePatientAuth(caller, patient)) {
+        return json({ error: 'You do not have permission to manage this patient login.' }, 403, origin, env);
       }
 
       const result = await provisionPatientLogin(profileId, env);
@@ -968,6 +1002,18 @@ export default {
       if ((role !== 'doctor' && role !== 'patient') || !profileId) {
         return json({ error: 'Query params role and profileId required.' }, 400, origin, env);
       }
+
+      const profile = await loadProfile(role, profileId, env);
+      if (!profile) return json({ error: 'Profile not found.' }, 404, origin, env);
+
+      if (role === 'patient') {
+        if (!canManagePatientAuth(caller, profile)) {
+          return json({ error: 'You do not have permission to view this patient login.' }, 403, origin, env);
+        }
+      } else if (!canManageDoctorAuth(caller)) {
+        return json({ error: 'Unauthorized. Sign in as an administrator.' }, 403, origin, env);
+      }
+
       const status = await getAccountStatus(role, profileId, env);
       if (!status) return json({ error: 'Profile not found.' }, 404, origin, env);
       return json(status, 200, origin, env);
@@ -987,6 +1033,14 @@ export default {
 
       const profile = await loadProfile(body.role, body.profileId, env);
       if (!profile) return json({ error: 'Profile not found.' }, 404, origin, env);
+
+      if (body.role === 'patient') {
+        if (!canManagePatientAuth(caller, profile)) {
+          return json({ error: 'You do not have permission to manage this patient login.' }, 403, origin, env);
+        }
+      } else if (!canManageDoctorAuth(caller)) {
+        return json({ error: 'Unauthorized. Sign in as an administrator.' }, 403, origin, env);
+      }
 
       let result: { error?: string };
       if (body.action === 'enable') {
