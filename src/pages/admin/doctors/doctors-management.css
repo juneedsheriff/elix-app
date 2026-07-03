@@ -713,12 +713,25 @@ body.doctors-mgmt-table-fullscreen-open {
 .request-detail-drawer__body {
   padding: 0 !important;
   max-height: calc(100dvh - 3.25rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .request-detail-drawer__shell {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  min-height: min-content;
+  flex: 1;
+}
+
+.request-detail-drawer__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding: 1.25rem 1.35rem 1.75rem;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .request-detail-drawer__hero {
@@ -895,13 +908,6 @@ body.doctors-mgmt-table-fullscreen-open {
   background: color-mix(in srgb, var(--text-soft) 8%, var(--surface-soft));
   border: 1px solid var(--border);
   color: var(--text-soft);
-}
-
-.request-detail-drawer__content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.15rem;
-  padding: 1.25rem 1.35rem 1.75rem;
 }
 
 .request-detail-drawer__notice {

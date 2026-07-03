@@ -2177,9 +2177,56 @@ export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequests
   }
 }
 
+/** Staff list fetch — omit assignee embed (RLS-safe for clinic PSE); names resolved separately. */
+async function fetchOpinionRequestRowsForStaff(): Promise<{
+  rows: RequestListRow[] | null;
+  error: { message: string; code?: string } | null;
+  responsesEnabled: boolean;
+}> {
+  const buildQuery = (select: string) =>
+    supabase
+      .from('opinion_requests')
+      .select(select)
+      .order('created_at', { ascending: false })
+      .returns<RequestListRow[]>();
+
+  let result = await buildQuery(requestListSelectWithResponseNoAssign);
+  if (!result.error) {
+    return { rows: result.data, error: null, responsesEnabled: true };
+  }
+
+  let lastError = result.error;
+
+  if (isMissingDoctorSelectionModeError(lastError)) {
+    result = await buildQuery(stripDoctorSelectionModeFromSelect(requestListSelectWithResponseNoAssign));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingRequestedSpecialtyError(lastError)) {
+    result = await buildQuery(stripRequestedSpecialtyFromSelect(requestListSelectWithResponseNoAssign));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  if (isMissingClinicScopeError(lastError)) {
+    result = await buildQuery(stripClinicScopeFromSelect(requestListSelectWithResponseNoAssign));
+    if (!result.error) {
+      return { rows: result.data, error: null, responsesEnabled: true };
+    }
+    lastError = result.error;
+  }
+
+  return fetchOpinionRequestRows();
+}
+
 /** Loads opinion requests visible to signed-in staff (administrator: all; PSE: assigned). */
 export async function fetchOpinionRequestsForStaff(): Promise<FetchOpinionRequestsResult> {
-  const { rows, error, responsesEnabled } = await fetchOpinionRequestRows();
+  const { rows, error, responsesEnabled } = await fetchOpinionRequestRowsForStaff();
 
   if (error) {
     return {

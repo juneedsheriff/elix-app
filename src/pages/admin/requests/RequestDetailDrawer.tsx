@@ -164,8 +164,9 @@ export default function RequestDetailDrawer({
 
   const showAssignSection = canAssign && !isClosed && !isClinicRequest;
 
+  // Clinic PSE RLS only exposes unassigned rows or rows assigned to the signed-in executive.
   const isClinicClaimPending =
-    staffIsClinicPse && isPendingAdminAssignment(request) && !isClosed;
+    staffIsClinicPse && isClinicRequest && !isClosed && !request.assigned_to;
 
   const assignedExecutiveName =
 
@@ -197,7 +198,9 @@ export default function RequestDetailDrawer({
   const canCoordinate =
     staffIsPse &&
     !isClosed &&
-    (staffIsPlatformPse || isAssignedToMe);
+    (staffIsPlatformPse
+      ? isAssignedToMe
+      : staffIsClinicPse && isClinicRequest && Boolean(request.assigned_to));
 
   const canViewClosedWorkflow =
     isClosed &&
@@ -206,13 +209,23 @@ export default function RequestDetailDrawer({
   const adminWorkflowView =
     adminViewer && !isClosed && (isClinicRequest || pseCoordinationStarted);
 
-  const showWorkflowWizard = canCoordinate || adminWorkflowView || canViewClosedWorkflow;
-
   const needsAssignmentForAdmin =
     adminViewer && !isClinicRequest && !pseCoordinationStarted && !isClosed;
 
   const adminViewingAssigned =
     adminViewer && !isClinicRequest && pseCoordinationStarted && !isClosed;
+
+  const showWorkflowWizard = canCoordinate || adminWorkflowView || canViewClosedWorkflow;
+
+  const showCoordinationEmpty =
+    !showActivity &&
+    !feedbackMessage &&
+    !feedbackSuccess &&
+    !needsAssignmentForAdmin &&
+    !adminViewingAssigned &&
+    !isClinicClaimPending &&
+    !showAssignSection &&
+    !showWorkflowWizard;
 
   const statusColor = requestStatusColor(request);
 
@@ -657,6 +670,21 @@ export default function RequestDetailDrawer({
 
             </section>
 
+          ) : null}
+
+          {showCoordinationEmpty ? (
+            <section className='request-detail-drawer__notice'>
+              <div className='request-detail-drawer__notice-copy'>
+                <Text fw={600} size='sm'>
+                  Coordination unavailable
+                </Text>
+                <Text size='sm' c='dimmed'>
+                  {staffIsClinicPse && request.assigned_to && !isAssignedToMe
+                    ? 'This request is assigned to another coordinator in your clinic.'
+                    : 'Claim this request or refresh the page to load coordination steps.'}
+                </Text>
+              </div>
+            </section>
           ) : null}
 
             </>

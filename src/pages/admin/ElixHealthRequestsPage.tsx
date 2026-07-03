@@ -5,7 +5,6 @@ import {
   assignOpinionRequest,
   deleteOpinionRequestForAdmin,
   fetchOpinionRequestsForStaff,
-  isPendingAdminAssignment,
   hasPseCoordinationStarted,
   staffRequestStatusLabel,
   subscribeStaffOpinionRequestUpdates
@@ -341,7 +340,7 @@ export default function ElixHealthRequestsPage() {
 
   useEffect(() => {
     if (!drawerOpen || !selectedRequest || !isClinicPse) return;
-    if (!isPendingAdminAssignment(selectedRequest)) return;
+    if (selectedRequest.assigned_to || selectedRequest.status === 'closed') return;
 
     let cancelled = false;
     const requestId = selectedRequest.id;
@@ -405,7 +404,7 @@ export default function ElixHealthRequestsPage() {
       const defaultAssignee =
         request.assigned_to ??
         draft ??
-        (isClinicPse && isPendingAdminAssignment(request) ? staff.id : '');
+        (isClinicPse && !request.assigned_to ? staff.id : '');
       setAssigneeId(defaultAssignee);
       setActionMessage(null);
       setSuccessMessage(null);
