@@ -46,6 +46,13 @@ import type { Doctor } from '../../../types/doctor';
 import type { ConsultationSummary, OpinionRequest, OpinionRequestRecommendation } from '../../../types/opinionRequest';
 import { formatRequestDate } from './requestsUtils';
 
+const ELIX_EXTERNAL_PAYMENT_BASE_URL = 'https://elixclinix.com/pay.html?amount=';
+
+function buildExternalPaymentLink(amount: number | null) {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return '';
+  return `${ELIX_EXTERNAL_PAYMENT_BASE_URL}${encodeURIComponent(amount.toFixed(2))}`;
+}
+
 function resolveInvoiceDoctor(request: OpinionRequest, doctors: Doctor[]): Doctor | null {
   const doctorId = request.selected_doctor_id ?? request.doctor_id;
   if (!doctorId) return null;
@@ -122,7 +129,6 @@ export default function RequestWorkflowWizard({
     }
     setMeetingLink(request.meeting_link ?? '');
     setPaymentReference(request.payment_reference ?? '');
-    setPaymentLink(request.payment_link ?? '');
     void loadMeta();
   }, [request, loadMeta]);
 
@@ -177,6 +183,23 @@ export default function RequestWorkflowWizard({
     () => resolvePsePaymentQuote(request, doctors, recommendations),
     [request, doctors, recommendations]
   );
+  const payableAmountForLink = useMemo(() => {
+    const invoiceTotal = Number(request.invoice_total);
+    if (Number.isFinite(invoiceTotal) && invoiceTotal > 0) return invoiceTotal;
+    return paymentQuote.amount;
+  }, [request.invoice_total, paymentQuote.amount]);
+  const autoPaymentLink = useMemo(
+    () => buildExternalPaymentLink(payableAmountForLink),
+    [payableAmountForLink]
+  );
+
+  useEffect(() => {
+    if (autoPaymentLink) {
+      setPaymentLink(autoPaymentLink);
+      return;
+    }
+    setPaymentLink(request.payment_link ?? '');
+  }, [autoPaymentLink, request.payment_link]);
 
   const canNavigateStep = (index: number) =>
     isClosedRequest || isReadOnlyView
@@ -616,9 +639,9 @@ export default function RequestWorkflowWizard({
             paymentAmount={paymentQuote.amount}
             paymentCurrency={paymentQuote.currency}
             paymentReference={paymentReference}
+            paymentLinkPlaceholder={autoPaymentLink || ELIX_EXTERNAL_PAYMENT_BASE_URL}
             busy={busy}
             readOnly={!canCoordinate}
-            onPaymentLinkChange={setPaymentLink}
             onPaymentReferenceChange={setPaymentReference}
             onSendInvoiceAndPaymentLink={() => void handleSendInvoiceAndPaymentLink()}
             onMarkPending={() => void handlePaymentPending()}

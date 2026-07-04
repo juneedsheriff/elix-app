@@ -27,12 +27,12 @@ import PaymentProofReview from './PaymentProofReview';
 type PsePaymentStepPanelProps = {
   request: OpinionRequest;
   paymentLink: string;
+  paymentLinkPlaceholder?: string;
   paymentAmount: number | null;
   paymentCurrency: string;
   paymentReference: string;
   busy: boolean;
   readOnly?: boolean;
-  onPaymentLinkChange: (value: string) => void;
   onPaymentReferenceChange: (value: string) => void;
   onSendInvoiceAndPaymentLink: () => void;
   onMarkPending: () => void;
@@ -43,12 +43,12 @@ type PsePaymentStepPanelProps = {
 export default function PsePaymentStepPanel({
   request,
   paymentLink,
+  paymentLinkPlaceholder = 'https://elixclinix.com/pay.html?amount=',
   paymentAmount,
   paymentCurrency,
   paymentReference,
   busy,
   readOnly = false,
-  onPaymentLinkChange,
   onPaymentReferenceChange,
   onSendInvoiceAndPaymentLink,
   onMarkPending,
@@ -135,10 +135,11 @@ export default function PsePaymentStepPanel({
           <Grid.Col span={{ base: 12, sm: 8 }}>
             <TextInput
               label='Payment link (external)'
-              placeholder='https://…'
+              description='Auto-generated from consultation amount.'
+              placeholder={paymentLinkPlaceholder}
               value={paymentLink}
-              readOnly={readOnly}
-              onChange={(e) => onPaymentLinkChange(e.currentTarget.value)}
+              readOnly
+              disabled
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>

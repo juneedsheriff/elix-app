@@ -9,6 +9,7 @@ import type { ConsultationSummary } from '../types/opinionRequest';
 
 export type ConsultationSummaryPdfMeta = {
   patientName?: string | null;
+  patientGender?: string | null;
   patientEmail?: string | null;
   patientId?: string | null;
   doctor?: Doctor | null;
@@ -22,9 +23,9 @@ export type ConsultationSummaryPdfMeta = {
 const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'chief_complaint', label: 'Chief complaint' },
   { key: 'history_present_illness', label: 'History of present illness' },
-  { key: 'vital_signs', label: 'Vital signs' },
-  { key: 'current_medications', label: 'Current medications' },
   { key: 'past_medical_history', label: 'Past medical history' },
+  { key: 'current_medications', label: 'Current medications' },
+  { key: 'vital_signs', label: 'Vital signs' },
   { key: 'labs_diagnostics', label: 'Labs / diagnostics' },
   { key: 'assessment_plan', label: 'Assessment & plan' },
   { key: 'prescription', label: 'Prescription' }
@@ -37,6 +38,25 @@ function wrapText(doc: { splitTextToSize: (text: string, maxWidth: number) => st
 function doctorDisplayName(meta: ConsultationSummaryPdfMeta): string | null {
   if (meta.doctor?.full_name?.trim()) return meta.doctor.full_name.trim();
   return meta.doctorName?.trim() ?? null;
+}
+
+function hasHonorificPrefix(name: string): boolean {
+  return /^(dr|mr|mrs|ms|miss)\.?\s+/i.test(name.trim());
+}
+
+function withDoctorHonorific(name: string | null): string | null {
+  if (!name) return null;
+  if (hasHonorificPrefix(name)) return name;
+  return `Dr. ${name}`;
+}
+
+function withPatientHonorific(name: string | null, gender?: string | null): string | null {
+  if (!name) return null;
+  if (hasHonorificPrefix(name)) return name;
+  const normalized = (gender ?? '').trim().toLowerCase();
+  if (normalized === 'male') return `Mr. ${name}`;
+  if (normalized === 'female') return `Ms. ${name}`;
+  return name;
 }
 
 function doctorSpecialty(meta: ConsultationSummaryPdfMeta): string | null {
@@ -112,23 +132,28 @@ async function buildConsultationSummaryPdf(
     doc.text(text, pageWidth - margin, rightY, { align: 'right' });
     rightY += size * 1.35;
   };
-  writeRight(`Date: ${issuedAt.toLocaleDateString()}`, 10);
+  writeRight(`Date & Time: ${issuedAt.toLocaleString()}`, 10);
   if (meta.requestId) {
     writeRight(`Request ID: ${meta.requestId.slice(0, 8).toUpperCase()}`, 9);
   }
-  if (meta.scheduledAt) {
-    writeRight(`Consultation: ${new Date(meta.scheduledAt).toLocaleString()}`, 9);
-  }
+
+  const doctorAddressLines = meta.doctor ? formatDoctorClinicAddressLines(meta.doctor) : [];
+  const doctorPhone = meta.doctor ? formatDoctorContactPhone(meta.doctor) : null;
+  const doctorWebsite = meta.doctor?.clinic_website?.trim() || null;
+  for (const line of doctorAddressLines) addLine(line, 10, false, margin, leftColWidth);
+  if (doctorPhone) addLine(`Phone: ${doctorPhone}`, 10, false, margin, leftColWidth);
+  if (doctorWebsite) addLine(doctorWebsite, 10, false, margin, leftColWidth);
 
   y = Math.max(y, rightY) + 12;
 
   addLine('Patient', 11, true);
-  if (meta.patientName) addLine(meta.patientName, 11);
+  const patientName = withPatientHonorific(meta.patientName ?? null, meta.patientGender);
+  if (patientName) addLine(patientName, 11);
   if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 10);
   y += 8;
 
   addLine('Consultation provider', 11, true);
-  const name = doctorDisplayName(meta);
+  const name = withDoctorHonorific(doctorDisplayName(meta));
   const specialty = doctorSpecialty(meta);
   if (name) {
     addLine(`${name}${specialty ? ` · ${specialty}` : ''}`, 11);
@@ -136,12 +161,6 @@ async function buildConsultationSummaryPdf(
   if (meta.doctor?.qualification?.trim()) addLine(meta.doctor.qualification.trim(), 10);
   if (meta.doctor?.medical_license_no?.trim()) {
     addLine(`Medical license: ${meta.doctor.medical_license_no.trim()}`, 10);
-  }
-  if (meta.doctor) {
-    for (const line of formatDoctorClinicAddressLines(meta.doctor)) addLine(line, 10);
-    const phone = formatDoctorContactPhone(meta.doctor);
-    if (phone) addLine(`Phone: ${phone}`, 10);
-    if (meta.doctor.clinic_website?.trim()) addLine(meta.doctor.clinic_website.trim(), 10);
   }
   y += 12;
 
@@ -182,6 +201,7 @@ export function consultationSummaryPdfMetaFromRequest(
     id?: string;
     patient_id?: string | null;
     patient_name?: string | null;
+    patient_gender?: string | null;
     patient_email?: string | null;
     doctor_name?: string | null;
     doctor_specialty?: string | null;
@@ -192,6 +212,7 @@ export function consultationSummaryPdfMetaFromRequest(
   return {
     patientId: request.patient_id,
     patientName: request.patient_name,
+    patientGender: request.patient_gender,
     patientEmail: request.patient_email,
     doctor: doctor ?? null,
     doctorName: request.doctor_name,

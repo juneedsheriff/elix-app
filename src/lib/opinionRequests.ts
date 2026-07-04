@@ -1177,7 +1177,7 @@ export function isRecommendationOpinionRequest(
 
 function mapRequestRow(
   row: RequestListRow,
-  patientMap: Map<string, { full_name: string; email: string }>
+  patientMap: Map<string, { full_name: string; email: string; gender: string | null }>
 ): OpinionRequest {
   const patient = row.patient_id ? patientMap.get(row.patient_id) : undefined;
   const records: OpinionRequestFile[] = [];
@@ -1194,6 +1194,7 @@ function mapRequestRow(
     created_at: row.created_at,
     patient_id: row.patient_id,
     patient_name: row.patient_name ?? patient?.full_name ?? null,
+    patient_gender: patient?.gender ?? null,
     doctor_id: row.doctor_id,
     doctor_name: row.doctor_name ?? row.doctors?.full_name ?? null,
     doctor_specialty: row.doctors?.specialty ?? null,
@@ -1287,19 +1288,23 @@ export async function submitDoctorOpinionResponse(requestId: string, responseTex
 }
 
 async function loadPatientEmailMap(authUserIds: string[]) {
-  const patientMap = new Map<string, { full_name: string; email: string }>();
+  const patientMap = new Map<string, { full_name: string; email: string; gender: string | null }>();
   if (!authUserIds.length) return patientMap;
 
   const { data: patients, error: patientsError } = await supabase
     .from('patients')
-    .select('auth_user_id, full_name, email')
+    .select('auth_user_id, full_name, email, gender')
     .in('auth_user_id', authUserIds);
 
   if (patientsError) throw patientsError;
 
   for (const p of patients ?? []) {
     if (p.auth_user_id) {
-      patientMap.set(p.auth_user_id, { full_name: p.full_name, email: p.email });
+      patientMap.set(p.auth_user_id, {
+        full_name: p.full_name,
+        email: p.email,
+        gender: p.gender ?? null
+      });
     }
   }
   return patientMap;

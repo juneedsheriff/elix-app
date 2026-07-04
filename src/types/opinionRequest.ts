@@ -68,6 +68,7 @@ export type OpinionRequest = {
   created_at: string;
   patient_id: string | null;
   patient_name: string | null;
+  patient_gender?: string | null;
   doctor_id: string | null;
   doctor_name: string | null;
   doctor_specialty: string | null;

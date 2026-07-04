@@ -20,6 +20,25 @@ type ConsultationSummaryPdfViewProps = {
   request: OpinionRequest;
 };
 
+function hasHonorificPrefix(name: string): boolean {
+  return /^(dr|mr|mrs|ms|miss)\.?\s+/i.test(name.trim());
+}
+
+function withDoctorHonorific(name: string | null): string | null {
+  if (!name) return null;
+  if (hasHonorificPrefix(name)) return name;
+  return `Dr. ${name}`;
+}
+
+function withPatientHonorific(name: string | null, gender?: string | null): string | null {
+  if (!name) return null;
+  if (hasHonorificPrefix(name)) return name;
+  const normalized = (gender ?? '').trim().toLowerCase();
+  if (normalized === 'male') return `Mr. ${name}`;
+  if (normalized === 'female') return `Ms. ${name}`;
+  return name;
+}
+
 export default function ConsultationSummaryPdfView({ summary, request }: ConsultationSummaryPdfViewProps) {
   const [downloading, setDownloading] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -37,6 +56,8 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const hasStructuredPreview = sections.length > 0;
   const hasPrescriptionOrder = Boolean(summary.prescription?.trim());
   const hasLabOrder = Boolean(summary.labs_diagnostics?.trim());
+  const patientDisplayName = withPatientHonorific(request.patient_name, request.patient_gender);
+  const doctorDisplayName = withDoctorHonorific(request.doctor_name);
 
   useEffect(() => {
     if (!storedPath) {
@@ -236,12 +257,12 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
           <header className='consultation-summary-pdf__header'>
             <p className='consultation-summary-pdf__brand'>ElixClinix</p>
             <h5 className='consultation-summary-pdf__title'>Consultation Summary</h5>
-            {request.patient_name ? (
-              <p className='consultation-summary-pdf__meta'>Patient: {request.patient_name}</p>
+            {patientDisplayName ? (
+              <p className='consultation-summary-pdf__meta'>Patient: {patientDisplayName}</p>
             ) : null}
-            {request.doctor_name ? (
+            {doctorDisplayName ? (
               <p className='consultation-summary-pdf__meta'>
-                Doctor: {request.doctor_name}
+                Doctor: {doctorDisplayName}
                 {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
               </p>
             ) : null}
