@@ -127,7 +127,7 @@ export default function ElixHealthRequestsPage() {
 
     if (executivesRes.error && isAdmin) {
       setError(executivesRes.error.message);
-    } else if (isAdmin) {
+    } else if (isAdmin || isClinicPse) {
       setExecutives(executivesRes.data ?? []);
     }
 
@@ -347,29 +347,39 @@ export default function ElixHealthRequestsPage() {
 
     void (async () => {
       setBusyId(requestId);
-      const { error: assignError } = await assignOpinionRequest(requestId, staff.id);
-      if (cancelled) return;
-      setBusyId(null);
+      try {
+        const { data: assignData, error: assignError } = await assignOpinionRequest(
+          requestId,
+          staff.id
+        );
 
-      if (assignError) {
-        setActionMessage(assignError.message);
-        return;
+        if (assignError) {
+          if (!cancelled) {
+            setActionMessage(assignError.message);
+          }
+          return;
+        }
+
+        const patch = {
+          id: requestId,
+          assigned_to: assignData?.assigned_to ?? staff.id,
+          assigned_to_name: staff.full_name,
+          assigned_at: assignData?.assigned_at ?? new Date().toISOString(),
+          consultation_stage: assignData?.consultation_stage ?? ('assigned' as const)
+        };
+        // Always apply a successful claim locally. A concurrent refresh/effect cleanup must not
+        // leave the drawer without assigned_to (which shows "Coordination unavailable").
+        patchSelectedRequest(patch);
+        setSelectedRequest((current) =>
+          current?.id === requestId ? ({ ...current, ...patch } as OpinionRequest) : current
+        );
+        setAssigneeId(staff.id);
+        if (!cancelled) {
+          void refresh();
+        }
+      } finally {
+        setBusyId((current) => (current === requestId ? null : current));
       }
-
-      const assignedAt = new Date().toISOString();
-      const patch = {
-        id: requestId,
-        assigned_to: staff.id,
-        assigned_to_name: staff.full_name,
-        assigned_at: assignedAt,
-        consultation_stage: 'assigned' as const
-      };
-      patchSelectedRequest(patch);
-      setSelectedRequest((current) =>
-        current?.id === requestId ? ({ ...current, ...patch } as OpinionRequest) : current
-      );
-      setAssigneeId(staff.id);
-      void refresh();
     })();
 
     return () => {
@@ -484,7 +494,10 @@ export default function ElixHealthRequestsPage() {
 
     const executive = executives.find((e) => e.id === assigneeId);
     const assignedAt = assignData?.assigned_at ?? new Date().toISOString();
-    const executiveName = executive?.full_name ?? 'Patient Service Executive';
+    const executiveName =
+      executive?.full_name ??
+      (assigneeId === staff.id ? staff.full_name : null) ??
+      'Patient Service Executive';
     const assignedRequest: OpinionRequest = {
       ...selectedRequest,
       assigned_to: assignData?.assigned_to ?? assigneeId,
@@ -501,7 +514,9 @@ export default function ElixHealthRequestsPage() {
     setSelectedRequest(assignedRequest);
     setCoordinationUnlockedId(selectedRequest.id);
     setSuccessMessage(
-      `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executiveName}. You can review coordination steps below.`
+      isClinicPse && assigneeId === staff.id
+        ? `You claimed the request from ${selectedRequest.patient_name ?? 'patient'}. Coordination steps are ready below.`
+        : `Assigned request from ${selectedRequest.patient_name ?? 'patient'} to ${executiveName}. You can review coordination steps below.`
     );
   };
 

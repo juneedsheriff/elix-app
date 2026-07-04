@@ -134,7 +134,7 @@ export default function RecommendDoctorsSection({
     if (saveError) {
       setBusy(false);
       const hint = saveError.message?.toLowerCase().includes('opinion_request_recommendations')
-        ? ' Run npm run db:apply-consultation-workflow (migration 019).'
+        ? ' Run npm run db:apply-recommendations-rls (migration 068), or npm run db:apply-consultation-workflow (migration 019) if the table is missing.'
         : '';
       onError(`${saveError.message}${hint}`);
       return;

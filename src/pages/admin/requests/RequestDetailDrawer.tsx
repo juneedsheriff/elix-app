@@ -17,8 +17,6 @@ import {
 
   IconCalendar,
 
-  IconCheck,
-
   IconClock,
 
   IconMail,
@@ -43,9 +41,9 @@ import { useElixHealthStaff } from '../ElixHealthStaffContext';
 
 import RequestWorkflowWizard from './RequestWorkflowWizard';
 
-import { formatRequestDate, patientInitials, requestStatusColor } from './requestsUtils';
+import { formatRequestDate, requestStatusColor } from './requestsUtils';
 
-import { isAdministrator, isAnyPatientServiceExecutive, isClinicPatientServiceExecutive, isPatientServiceExecutive } from '../../../lib/staffPermissions';
+import { isAdministrator, isAnyPatientServiceExecutive, isClinicPatientServiceExecutive } from '../../../lib/staffPermissions';
 
 
 
@@ -142,7 +140,6 @@ export default function RequestDetailDrawer({
   const { staff } = useElixHealthStaff();
 
   const staffIsPse = isAnyPatientServiceExecutive(staff);
-  const staffIsPlatformPse = isPatientServiceExecutive(staff);
   const staffIsClinicPse = isClinicPatientServiceExecutive(staff);
   const staffIsAdmin = isAdministrator(staff);
 
@@ -158,21 +155,31 @@ export default function RequestDetailDrawer({
     hasPseCoordinationStarted(request) || (isAdmin && coordinationUnlocked);
   const adminViewer = isAdmin && !staffIsPse;
 
-  const isAssignedToMe = Boolean(request.assigned_to && request.assigned_to === staff.id);
+  const isAssignedToMe = Boolean(
+    request.assigned_to &&
+      (request.assigned_to === staff.id ||
+        (staff.auth_user_id && request.assigned_to === staff.auth_user_id))
+  );
 
   const canAssign = isAdmin && isPendingAdminAssignment(request);
 
   const showAssignSection = canAssign && !isClosed && !isClinicRequest;
 
-  // Clinic PSE RLS only exposes unassigned rows or rows assigned to the signed-in executive.
+  // Clinic PSE can open unassigned clinic-queue rows (RLS). Do not gate on clinic_id in the
+  // client model — it can be missing from older selects even when the row is clinic-scoped.
   const isClinicClaimPending =
-    staffIsClinicPse && isClinicRequest && !isClosed && !request.assigned_to;
+    staffIsClinicPse &&
+    !isClosed &&
+    !request.assigned_to &&
+    !hasPseCoordinationStarted(request);
 
   const assignedExecutiveName =
 
     request.assigned_to_name ??
 
     executives.find((executive) => executive.id === request.assigned_to)?.full_name ??
+
+    (isAssignedToMe ? staff.full_name : null) ??
 
     null;
 
@@ -195,16 +202,19 @@ export default function RequestDetailDrawer({
 
   const assignSelectValue = assigneeId || request.assigned_to || null;
 
+  // Some environments may miss assigned_to in the payload while consultation_stage is already
+  // advanced; in that case still unlock workflow for the PSE queue row.
+  // RLS still enforces write permissions server-side.
   const canCoordinate =
     staffIsPse &&
     !isClosed &&
-    (staffIsPlatformPse
-      ? isAssignedToMe
-      : staffIsClinicPse && isClinicRequest && Boolean(request.assigned_to));
+    (Boolean(request.assigned_to) || hasPseCoordinationStarted(request));
 
   const canViewClosedWorkflow =
     isClosed &&
-    (staffIsAdmin || (staffIsPse && (staffIsPlatformPse || isAssignedToMe)));
+    (staffIsAdmin ||
+      (staffIsPse &&
+        (Boolean(request.assigned_to) || hasPseCoordinationStarted(request))));
 
   const adminWorkflowView =
     adminViewer && !isClosed && (isClinicRequest || pseCoordinationStarted);
@@ -228,10 +238,6 @@ export default function RequestDetailDrawer({
     !showWorkflowWizard;
 
   const statusColor = requestStatusColor(request);
-
-  const initials = patientInitials(request.patient_name);
-
-
 
   return (
 
@@ -681,7 +687,9 @@ export default function RequestDetailDrawer({
                 <Text size='sm' c='dimmed'>
                   {staffIsClinicPse && request.assigned_to && !isAssignedToMe
                     ? 'This request is assigned to another coordinator in your clinic.'
-                    : 'Claim this request or refresh the page to load coordination steps.'}
+                    : staffIsPse && !isAssignedToMe
+                      ? 'This request is not assigned to you yet. Refresh the page if you just claimed it.'
+                      : 'Refresh the page to load coordination steps.'}
                 </Text>
               </div>
             </section>
