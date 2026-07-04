@@ -1709,3 +1709,114 @@
   margin-top: 0.65rem;
 }
 
+.patient-request-detail-card {
+  position: relative;
+  --patient-chat-dock-height: 40px;
+  padding-bottom: calc(var(--patient-chat-dock-height) + 20px + env(safe-area-inset-bottom, 0px));
+}
+
+.patient-request-detail--chat {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.patient-request-detail-card--chat {
+  padding-bottom: 0.85rem;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.patient-request-chat-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.patient-request-chat-view .request-chat-panel {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+}
+
+.patient-request-chat-view__back {
+  width: fit-content;
+}
+
+.patient-request-chat-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  min-height: var(--patient-chat-dock-height);
+  box-sizing: border-box;
+  padding: 0.4rem 0.75rem calc(env(safe-area-inset-bottom, 0px) + 0.4rem);
+  background: #fff;
+  border-top: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  box-shadow: 0 -8px 22px rgba(15, 47, 70, 0.08);
+}
+
+.patient-request-chat-fab {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.56rem 0.9rem;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-cyan), var(--brand-green));
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(9, 171, 192, 0.32);
+  cursor: pointer;
+  z-index: 70;
+  white-space: nowrap;
+}
+
+.patient-request-chat-fab:hover,
+.patient-request-chat-fab:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(9, 171, 192, 0.4);
+  outline: none;
+}
+
+.patient-request-detail-view,
+.patient-request-detail-view__card {
+  overflow-x: hidden;
+}
+
+.patient-request-detail--chat .patient-request-chat-view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.patient-request-detail--chat .request-chat-panel__messages {
+  min-height: 0;
+}
+
+.patient-request-detail-view--chat {
+  height: calc(100dvh - 76px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.patient-request-detail-view__card--chat {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+

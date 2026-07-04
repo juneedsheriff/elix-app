@@ -56,12 +56,13 @@ export default function PreferredLanguageMultiSelect({
     if (exists) {
       setQuery('');
       setActiveIndex(-1);
+      setOpen(false);
       return;
     }
     onChange([...value, normalized]);
     setQuery('');
     setActiveIndex(-1);
-    setOpen(true);
+    setOpen(false);
     inputRef.current?.focus();
   };
 

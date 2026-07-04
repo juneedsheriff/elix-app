@@ -233,6 +233,8 @@
   .doctors-screen .section-card {
     padding: 0.85rem;
     border-radius: 16px;
+    margin-bottom: 80px;
+
   }
 
   .case-review-consultation-banner {

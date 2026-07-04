@@ -712,10 +712,15 @@ body.doctors-mgmt-table-fullscreen-open {
 
 .request-detail-drawer__body {
   padding: 0 !important;
-  max-height: calc(100dvh - 3.25rem);
+  max-height: calc(100dvh - 4.25rem);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.request-detail-drawer__body--chat {
+  height: calc(100dvh - 3.25rem);
+  overflow: hidden;
 }
 
 .request-detail-drawer__shell {
@@ -725,6 +730,12 @@ body.doctors-mgmt-table-fullscreen-open {
   flex: 1;
 }
 
+.request-detail-drawer__shell--chat {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .request-detail-drawer__content {
   display: flex;
   flex-direction: column;
@@ -732,6 +743,13 @@ body.doctors-mgmt-table-fullscreen-open {
   padding: 1.25rem 1.35rem 1.75rem;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.request-detail-drawer__content--chat {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 1rem;
 }
 
 .request-detail-drawer__hero {
@@ -974,6 +992,32 @@ body.doctors-mgmt-table-fullscreen-open {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+
+.request-detail-drawer__workflow--chat {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.request-detail-drawer__workflow--chat .request-chat-panel {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.request-detail-drawer__workflow--chat .request-chat-panel__messages {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.request-detail-drawer__workflow--chat .request-chat-panel__composer {
+  flex-shrink: 0;
 }
 
 .request-detail-drawer__workflow-head {

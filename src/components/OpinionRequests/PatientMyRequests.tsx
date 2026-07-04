@@ -80,19 +80,14 @@ export default function PatientMyRequests({
   const [choiceModalOpen, setChoiceModalOpen] = useState(false);
   const [showRecommendationForm, setShowRecommendationForm] = useState(false);
   const [requestTab, setRequestTab] = useState<'upcoming' | 'completed'>('upcoming');
+  const [detailChatMode, setDetailChatMode] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
   const { completedRequests, upcomingRequests, showRequestTabs, visibleRequests } = useMemo(() => {
       const completed = requests.filter(isPatientRequestCompleted);
       const upcoming = requests.filter((request) => !isPatientRequestCompleted(request));
-      const showTabs = completed.length > 0 && upcoming.length > 0;
-      const visible = showTabs
-        ? requestTab === 'completed'
-          ? completed
-          : upcoming
-        : upcoming.length > 0
-          ? upcoming
-          : completed;
+      const showTabs = completed.length > 0 || upcoming.length > 0;
+      const visible = requestTab === 'completed' ? completed : upcoming;
 
       return {
         completedRequests: completed,
@@ -244,6 +239,7 @@ export default function PatientMyRequests({
 
   const closeDetail = () => {
     setDetailRequest(null);
+    setDetailChatMode(false);
     setSearchParams({});
   };
 
@@ -267,6 +263,10 @@ export default function PatientMyRequests({
       setActionMessage(null);
     }
   };
+
+  useEffect(() => {
+    if (!selectedId) setDetailChatMode(false);
+  }, [selectedId]);
 
   const goToScreen = useCallback(
     (screenId: string) => {
@@ -339,8 +339,16 @@ export default function PatientMyRequests({
     }
 
     return (
-      <div className='screen-grid doctors-screen patient-request-detail-view'>
-        <section className='section-card patient-request-detail-view__card'>
+      <div
+        className={`screen-grid doctors-screen patient-request-detail-view${
+          detailChatMode ? ' patient-request-detail-view--chat' : ''
+        }`}
+      >
+        <section
+          className={`section-card patient-request-detail-view__card${
+            detailChatMode ? ' patient-request-detail-view__card--chat' : ''
+          }`}
+        >
           {actionMessage ? (
             <p className='auth-error' role='status'>
               {actionMessage}
@@ -354,6 +362,8 @@ export default function PatientMyRequests({
           <PatientRequestDetail
             request={selectedRequest}
             liveTick={liveTick}
+            patientAuthUserId={patientAuthUserId}
+            onChatModeChange={setDetailChatMode}
             onBack={closeDetail}
             onOpenActivity={() => openActivity(selectedRequest.id)}
             onUpdated={() => void load({ silent: true })}
@@ -490,6 +500,22 @@ export default function PatientMyRequests({
               <p className='pmr-empty__text'>
                 Tap Get a doctor consultation to start your first consultation, or browse doctors to choose a
                 specialist directly.
+              </p>
+            </div>
+          ) : null}
+
+          {!loading && !error && requests.length > 0 && visibleRequests.length === 0 ? (
+            <div className='pmr-empty'>
+              <div className='pmr-empty__icon' aria-hidden>
+                <ClipboardList size={28} strokeWidth={1.75} />
+              </div>
+              <p className='pmr-empty__title'>
+                {requestTab === 'upcoming' ? 'No upcoming request found' : 'No completed request found'}
+              </p>
+              <p className='pmr-empty__text'>
+                {requestTab === 'upcoming'
+                  ? 'Your new and in-progress consultations will appear here.'
+                  : 'Completed consultations will appear here once finished.'}
               </p>
             </div>
           ) : null}

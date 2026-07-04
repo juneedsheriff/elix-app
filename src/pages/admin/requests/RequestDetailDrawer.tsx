@@ -13,6 +13,7 @@ import {
 
   IconAlertCircle,
 
+  IconArrowLeft,
   IconArrowRight,
 
   IconCalendar,
@@ -20,6 +21,7 @@ import {
   IconClock,
 
   IconMail,
+  IconMessage2,
 
   IconUser,
 
@@ -30,6 +32,7 @@ import {
 import { hasPseCoordinationStarted, isPendingAdminAssignment, staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import OpinionRequestActivityPage from '../../../components/OpinionRequests/OpinionRequestActivityPage';
 import OpinionRequestAuditLink from '../../../components/OpinionRequests/OpinionRequestAuditLink';
+import RequestChatPanel from '../../../components/OpinionRequests/RequestChatPanel';
 
 import type { Admin } from '../../../types/admin';
 
@@ -132,9 +135,11 @@ export default function RequestDetailDrawer({
 }: RequestDetailDrawerProps) {
 
   const [showActivity, setShowActivity] = useState(false);
+  const [showRequestChatPanel, setShowRequestChatPanel] = useState(false);
 
   useEffect(() => {
     setShowActivity(false);
+    setShowRequestChatPanel(false);
   }, [request?.id, opened]);
 
   const { staff } = useElixHealthStaff();
@@ -226,6 +231,8 @@ export default function RequestDetailDrawer({
     adminViewer && !isClinicRequest && pseCoordinationStarted && !isClosed;
 
   const showWorkflowWizard = canCoordinate || adminWorkflowView || canViewClosedWorkflow;
+  const showRequestChat = staffIsPse && (showWorkflowWizard || hasPseCoordinationStarted(request));
+  const drawerChatMode = showRequestChat && showRequestChatPanel;
 
   const showCoordinationEmpty =
     !showActivity &&
@@ -265,7 +272,9 @@ export default function RequestDetailDrawer({
 
         title: 'request-detail-drawer__mantine-title',
 
-        body: 'doctors-mgmt-drawer__body request-detail-drawer__body',
+        body: `doctors-mgmt-drawer__body request-detail-drawer__body${
+          drawerChatMode ? ' request-detail-drawer__body--chat' : ''
+        }`,
 
         close: 'request-detail-drawer__close'
 
@@ -273,7 +282,11 @@ export default function RequestDetailDrawer({
 
     >
 
-      <div className='request-detail-drawer__shell'>
+      <div
+        className={`request-detail-drawer__shell${
+          drawerChatMode ? ' request-detail-drawer__shell--chat' : ''
+        }`}
+      >
 
         <header className='request-detail-drawer__hero'>
 
@@ -372,7 +385,11 @@ export default function RequestDetailDrawer({
 
 
 
-        <div className='request-detail-drawer__content'>
+        <div
+          className={`request-detail-drawer__content${
+            drawerChatMode ? ' request-detail-drawer__content--chat' : ''
+          }`}
+        >
 
           {showActivity ? (
             <OpinionRequestActivityPage
@@ -646,7 +663,7 @@ export default function RequestDetailDrawer({
 
 
 
-          {showWorkflowWizard ? (
+          {showWorkflowWizard && !showRequestChatPanel ? (
 
             <section className='request-detail-drawer__workflow'>
 
@@ -676,6 +693,50 @@ export default function RequestDetailDrawer({
 
             </section>
 
+          ) : null}
+
+          {showRequestChat && !showRequestChatPanel ? (
+            <section className='request-detail-drawer__workflow'>
+              <Button
+                variant='light'
+                color='cyan'
+                radius='md'
+                onClick={() => setShowRequestChatPanel(true)}
+                leftSection={<IconMessage2 size={16} stroke={1.75} />}
+              >
+                Chat with patient
+              </Button>
+            </section>
+          ) : null}
+
+          {showRequestChat && showRequestChatPanel ? (
+            <section className='request-detail-drawer__workflow request-detail-drawer__workflow--chat '>
+          <div>
+          <Button
+                variant='subtle'
+                color='gray'
+                radius='md'
+                onClick={() => setShowRequestChatPanel(false)}
+                leftSection={<IconArrowLeft size={16} stroke={1.75} />}
+              >
+                Back to coordination
+              </Button>
+          </div>
+              <RequestChatPanel
+                request={request}
+                viewerRole='pse'
+                senderStaffId={staff.id}
+                disabled={isClosed || !canCoordinate}
+                disabledReason={
+                  isClosed
+                    ? 'This request is closed. Chat is read-only.'
+                    : !canCoordinate
+                      ? 'Assign or claim this request to send chat messages.'
+                      : null
+                }
+                onError={onError}
+              />
+            </section>
           ) : null}
 
           {showCoordinationEmpty ? (

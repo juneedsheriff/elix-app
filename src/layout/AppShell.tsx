@@ -67,7 +67,7 @@ export default function AppShell({
 }: AppShellProps) {
   const navItems = getNavItems(role, language);
   const activeNavItem = navItems.find((item) => item.id === activeScreen);
-  const hideBottomNav = activeScreen === 'doctor-consultation';
+  const hideBottomNav = activeScreen === 'doctor-consultation' || activeScreen === 'my-requests';
 
   return (
     <div className='mobile-shell'>
