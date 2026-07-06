@@ -3292,6 +3292,7 @@ async function uploadConsultationInvoicePdf(
     invoiceNumber,
     issuedAt,
     patientName: request.patient_name,
+    patientGender: request.patient_gender,
     patientEmail: request.patient_email,
     requestId: request.id,
     doctor: input.doctor,
@@ -3607,13 +3608,18 @@ export async function pseReleaseToDoctor(requestId: string) {
 
 type ConsultationSummaryPatientRow = ConsultationSummary & {
   doctor?: { full_name: string | null; specialty: string | null } | null;
-  request?: { scheduled_at: string | null; doctor_name: string | null } | null;
+  request?: { scheduled_at: string | null; doctor_name: string | null; patient_name: string | null } | null;
 };
 
-function mapPatientConsultationSummary(row: ConsultationSummaryPatientRow): ConsultationSummary {
+function mapPatientConsultationSummary(
+  row: ConsultationSummaryPatientRow,
+  patientProfile?: { full_name?: string | null; gender?: string | null } | null
+): ConsultationSummary {
   const { doctor, request, ...summary } = row;
   return {
     ...summary,
+    patient_name: request?.patient_name ?? patientProfile?.full_name ?? null,
+    patient_gender: patientProfile?.gender ?? null,
     doctor_name: doctor?.full_name ?? request?.doctor_name ?? null,
     doctor_specialty: doctor?.specialty ?? null,
     scheduled_at: request?.scheduled_at ?? null
@@ -3621,35 +3627,44 @@ function mapPatientConsultationSummary(row: ConsultationSummaryPatientRow): Cons
 }
 
 export async function fetchPatientConsultationSummaries(patientAuthUserId: string) {
-  const { data, error } = await supabase
-    .from('consultation_summaries')
-    .select(
+  const [summariesRes, patientRes] = await Promise.all([
+    supabase
+      .from('consultation_summaries')
+      .select(
+        `
+        id,
+        request_id,
+        doctor_id,
+        patient_auth_user_id,
+        chief_complaint,
+        history_present_illness,
+        vital_signs,
+        current_medications,
+        past_medical_history,
+        labs_diagnostics,
+        assessment_plan,
+        prescription,
+        pdf_storage_path,
+        created_at,
+        updated_at,
+        doctor:doctors(full_name, specialty),
+        request:opinion_requests(scheduled_at, doctor_name, patient_name)
       `
-      id,
-      request_id,
-      doctor_id,
-      patient_auth_user_id,
-      chief_complaint,
-      history_present_illness,
-      vital_signs,
-      current_medications,
-      past_medical_history,
-      labs_diagnostics,
-      assessment_plan,
-      prescription,
-      pdf_storage_path,
-      created_at,
-      updated_at,
-      doctor:doctors(full_name, specialty),
-      request:opinion_requests(scheduled_at, doctor_name)
-    `
-    )
-    .eq('patient_auth_user_id', patientAuthUserId)
-    .order('created_at', { ascending: false })
-    .returns<ConsultationSummaryPatientRow[]>();
+      )
+      .eq('patient_auth_user_id', patientAuthUserId)
+      .order('created_at', { ascending: false })
+      .returns<ConsultationSummaryPatientRow[]>(),
+    fetchPatientByAuthUserId(patientAuthUserId)
+  ]);
+
+  const { data, error } = summariesRes;
 
   if (error) return { data: null, error };
-  return { data: (data ?? []).map(mapPatientConsultationSummary), error: null };
+  const patientProfile = patientRes.data;
+  return {
+    data: (data ?? []).map((row) => mapPatientConsultationSummary(row, patientProfile)),
+    error: null
+  };
 }
 
 const CONSULTATION_SUMMARY_SELECT = `

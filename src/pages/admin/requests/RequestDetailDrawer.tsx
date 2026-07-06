@@ -710,9 +710,8 @@ export default function RequestDetailDrawer({
           ) : null}
 
           {showRequestChat && showRequestChatPanel ? (
-            <section className='request-detail-drawer__workflow request-detail-drawer__workflow--chat '>
-          <div>
-          <Button
+            <section className='request-detail-drawer__workflow request-detail-drawer__workflow--chat'>
+              <Button
                 variant='subtle'
                 color='gray'
                 radius='md'
@@ -721,7 +720,6 @@ export default function RequestDetailDrawer({
               >
                 Back to coordination
               </Button>
-          </div>
               <RequestChatPanel
                 request={request}
                 viewerRole='pse'

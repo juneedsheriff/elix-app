@@ -68,6 +68,31 @@ function mapPatientAdminRow(row: PatientAdminRow): Patient {
   };
 }
 
+async function enrichPatientsWithClinicNames(patients: Patient[]): Promise<Patient[]> {
+  const missingClinicIds = [
+    ...new Set(
+      patients
+        .filter((patient) => patient.clinic_id && !patient.pse_clinic_name?.trim())
+        .map((patient) => patient.clinic_id as string)
+    )
+  ];
+
+  if (!missingClinicIds.length) return patients;
+
+  const { data, error } = await supabase.from('pse_clinics').select('id, name').in('id', missingClinicIds);
+  if (error || !data?.length) return patients;
+
+  const clinicNameById = new Map(
+    data.map((row) => [row.id as string, (row.name as string | null)?.trim() || 'Clinic workspace'])
+  );
+
+  return patients.map((patient) => {
+    if (!patient.clinic_id || patient.pse_clinic_name?.trim()) return patient;
+    const clinicName = clinicNameById.get(patient.clinic_id);
+    return clinicName ? { ...patient, pse_clinic_name: clinicName } : patient;
+  });
+}
+
 const doctorAdminColumns = DOCTOR_PROFILE_COLUMNS;
 
 type DoctorAdminRow = Doctor & { pse_clinics?: { name: string } | { name: string }[] | null };
@@ -215,8 +240,10 @@ export async function fetchAllPatientsForAdmin() {
     .order('created_at', { ascending: false });
 
   if (!withClinic.error) {
+    const mapped = (withClinic.data ?? []).map((row) => mapPatientAdminRow(row as PatientAdminRow));
+    const enriched = await enrichPatientsWithClinicNames(mapped);
     return {
-      data: (withClinic.data ?? []).map((row) => mapPatientAdminRow(row as PatientAdminRow)),
+      data: enriched,
       error: null
     };
   }
@@ -231,7 +258,8 @@ export async function fetchAllPatientsForAdmin() {
     .order('created_at', { ascending: false });
 
   if (result.error) return { data: null, error: result.error };
-  return { data: (result.data ?? []) as Patient[], error: null };
+  const enriched = await enrichPatientsWithClinicNames((result.data ?? []) as Patient[]);
+  return { data: enriched, error: null };
 }
 
 export async function fetchAllDoctorsForAdmin() {

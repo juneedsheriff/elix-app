@@ -19,6 +19,7 @@ export type ConsultationInvoicePdfInput = {
   invoiceNumber: string;
   issuedAt: Date;
   patientName: string | null;
+  patientGender?: string | null;
   patientEmail: string | null;
   requestId: string;
   doctor: Doctor;
@@ -34,20 +35,46 @@ const ELIX_BILLING = {
   website: 'www.elixhealth.com'
 };
 
-/** GST applies to INR consultation invoices; USD invoices have no tax by default. */
+function hasHonorificPrefix(name: string): boolean {
+  return /^(dr|mr|mrs|ms|miss)\.?\s+/i.test(name.trim());
+}
+
+function withDoctorHonorific(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (hasHonorificPrefix(trimmed)) return trimmed;
+  return `Dr. ${trimmed}`;
+}
+
+function withPatientHonorific(
+  name: string | null | undefined,
+  gender: string | null | undefined
+): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (hasHonorificPrefix(trimmed)) return trimmed;
+  const normalizedGender = (gender ?? '').trim().toLowerCase();
+  if (normalizedGender === 'male') return `Mr. ${trimmed}`;
+  if (normalizedGender === 'female') return `Ms. ${trimmed}`;
+  return trimmed;
+}
+
+/** Consultation invoices are generated without tax/GST. */
 export function computeConsultationInvoiceTotals(
   subtotal: number,
   currency: ConsultationCurrency
 ): ConsultationInvoiceTotals {
   const amount = Math.max(0, Math.round(Number(subtotal) || 0));
-  const taxRate = currency === 'INR' ? 0.18 : 0;
-  const taxAmount = taxRate > 0 ? Math.round(amount * taxRate) : 0;
+  const taxRate = 0;
+  const taxAmount = 0;
   return {
     subtotal: amount,
     taxRate,
     taxAmount,
     total: amount + taxAmount,
-    taxLabel: taxRate > 0 ? `GST (${Math.round(taxRate * 100)}%)` : null
+    taxLabel: null
   };
 }
 
@@ -128,13 +155,19 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
 
   const leftColWidth = contentWidth * 0.52;
   const rightX = margin + leftColWidth + 16;
+  const clinicLines = formatClinicAddress(input.doctor);
+  const contactPhone = input.doctor.mobile_no?.trim() || input.doctor.phone?.trim();
+  const doctorDisplayName = withDoctorHonorific(input.doctor.full_name) ?? input.doctor.full_name;
+  const patientDisplayName = withPatientHonorific(input.patientName, input.patientGender);
 
   addLine(ELIX_BILLING.legalName, 11, true, margin, leftColWidth);
   addLine(ELIX_BILLING.tagline, 10, false, margin, leftColWidth);
+  for (const line of clinicLines) addLine(line, 10, false, margin, leftColWidth);
+  if (contactPhone) addLine(`Phone: ${contactPhone}`, 10, false, margin, leftColWidth);
   addLine(ELIX_BILLING.email, 10, false, margin, leftColWidth);
   addLine(ELIX_BILLING.website, 10, false, margin, leftColWidth);
 
-  const rightStartY = y - 4 * 11 * 1.35;
+  const rightStartY = y - 4 * 10 * 1.35;
   let rightY = Math.max(margin + 52, rightStartY);
   const writeRight = (text: string, size: number, bold = false) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
@@ -149,30 +182,25 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   y = Math.max(y, rightY) + 12;
 
   addLine('Bill to', 11, true);
-  if (input.patientName) addLine(input.patientName, 11);
+  if (patientDisplayName) addLine(patientDisplayName, 11);
   if (input.patientEmail) addLine(input.patientEmail, 10);
   y += 8;
 
   addLine('Consultation provider', 11, true);
   addLine(
-    `${input.doctor.full_name}${input.doctor.specialty ? ` · ${input.doctor.specialty}` : ''}`,
+    `${doctorDisplayName}${input.doctor.specialty ? ` · ${input.doctor.specialty}` : ''}`,
     11
   );
   if (input.doctor.qualification?.trim()) addLine(input.doctor.qualification.trim(), 10);
   if (input.doctor.medical_license_no?.trim()) {
     addLine(`License: ${input.doctor.medical_license_no.trim()}`, 10);
   }
-  const clinicLines = formatClinicAddress(input.doctor);
-  for (const line of clinicLines) addLine(line, 10);
-  const contactPhone = input.doctor.mobile_no?.trim() || input.doctor.phone?.trim();
-  if (contactPhone) addLine(`Phone: ${contactPhone}`, 10);
-  if (input.doctor.clinic_website?.trim()) addLine(input.doctor.clinic_website.trim(), 10);
   y += 10;
 
   const durationLabel = input.durationMinutes
     ? formatDurationMinutesLabel(input.durationMinutes)
     : 'Consultation';
-  const description = `${durationLabel} online consultation — ${input.doctor.full_name}`;
+  const description = `${durationLabel} online consultation — ${doctorDisplayName}`;
 
   ensureSpace(120);
   doc.setFillColor(245, 248, 252);
@@ -217,8 +245,6 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
       input.totals.taxLabel,
       formatConsultationFeeForPdf(input.totals.taxAmount, input.currency)
     );
-  } else {
-    addSummaryRow('Tax', '—');
   }
   y += 4;
   doc.line(summaryX, y, pageWidth - margin, y);

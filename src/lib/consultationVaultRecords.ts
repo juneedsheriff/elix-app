@@ -26,6 +26,7 @@ function orderPdfMeta(input: SyncConsultationOrdersInput): ConsultationOrderPdfM
   const { request, doctor, issuedAt } = input;
   return {
     patientName: request.patient_name,
+    patientGender: request.patient_gender,
     patientId: request.patient_id,
     doctorName: doctor?.full_name ?? request.doctor_name,
     doctorSpecialty: doctor?.specialty ?? request.doctor_specialty,

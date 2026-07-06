@@ -107,6 +107,7 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const meta = consultationSummaryPdfMetaFromRequest(request);
   const orderMeta = {
     patientName: request.patient_name,
+    patientGender: request.patient_gender,
     patientId: request.patient_id,
     doctorName: request.doctor_name,
     doctorSpecialty: request.doctor_specialty,

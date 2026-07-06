@@ -431,6 +431,8 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
       setDownloadingOrderKey(key);
       try {
         const meta = {
+          patientName: summary.patient_name,
+          patientGender: summary.patient_gender,
           patientId: summary.patient_auth_user_id,
           requestId: summary.request_id,
           doctorName: summary.doctor_name,

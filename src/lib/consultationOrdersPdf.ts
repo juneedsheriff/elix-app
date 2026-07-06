@@ -2,6 +2,7 @@ import { ELIX_BRAND, loadElixLogoDataUrl } from './pdfBranding';
 
 export type ConsultationOrderPdfMeta = {
   patientName?: string | null;
+  patientGender?: string | null;
   patientId?: string | null;
   doctorName?: string | null;
   doctorSpecialty?: string | null;
@@ -9,6 +10,32 @@ export type ConsultationOrderPdfMeta = {
   requestId?: string | null;
   issuedAt?: Date;
 };
+
+function hasHonorificPrefix(name: string): boolean {
+  return /^(dr|mr|mrs|ms|miss)\.?\s+/i.test(name.trim());
+}
+
+function withDoctorHonorific(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (hasHonorificPrefix(trimmed)) return trimmed;
+  return `Dr. ${trimmed}`;
+}
+
+function withPatientHonorific(
+  name: string | null | undefined,
+  gender: string | null | undefined
+): string | null {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (hasHonorificPrefix(trimmed)) return trimmed;
+  const normalizedGender = (gender ?? '').trim().toLowerCase();
+  if (normalizedGender === 'male') return `Mr. ${trimmed}`;
+  if (normalizedGender === 'female') return `Ms. ${trimmed}`;
+  return trimmed;
+}
 
 function shortId(value: string): string {
   return value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
@@ -115,14 +142,16 @@ async function buildOrderPdf(
   y = Math.max(y, rightY) + 12;
 
   addLine('Patient', 11, true);
-  if (meta.patientName) addLine(meta.patientName, 11);
+  const patientDisplayName = withPatientHonorific(meta.patientName, meta.patientGender);
+  if (patientDisplayName) addLine(patientDisplayName, 11);
   if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 10);
   y += 8;
 
   addLine('Consultation provider', 11, true);
-  if (meta.doctorName) {
+  const doctorDisplayName = withDoctorHonorific(meta.doctorName);
+  if (doctorDisplayName) {
     addLine(
-      `${meta.doctorName}${meta.doctorSpecialty ? ` · ${meta.doctorSpecialty}` : ''}`,
+      `${doctorDisplayName}${meta.doctorSpecialty ? ` · ${meta.doctorSpecialty}` : ''}`,
       11
     );
   }
