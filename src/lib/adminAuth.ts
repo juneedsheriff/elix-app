@@ -1,6 +1,10 @@
 import { supabase } from './supabase';
 
 export type AccountRole = 'doctor' | 'patient';
+export type RequestLifecycleEvent =
+  | 'patient_request_submitted'
+  | 'request_assigned_to_pse'
+  | 'request_released_to_doctor';
 
 export type AccountAuthStatus = {
   role: AccountRole;
@@ -178,4 +182,20 @@ export function loginStatusLabel(status: AccountAuthStatus | null, authUserId?: 
   }
   if (!authUserId) return 'No login';
   return loginDisabled ? 'Disabled' : 'Linked';
+}
+
+export async function notifyRequestLifecycleEmail(input: {
+  event: RequestLifecycleEvent;
+  requestId: string;
+}) {
+  const requestId = input.requestId.trim();
+  if (!requestId) return { data: null, error: 'requestId is required.' };
+
+  return adminAuthFetch<{ ok: boolean; delivered?: number; skipped?: boolean }>(
+    '/notify/request-lifecycle',
+    {
+      method: 'POST',
+      body: JSON.stringify({ event: input.event, requestId })
+    }
+  );
 }

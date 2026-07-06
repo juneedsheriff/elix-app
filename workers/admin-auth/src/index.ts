@@ -12,12 +12,21 @@ type Env = {
 };
 
 type Role = 'doctor' | 'patient';
+type RequestLifecycleEvent =
+  | 'patient_request_submitted'
+  | 'request_assigned_to_pse'
+  | 'request_released_to_doctor';
 
 type ManageBody = {
   role: Role;
   profileId: string;
   action: 'enable' | 'disable' | 'set_password';
   password?: string;
+};
+
+type RequestLifecycleNotifyBody = {
+  event: RequestLifecycleEvent;
+  requestId: string;
 };
 
 type EnableLoginOptions = {
@@ -652,6 +661,225 @@ async function sendTemporaryPasswordEmail(
   return {};
 }
 
+async function sendEmailViaResend(input: {
+  toEmail: string;
+  subject: string;
+  html: string;
+  env: Env;
+}): Promise<{ error?: string }> {
+  const apiKey = input.env.RESEND_API_KEY?.trim();
+  const senderEmail = input.env.SMTP_ADMIN_EMAIL?.trim();
+  const senderName = input.env.SMTP_SENDER_NAME?.trim() || 'ElixClinix';
+  if (!apiKey || !senderEmail) {
+    return {
+      error:
+        'Notification email service is not configured (missing RESEND_API_KEY or SMTP_ADMIN_EMAIL in admin-auth worker).'
+    };
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: `${senderName} <${senderEmail}>`,
+      to: [input.toEmail],
+      subject: input.subject,
+      html: input.html
+    })
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    return { error: message || `HTTP ${response.status}` };
+  }
+
+  return {};
+}
+
+type RequestNotificationContext = {
+  requestId: string;
+  patientId: string | null;
+  patientName: string | null;
+  patientEmail: string | null;
+  doctorName: string | null;
+  doctorEmail: string | null;
+  assignedPseName: string | null;
+  assignedPseEmail: string | null;
+  submittedAt: string | null;
+  assignedAt: string | null;
+};
+
+async function loadRequestNotificationContext(
+  requestId: string,
+  env: Env
+): Promise<{ data: RequestNotificationContext | null; error?: string }> {
+  const admin = serviceClient(env);
+  const { data, error } = await admin
+    .from('opinion_requests')
+    .select(
+      `
+      id,
+      patient_id,
+      patient_name,
+      patient_email,
+      doctor_id,
+      doctor_name,
+      assigned_to,
+      assigned_at,
+      created_at,
+      assignee:admins!opinion_requests_assigned_to_fkey(full_name, email),
+      doctors(full_name, email)
+    `
+    )
+    .eq('id', requestId)
+    .maybeSingle();
+
+  if (error) return { data: null, error: error.message };
+  if (!data) return { data: null, error: 'Request not found.' };
+
+  const assignee = Array.isArray(data.assignee) ? data.assignee[0] : data.assignee;
+  const doctor = Array.isArray(data.doctors) ? data.doctors[0] : data.doctors;
+
+  let patientEmail = (data.patient_email as string | null | undefined)?.trim() || null;
+  if (!patientEmail && data.patient_id) {
+    const { data: patient } = await admin
+      .from('patients')
+      .select('email')
+      .eq('auth_user_id', data.patient_id as string)
+      .maybeSingle();
+    patientEmail = (patient?.email as string | null | undefined)?.trim() || null;
+  }
+
+  return {
+    data: {
+      requestId: data.id as string,
+      patientId: (data.patient_id as string | null | undefined) ?? null,
+      patientName: (data.patient_name as string | null | undefined) ?? null,
+      patientEmail,
+      doctorName: ((doctor?.full_name as string | null | undefined) ?? (data.doctor_name as string | null)) ?? null,
+      doctorEmail: (doctor?.email as string | null | undefined) ?? null,
+      assignedPseName: (assignee?.full_name as string | null | undefined) ?? null,
+      assignedPseEmail: (assignee?.email as string | null | undefined) ?? null,
+      submittedAt: (data.created_at as string | null | undefined) ?? null,
+      assignedAt: (data.assigned_at as string | null | undefined) ?? null
+    }
+  };
+}
+
+async function sendRequestLifecycleNotification(
+  body: RequestLifecycleNotifyBody,
+  request: Request,
+  env: Env
+): Promise<{ delivered: number; skipped?: boolean; error?: string }> {
+  const requestId = body.requestId?.trim();
+  if (!requestId) return { delivered: 0, error: 'requestId is required.' };
+
+  const requestContext = await loadRequestNotificationContext(requestId, env);
+  if (requestContext.error || !requestContext.data) {
+    return { delivered: 0, error: requestContext.error ?? 'Could not load request details.' };
+  }
+  const ctx = requestContext.data;
+
+  const auth = request.headers.get('Authorization');
+  if (!auth?.startsWith('Bearer ')) {
+    return { delivered: 0, error: 'Unauthorized.' };
+  }
+  const token = auth.slice(7);
+  const callerUserId = await getUserIdFromToken(token, env);
+  if (!callerUserId) return { delivered: 0, error: 'Unauthorized.' };
+
+  const staffCaller = await verifyStaffCaller(request, env);
+
+  if (body.event === 'patient_request_submitted') {
+    if (!ctx.patientId || callerUserId !== ctx.patientId) {
+      return { delivered: 0, error: 'Only the request patient can send this notification.' };
+    }
+
+    const { data: admins, error: adminsError } = await serviceClient(env)
+      .from('admins')
+      .select('email, full_name')
+      .eq('role', 'administrator')
+      .eq('is_active', true);
+    if (adminsError) return { delivered: 0, error: adminsError.message };
+
+    const recipients = (admins ?? [])
+      .map((row) => ({ email: String(row.email ?? '').trim(), name: String(row.full_name ?? '').trim() }))
+      .filter((row) => row.email.length > 0);
+    if (!recipients.length) return { delivered: 0, skipped: true };
+
+    const subject = `New patient request submitted · ${ctx.requestId.slice(0, 8).toUpperCase()}`;
+    let delivered = 0;
+    for (const recipient of recipients) {
+      const email = await sendEmailViaResend({
+        toEmail: recipient.email,
+        subject,
+        html: `
+          <p>Hi ${recipient.name || 'Admin'},</p>
+          <p>A new patient request was submitted and is awaiting assignment.</p>
+          <p><strong>Request ID:</strong> ${ctx.requestId.slice(0, 8).toUpperCase()}</p>
+          <p><strong>Patient:</strong> ${ctx.patientName || 'Patient'}</p>
+          ${ctx.submittedAt ? `<p><strong>Submitted:</strong> ${new Date(ctx.submittedAt).toLocaleString()}</p>` : ''}
+        `,
+        env
+      });
+      if (!email.error) delivered += 1;
+    }
+    return { delivered };
+  }
+
+  if (body.event === 'request_assigned_to_pse') {
+    if (!staffCaller || staffCaller.role !== 'administrator') {
+      return { delivered: 0, error: 'Only administrators can send this notification.' };
+    }
+    if (!ctx.assignedPseEmail?.trim()) return { delivered: 0, skipped: true };
+
+    const result = await sendEmailViaResend({
+      toEmail: ctx.assignedPseEmail.trim(),
+      subject: `New request assigned to you · ${ctx.requestId.slice(0, 8).toUpperCase()}`,
+      html: `
+        <p>Hi ${ctx.assignedPseName || 'PSE'},</p>
+        <p>A patient request has been assigned to you for coordination.</p>
+        <p><strong>Request ID:</strong> ${ctx.requestId.slice(0, 8).toUpperCase()}</p>
+        <p><strong>Patient:</strong> ${ctx.patientName || 'Patient'}</p>
+        ${ctx.assignedAt ? `<p><strong>Assigned:</strong> ${new Date(ctx.assignedAt).toLocaleString()}</p>` : ''}
+      `,
+      env
+    });
+    if (result.error) return { delivered: 0, error: result.error };
+    return { delivered: 1 };
+  }
+
+  if (body.event === 'request_released_to_doctor') {
+    if (
+      !staffCaller ||
+      (staffCaller.role !== 'patient_service_executive' &&
+        staffCaller.role !== 'patient_service_executive_clinic')
+    ) {
+      return { delivered: 0, error: 'Only PSE users can send this notification.' };
+    }
+    if (!ctx.doctorEmail?.trim()) return { delivered: 0, skipped: true };
+
+    const result = await sendEmailViaResend({
+      toEmail: ctx.doctorEmail.trim(),
+      subject: `Patient request ready for consultation · ${ctx.requestId.slice(0, 8).toUpperCase()}`,
+      html: `
+        <p>Hi ${ctx.doctorName || 'Doctor'},</p>
+        <p>A patient request has been coordinated and released to you for consultation.</p>
+        <p><strong>Request ID:</strong> ${ctx.requestId.slice(0, 8).toUpperCase()}</p>
+        <p><strong>Patient:</strong> ${ctx.patientName || 'Patient'}</p>
+      `,
+      env
+    });
+    if (result.error) return { delivered: 0, error: result.error };
+    return { delivered: 1 };
+  }
+
+  return { delivered: 0, error: 'Unsupported event.' };
+}
+
 async function enableLogin(
   profile: ProfileRow,
   role: Role,
@@ -957,6 +1185,28 @@ export default {
       const result = await manageStaffMember(body, env, { selfService: true });
       if (result.error) return json({ error: result.error }, 400, origin, env);
       return json({ ok: true, staff: result.staff }, 200, origin, env);
+    }
+
+    if (request.method === 'POST' && pathname === '/notify/request-lifecycle') {
+      let body: RequestLifecycleNotifyBody;
+      try {
+        body = (await request.json()) as RequestLifecycleNotifyBody;
+      } catch {
+        return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+      }
+
+      if (!body.event || !body.requestId) {
+        return json({ error: 'event and requestId are required.' }, 400, origin, env);
+      }
+
+      const result = await sendRequestLifecycleNotification(body, request, env);
+      if (result.error) return json({ error: result.error }, 400, origin, env);
+      return json(
+        { ok: true, delivered: result.delivered, skipped: Boolean(result.skipped) },
+        200,
+        origin,
+        env
+      );
     }
 
     const caller = await verifyStaffCaller(request, env);

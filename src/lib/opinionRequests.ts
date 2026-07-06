@@ -28,6 +28,7 @@ import {
   consultationSummaryPdfMetaFromRequest,
   generateConsultationSummaryPdfBlob
 } from './consultationSummaryPdf';
+import { notifyRequestLifecycleEmail } from './adminAuth';
 import { syncConsultationOrdersToPatientVault } from './consultationVaultRecords';
 import {
   createConsultationInvoiceUploadUrl,
@@ -914,6 +915,10 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
   await logRequestAudit(request.id, 'request_created', 'patient', {
     metadata: { doctor_id: doctor.id, doctor_name: doctorName }
   });
+  void notifyRequestLifecycleEmail({
+    event: 'patient_request_submitted',
+    requestId: request.id
+  });
   return { data: { id: request.id }, error: null };
 }
 
@@ -1165,6 +1170,10 @@ export async function createRecommendationOpinionRequest(input: CreateRecommenda
       requested_specialty: input.requestedSpecialty?.trim() || null,
       record_count: input.recordIds.length
     }
+  });
+  void notifyRequestLifecycleEmail({
+    event: 'patient_request_submitted',
+    requestId: request.id
   });
   return { data: { id: request.id }, error: null };
 }
@@ -3603,6 +3612,10 @@ export async function pseReleaseToDoctor(requestId: string) {
     .single();
   if (error) return { data: null, error };
   await logRequestAudit(requestId, 'released_to_doctor', 'pse');
+  void notifyRequestLifecycleEmail({
+    event: 'request_released_to_doctor',
+    requestId
+  });
   return { data, error: null };
 }
 
@@ -4094,6 +4107,10 @@ export async function assignOpinionRequest(requestId: string, assigneeAdminId: s
 
   await logRequestAudit(requestId, 'request_assigned', 'administrator', {
     metadata: { assigned_to: assigneeAdminId }
+  });
+  void notifyRequestLifecycleEmail({
+    event: 'request_assigned_to_pse',
+    requestId
   });
   return { data, error: null };
 }
