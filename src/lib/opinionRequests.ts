@@ -3486,11 +3486,12 @@ export async function pseScheduleAppointment(
   requestId: string,
   input: { scheduledAt: string; meetingLink?: string | null }
 ) {
+  const trimmedMeetingLink = input.meetingLink?.trim() || null;
   const { data, error } = await supabase
     .from('opinion_requests')
     .update({
       scheduled_at: input.scheduledAt,
-      meeting_link: input.meetingLink?.trim() || null,
+      meeting_link: trimmedMeetingLink,
       consultation_stage: 'scheduled'
     })
     .eq('id', requestId)
@@ -3498,7 +3499,11 @@ export async function pseScheduleAppointment(
     .single();
   if (error) return { data: null, error };
   await logRequestAudit(requestId, 'appointment_scheduled', 'pse', {
-    metadata: { scheduled_at: input.scheduledAt, meeting_link: input.meetingLink?.trim() || null }
+    metadata: { scheduled_at: input.scheduledAt, meeting_link: trimmedMeetingLink }
+  });
+  void notifyRequestLifecycleEmail({
+    event: 'doctor_appointment_scheduled',
+    requestId
   });
   return { data, error: null };
 }
@@ -3612,10 +3617,6 @@ export async function pseReleaseToDoctor(requestId: string) {
     .single();
   if (error) return { data: null, error };
   await logRequestAudit(requestId, 'released_to_doctor', 'pse');
-  void notifyRequestLifecycleEmail({
-    event: 'request_released_to_doctor',
-    requestId
-  });
   return { data, error: null };
 }
 

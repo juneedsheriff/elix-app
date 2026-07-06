@@ -15,7 +15,8 @@ type Role = 'doctor' | 'patient';
 type RequestLifecycleEvent =
   | 'patient_request_submitted'
   | 'request_assigned_to_pse'
-  | 'request_released_to_doctor';
+  | 'request_released_to_doctor'
+  | 'doctor_appointment_scheduled';
 
 type ManageBody = {
   role: Role;
@@ -710,6 +711,8 @@ type RequestNotificationContext = {
   assignedPseEmail: string | null;
   submittedAt: string | null;
   assignedAt: string | null;
+  scheduledAt: string | null;
+  meetingLink: string | null;
 };
 
 async function loadRequestNotificationContext(
@@ -726,6 +729,8 @@ async function loadRequestNotificationContext(
       doctor_name,
       assigned_to,
       assigned_at,
+      scheduled_at,
+      meeting_link,
       created_at,
       assignee:admins!opinion_requests_assigned_to_fkey(full_name, email),
       doctor_profile:doctors!opinion_requests_doctor_id_fkey(full_name, email)
@@ -738,6 +743,8 @@ async function loadRequestNotificationContext(
       doctor_name,
       assigned_to,
       assigned_at,
+      scheduled_at,
+      meeting_link,
       created_at,
       assignee:admins!opinion_requests_assigned_to_fkey(full_name, email),
       doctor_profile:doctors!opinion_requests_doctor_id_fkey(full_name, email)
@@ -785,7 +792,9 @@ async function loadRequestNotificationContext(
       assignedPseName: (assignee?.full_name as string | null | undefined) ?? null,
       assignedPseEmail: (assignee?.email as string | null | undefined) ?? null,
       submittedAt: (data.created_at as string | null | undefined) ?? null,
-      assignedAt: (data.assigned_at as string | null | undefined) ?? null
+      assignedAt: (data.assigned_at as string | null | undefined) ?? null,
+      scheduledAt: (data.scheduled_at as string | null | undefined) ?? null,
+      meetingLink: (data.meeting_link as string | null | undefined) ?? null
     }
   };
 }
@@ -873,7 +882,7 @@ async function sendRequestLifecycleNotification(
     return { delivered: 1 };
   }
 
-  if (body.event === 'request_released_to_doctor') {
+  if (body.event === 'request_released_to_doctor' || body.event === 'doctor_appointment_scheduled') {
     if (
       !staffCaller ||
       (staffCaller.role !== 'patient_service_executive' &&
@@ -883,14 +892,30 @@ async function sendRequestLifecycleNotification(
     }
     if (!ctx.doctorEmail?.trim()) return { delivered: 0, skipped: true };
 
+    const appointmentDetails = ctx.scheduledAt
+      ? `<p><strong>Appointment:</strong> ${new Date(ctx.scheduledAt).toLocaleString()}</p>`
+      : '';
+    const meetingDetails = ctx.meetingLink?.trim()
+      ? `<p><strong>Meeting link:</strong> <a href="${ctx.meetingLink.trim()}">${ctx.meetingLink.trim()}</a></p>`
+      : '';
+
     const result = await sendEmailViaResend({
       toEmail: ctx.doctorEmail.trim(),
-      subject: `Patient request ready for consultation · ${ctx.requestId.slice(0, 8).toUpperCase()}`,
+      subject:
+        body.event === 'doctor_appointment_scheduled'
+          ? `Appointment scheduled with patient · ${ctx.requestId.slice(0, 8).toUpperCase()}`
+          : `Patient request ready for consultation · ${ctx.requestId.slice(0, 8).toUpperCase()}`,
       html: `
         <p>Hi ${ctx.doctorName || 'Doctor'},</p>
-        <p>A patient request has been coordinated and released to you for consultation.</p>
+        <p>${
+          body.event === 'doctor_appointment_scheduled'
+            ? 'A patient appointment has been scheduled for your consultation.'
+            : 'A patient request has been coordinated and released to you for consultation.'
+        }</p>
         <p><strong>Request ID:</strong> ${ctx.requestId.slice(0, 8).toUpperCase()}</p>
         <p><strong>Patient:</strong> ${ctx.patientName || 'Patient'}</p>
+        ${appointmentDetails}
+        ${meetingDetails}
       `,
       env
     });

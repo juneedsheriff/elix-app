@@ -4,7 +4,8 @@ export type AccountRole = 'doctor' | 'patient';
 export type RequestLifecycleEvent =
   | 'patient_request_submitted'
   | 'request_assigned_to_pse'
-  | 'request_released_to_doctor';
+  | 'request_released_to_doctor'
+  | 'doctor_appointment_scheduled';
 
 export type AccountAuthStatus = {
   role: AccountRole;

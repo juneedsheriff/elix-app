@@ -146,6 +146,12 @@ checks.push({
   actorPassword: PSE_PASSWORD
 });
 
+checks.push({
+  name: 'doctor_appointment_scheduled',
+  actorEmail: PSE_EMAIL,
+  actorPassword: PSE_PASSWORD
+});
+
 for (const check of checks) {
   try {
     const token = await signIn(check.actorEmail, check.actorPassword);
