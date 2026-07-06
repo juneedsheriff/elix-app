@@ -717,10 +717,7 @@ async function loadRequestNotificationContext(
   env: Env
 ): Promise<{ data: RequestNotificationContext | null; error?: string }> {
   const admin = serviceClient(env);
-  const { data, error } = await admin
-    .from('opinion_requests')
-    .select(
-      `
+  const selectWithPatientEmail = `
       id,
       patient_id,
       patient_name,
@@ -731,17 +728,41 @@ async function loadRequestNotificationContext(
       assigned_at,
       created_at,
       assignee:admins!opinion_requests_assigned_to_fkey(full_name, email),
-      doctors(full_name, email)
-    `
-    )
+      doctor_profile:doctors!opinion_requests_doctor_id_fkey(full_name, email)
+    `;
+  const selectLegacy = `
+      id,
+      patient_id,
+      patient_name,
+      doctor_id,
+      doctor_name,
+      assigned_to,
+      assigned_at,
+      created_at,
+      assignee:admins!opinion_requests_assigned_to_fkey(full_name, email),
+      doctor_profile:doctors!opinion_requests_doctor_id_fkey(full_name, email)
+    `;
+
+  let { data, error } = await admin
+    .from('opinion_requests')
+    .select(selectWithPatientEmail)
     .eq('id', requestId)
     .maybeSingle();
+
+  // Backward compatibility for deployments where patient_email column is not yet present.
+  if (error && /patient_email|column/i.test(error.message)) {
+    ({ data, error } = await admin
+      .from('opinion_requests')
+      .select(selectLegacy)
+      .eq('id', requestId)
+      .maybeSingle());
+  }
 
   if (error) return { data: null, error: error.message };
   if (!data) return { data: null, error: 'Request not found.' };
 
   const assignee = Array.isArray(data.assignee) ? data.assignee[0] : data.assignee;
-  const doctor = Array.isArray(data.doctors) ? data.doctors[0] : data.doctors;
+  const doctor = Array.isArray(data.doctor_profile) ? data.doctor_profile[0] : data.doctor_profile;
 
   let patientEmail = (data.patient_email as string | null | undefined)?.trim() || null;
   if (!patientEmail && data.patient_id) {
