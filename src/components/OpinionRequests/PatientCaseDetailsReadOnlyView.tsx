@@ -70,8 +70,25 @@ export default function PatientCaseDetailsReadOnlyView({
           label='Date Symptoms Started'
           value={formatCaseDetailValue(details.symptomsStartedDate)}
         />
-        <DetailField label='Current Diagnosis' value={formatCaseDetailValue(details.currentDiagnosis)} />
         <DetailField label='Severity of Symptoms' value={formatCaseDetailValue(details.symptomSeverity)} />
+        <p className='patient-case-details-readonly__subsection'>Vital Signs</p>
+        <DetailField
+          label='Blood Pressure'
+          value={formatCaseDetailValue(details.vitalSigns.bloodPressure)}
+        />
+        <DetailField label='Pulse Rate' value={formatCaseDetailValue(details.vitalSigns.pulseRate)} />
+        <DetailField
+          label='Respiratory Rate'
+          value={formatCaseDetailValue(details.vitalSigns.respiratoryRate)}
+        />
+        <DetailField
+          label='Temperature'
+          value={formatCaseDetailValue(details.vitalSigns.temperature)}
+        />
+        <DetailField label='SpO₂' value={formatCaseDetailValue(details.vitalSigns.spo2)} />
+        <DetailField label='Height' value={formatCaseDetailValue(details.vitalSigns.height)} />
+        <DetailField label='Weight' value={formatCaseDetailValue(details.vitalSigns.weight)} />
+        <DetailField label='Current Diagnosis' value={formatCaseDetailValue(details.currentDiagnosis)} />
         <DetailField
           label='Current Treatment Plan'
           value={formatCaseDetailValue(details.currentTreatmentPlan)}

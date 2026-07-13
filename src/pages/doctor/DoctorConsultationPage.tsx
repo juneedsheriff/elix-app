@@ -194,6 +194,13 @@ export default function DoctorConsultationPage({
     let cancelled = false;
 
     const refreshRequest = async () => {
+      const listRes = await fetchDoctorOpinionRequests();
+      if (cancelled) return;
+      const match = (listRes.data ?? []).find((row) => row.id === request.id) ?? null;
+      if (match) {
+        setRequest(match);
+        return;
+      }
       const { data } = await fetchStaffOpinionRequestById(request.id);
       if (!cancelled && data) {
         setRequest(data);
@@ -221,10 +228,15 @@ export default function DoctorConsultationPage({
       return;
     }
 
-    const doctorId = request.doctor_id;
-    const patientId = request.patient_id;
-    if (!doctorId || !patientId) {
-      setError('This request is missing doctor or patient information.');
+    const doctorId =
+      doctorProfile?.id?.trim() ||
+      request.doctor_id?.trim() ||
+      request.selected_doctor_id?.trim() ||
+      null;
+    // Clinic patients may not have claimed a login yet — patient_id (auth user) can be null.
+    const patientId = request.patient_id?.trim() || null;
+    if (!doctorId) {
+      setError('This request is missing doctor information.');
       return;
     }
 

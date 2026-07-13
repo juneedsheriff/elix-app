@@ -7,7 +7,7 @@ type Env = {
   ALLOWED_ORIGIN?: string;
 };
 
-type AuthUser = { id: string };
+type AuthUser = { id: string; email?: string | null };
 
 function corsHeaders(origin: string | null, env: Env): HeadersInit {
   const allowed = env.ALLOWED_ORIGIN?.trim();
@@ -43,8 +43,8 @@ async function getAuthUser(request: Request, env: Env): Promise<AuthUser | null>
   });
 
   if (!res.ok) return null;
-  const user = (await res.json()) as { id?: string };
-  return user.id ? { id: user.id } : null;
+  const user = (await res.json()) as { id?: string; email?: string | null };
+  return user.id ? { id: user.id, email: user.email ?? null } : null;
 }
 
 function assertOwnsPath(allowedPrefixes: string[], storagePath: string): void {
@@ -81,23 +81,70 @@ async function isStaffMember(userId: string, authHeader: string, env: Env): Prom
   return Array.isArray(rows) && rows.length > 0;
 }
 
+async function getDoctorIdsForAuthUser(
+  userId: string,
+  authHeader: string,
+  env: Env,
+  email?: string | null
+): Promise<string[]> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return [];
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
+  const headers = supabaseRestHeaders(authHeader, env, useServiceRole);
+  const ids = new Set<string>();
+  let linkedByAuth = false;
+
+  const byAuthUrl = `${base}/rest/v1/doctors?auth_user_id=eq.${encodeURIComponent(userId)}&select=id`;
+  const byAuthRes = await fetch(byAuthUrl, { headers });
+  if (byAuthRes.ok) {
+    const rows = (await byAuthRes.json()) as { id?: string }[];
+    for (const row of rows) {
+      if (row.id) {
+        ids.add(row.id);
+        linkedByAuth = true;
+      }
+    }
+  }
+
+  const trimmedEmail = email?.trim().toLowerCase();
+  if (trimmedEmail) {
+    // Match login-by-email doctor profiles that may not have auth_user_id linked yet.
+    const byEmailUrl = `${base}/rest/v1/doctors?email=ilike.${encodeURIComponent(`"${trimmedEmail}"`)}&select=id`;
+    const byEmailRes = await fetch(byEmailUrl, { headers });
+    if (byEmailRes.ok) {
+      const rows = (await byEmailRes.json()) as { id?: string }[];
+      for (const row of rows) {
+        if (row.id) ids.add(row.id);
+      }
+    }
+  }
+
+  // Self-heal: link auth_user_id so DB RLS (current_doctor_id) matches this login.
+  if (useServiceRole && !linkedByAuth && ids.size > 0) {
+    const doctorId = [...ids][0];
+    await fetch(`${base}/rest/v1/doctors?id=eq.${encodeURIComponent(doctorId)}&auth_user_id=is.null`, {
+      method: 'PATCH',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal'
+      },
+      body: JSON.stringify({ auth_user_id: userId })
+    });
+  }
+
+  return [...ids];
+}
+
 async function getDoctorIdForAuthUser(
   userId: string,
   authHeader: string,
-  env: Env
+  env: Env,
+  email?: string | null
 ): Promise<string | null> {
-  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
-
-  const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const url = `${base}/rest/v1/doctors?auth_user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`;
-  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
-  const res = await fetch(url, {
-    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
-  });
-  if (!res.ok) return null;
-
-  const rows = (await res.json()) as { id?: string }[];
-  return rows[0]?.id ?? null;
+  const ids = await getDoctorIdsForAuthUser(userId, authHeader, env, email);
+  return ids[0] ?? null;
 }
 
 async function canDoctorUploadConsultationSummary(
@@ -105,24 +152,14 @@ async function canDoctorUploadConsultationSummary(
   authHeader: string,
   requestId: string,
   storagePath: string,
-  env: Env
+  env: Env,
+  email?: string | null,
+  claimedDoctorId?: string | null
 ): Promise<boolean> {
   const expectedPrefix = `consultation-summaries/${requestId.trim()}/`;
   if (!storagePath.startsWith(expectedPrefix)) return false;
 
-  const doctorId = await getDoctorIdForAuthUser(userId, authHeader, env);
-  if (!doctorId) return false;
-
-  const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&doctor_id=eq.${encodeURIComponent(doctorId)}&select=id&limit=1`;
-  const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
-  const res = await fetch(url, {
-    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
-  });
-  if (!res.ok) return false;
-
-  const rows = (await res.json()) as unknown[];
-  return Array.isArray(rows) && rows.length > 0;
+  return canDoctorAccessRequest(userId, authHeader, requestId, env, email, claimedDoctorId);
 }
 
 async function canAccessConsultationSummaryPdfForRequest(
@@ -130,7 +167,8 @@ async function canAccessConsultationSummaryPdfForRequest(
   userId: string,
   requestId: string,
   storagePath: string,
-  env: Env
+  env: Env,
+  email?: string | null
 ): Promise<boolean> {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
 
@@ -167,8 +205,10 @@ async function canAccessConsultationSummaryPdfForRequest(
   if (summary.patient_auth_user_id === userId) return true;
   if (staff) return true;
 
-  const doctorId = await getDoctorIdForAuthUser(userId, authHeader, env);
-  return Boolean(doctorId && summary.doctor_id === doctorId);
+  if (await canDoctorAccessRequest(userId, authHeader, requestId, env, email)) return true;
+
+  const doctorIds = await getDoctorIdsForAuthUser(userId, authHeader, env, email);
+  return doctorIds.some((id) => summary.doctor_id === id);
 }
 
 const REQUEST_RECORD_CATEGORIES = new Set([
@@ -492,7 +532,7 @@ async function assertCanAccessPath(
   authHeader: string,
   storagePath: string,
   env: Env,
-  options?: { userId?: string; requestId?: string }
+  options?: { userId?: string; requestId?: string; email?: string | null }
 ): Promise<void> {
   if (storagePath.includes('..')) {
     throw new Error('Forbidden');
@@ -518,7 +558,8 @@ async function assertCanAccessPath(
       options.userId,
       requestId,
       storagePath,
-      env
+      env,
+      options.email
     );
     if (summaryAllowed) return;
 
@@ -625,32 +666,103 @@ function consultationOrderStoragePrefix(
   return `${folder}/consultation-orders/${requestId.trim()}/${recordCategory}/`;
 }
 
+async function resolveAuthorizedDoctorIds(
+  userId: string,
+  authHeader: string,
+  env: Env,
+  email?: string | null,
+  claimedDoctorId?: string | null
+): Promise<string[]> {
+  const ids = new Set(await getDoctorIdsForAuthUser(userId, authHeader, env, email));
+  const claimed = claimedDoctorId?.trim();
+  if (!claimed || ids.has(claimed)) return [...ids];
+
+  // App may send the signed-in doctor profile id; accept it when that row's email matches the JWT.
+  const trimmedEmail = email?.trim().toLowerCase();
+  if (!trimmedEmail || !env.SUPABASE_SERVICE_ROLE_KEY) return [...ids];
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/doctors?id=eq.${encodeURIComponent(claimed)}&select=id,email&limit=1`;
+  const res = await fetch(url, {
+    headers: supabaseRestHeaders(authHeader, env, true)
+  });
+  if (!res.ok) return [...ids];
+  const rows = (await res.json()) as { id?: string; email?: string | null }[];
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (row?.id && row.email?.trim().toLowerCase() === trimmedEmail) {
+    ids.add(row.id);
+  }
+  return [...ids];
+}
+
 async function canDoctorAccessRequest(
   userId: string,
   authHeader: string,
   requestId: string,
-  env: Env
+  env: Env,
+  email?: string | null,
+  claimedDoctorId?: string | null
 ): Promise<boolean> {
-  const doctorId = await getDoctorIdForAuthUser(userId, authHeader, env);
-  if (!doctorId) return false;
-
   const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&doctor_id=eq.${encodeURIComponent(doctorId)}&select=id&limit=1`;
+  const encodedRequestId = encodeURIComponent(requestId.trim());
+
+  // Prefer RLS visibility: if this doctor's JWT can read the request, they are assigned.
+  const rlsUrl = `${base}/rest/v1/opinion_requests?id=eq.${encodedRequestId}&select=id&limit=1`;
+  const rlsRes = await fetch(rlsUrl, {
+    headers: supabaseRestHeaders(authHeader, env, false)
+  });
+  if (rlsRes.ok) {
+    const rlsRows = (await rlsRes.json()) as unknown[];
+    if (Array.isArray(rlsRows) && rlsRows.length > 0) return true;
+  }
+
+  const doctorIds = new Set(
+    await resolveAuthorizedDoctorIds(userId, authHeader, env, email, claimedDoctorId)
+  );
+  if (!doctorIds.size) return false;
+
   const useServiceRole = Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
-  const res = await fetch(url, {
+  const requestUrl =
+    `${base}/rest/v1/opinion_requests?id=eq.${encodedRequestId}` +
+    `&select=id,doctor_id,selected_doctor_id&limit=1`;
+  const requestRes = await fetch(requestUrl, {
     headers: supabaseRestHeaders(authHeader, env, useServiceRole)
   });
-  if (!res.ok) return false;
+  if (requestRes.ok) {
+    const rows = (await requestRes.json()) as {
+      doctor_id?: string | null;
+      selected_doctor_id?: string | null;
+    }[];
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (row) {
+      if (row.doctor_id && doctorIds.has(row.doctor_id)) return true;
+      if (row.selected_doctor_id && doctorIds.has(row.selected_doctor_id)) return true;
+    }
+  }
 
-  const rows = (await res.json()) as unknown[];
-  return Array.isArray(rows) && rows.length > 0;
+  // Also allow doctors listed on recommendations for this request.
+  const recUrl =
+    `${base}/rest/v1/opinion_request_recommendations?request_id=eq.${encodedRequestId}` +
+    `&select=doctor_id`;
+  const recRes = await fetch(recUrl, {
+    headers: supabaseRestHeaders(authHeader, env, useServiceRole)
+  });
+  if (recRes.ok) {
+    const recRows = (await recRes.json()) as { doctor_id?: string | null }[];
+    if (Array.isArray(recRows) && recRows.some((r) => r.doctor_id && doctorIds.has(r.doctor_id))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function canDoctorUploadConsultationOrderPath(
   userId: string,
   authHeader: string,
   storagePath: string,
-  env: Env
+  env: Env,
+  email?: string | null
 ): Promise<boolean> {
   const match = storagePath.match(/^([^/]+)\/consultation-orders\/([^/]+)\/(prescriptions|lab_results)\//);
   if (!match) return false;
@@ -660,7 +772,7 @@ async function canDoctorUploadConsultationOrderPath(
   const recordCategory = match[3];
   if (!CONSULTATION_ORDER_CATEGORIES.has(recordCategory)) return false;
 
-  if (!(await canDoctorAccessRequest(userId, authHeader, requestId, env))) return false;
+  if (!(await canDoctorAccessRequest(userId, authHeader, requestId, env, email))) return false;
 
   const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
   if (!patientContext || patientContext.folder !== folder) return false;
@@ -855,6 +967,7 @@ export default {
           requestId?: string;
           contentLength?: number;
           fileName?: string;
+          doctorId?: string;
         };
 
         if (!body.requestId?.trim()) {
@@ -901,10 +1014,23 @@ export default {
           authHeader,
           requestId,
           storagePath,
-          env
+          env,
+          user.email,
+          body.doctorId
         );
         if (!canUpload) {
-          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+          const doctorId = await getDoctorIdForAuthUser(user.id, authHeader, env, user.email);
+          return jsonResponse(
+            {
+              error: 'Forbidden',
+              hint: doctorId
+                ? 'You are not the assigned doctor for this consultation request.'
+                : 'No doctor profile is linked to this login. Ask an admin to link your doctor account.'
+            },
+            403,
+            origin,
+            env
+          );
         }
 
         return jsonResponse(
@@ -952,7 +1078,7 @@ export default {
         }
 
         const requestId = body.requestId.trim();
-        if (!(await canDoctorAccessRequest(user.id, authHeader, requestId, env))) {
+        if (!(await canDoctorAccessRequest(user.id, authHeader, requestId, env, user.email))) {
           return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
         }
 
@@ -1019,7 +1145,7 @@ export default {
         const requestId = body.requestId.trim();
         const storagePath = body.storagePath.trim();
 
-        if (!(await canDoctorUploadConsultationOrderPath(user.id, authHeader, storagePath, env))) {
+        if (!(await canDoctorUploadConsultationOrderPath(user.id, authHeader, storagePath, env, user.email))) {
           return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
         }
 
@@ -1237,7 +1363,8 @@ export default {
               authHeader,
               requestId,
               storagePath,
-              env
+              env,
+              user.email
             );
             if (!canUpload) {
               throw new Error('Forbidden');
@@ -1262,7 +1389,8 @@ export default {
               user.id,
               authHeader,
               storagePath,
-              env
+              env,
+              user.email
             );
             if (!canUpload) {
               throw new Error('Forbidden');
@@ -1303,7 +1431,8 @@ export default {
         const storagePath = body.storagePath.trim();
         await assertCanAccessPath(pathPrefixes, authHeader, storagePath, env, {
           userId: user.id,
-          requestId: body.requestId
+          requestId: body.requestId,
+          email: user.email
         });
 
         const object = await env.MEDICAL_RECORDS.get(storagePath);

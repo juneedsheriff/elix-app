@@ -13,6 +13,14 @@
   padding-bottom: 0.35rem;
 }
 
+.patient-case-details-readonly__subsection {
+  grid-column: 1 / -1;
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--text, #111827);
+}
+
 .patient-case-details-readonly__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

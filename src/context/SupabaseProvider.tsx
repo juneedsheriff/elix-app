@@ -104,7 +104,19 @@ async function resolveDoctorForUser(user: User | null): Promise<Doctor | null> {
 
   if (user.email) {
     const byEmail = await fetchDoctorByEmail(user.email);
-    if (byEmail.data) return byEmail.data;
+    if (byEmail.data) {
+      if (!byEmail.data.auth_user_id) {
+        const { error: linkError } = await supabase
+          .from('doctors')
+          .update({ auth_user_id: user.id })
+          .eq('id', byEmail.data.id)
+          .is('auth_user_id', null);
+        if (!linkError) {
+          return { ...byEmail.data, auth_user_id: user.id };
+        }
+      }
+      return byEmail.data;
+    }
   }
 
   const metaRole = user.user_metadata?.role;

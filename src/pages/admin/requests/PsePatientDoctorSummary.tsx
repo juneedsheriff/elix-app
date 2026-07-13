@@ -160,8 +160,8 @@ export default function PsePatientDoctorSummary({
           </Stack>
         ) : (
           <Text size='sm' c='dimmed'>
-            The patient has not chosen a doctor yet. Share your recommendations so they can select one
-            and submit their preferred time.
+            The patient has not chosen a doctor yet. Share recommendations for them to choose, or
+            assign a doctor directly below without waiting for patient approval.
           </Text>
         )}
       </Paper>

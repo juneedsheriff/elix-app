@@ -117,8 +117,9 @@ export function useDoctorCasesTableColumns({
         Cell: ({ row }) => {
           const request = row.original;
           const meetingLink = request.meeting_link?.trim();
+          const scheduledAt = request.scheduled_at?.trim();
 
-          if (!meetingLink) {
+          if (!meetingLink && !scheduledAt) {
             return (
               <Text size='sm' className='doctors-mgmt-muted'>
                 —
@@ -128,23 +129,34 @@ export function useDoctorCasesTableColumns({
 
           return (
             <Stack gap={4}>
-              <Group gap={6} wrap='nowrap'>
-                <IconVideo size={15} stroke={1.6} />
-                <Text size='sm' fw={600}>
-                  Video
-                </Text>
-              </Group>
-              {request.scheduled_at ? (
+              {meetingLink ? (
+                <Group gap={6} wrap='nowrap'>
+                  <IconVideo size={15} stroke={1.6} />
+                  <Text size='sm' fw={600}>
+                    Video
+                  </Text>
+                </Group>
+              ) : (
+                <Group gap={6} wrap='nowrap'>
+                  <IconCalendar size={15} stroke={1.6} />
+                  <Text size='sm' fw={600}>
+                    Scheduled
+                  </Text>
+                </Group>
+              )}
+              {scheduledAt ? (
                 <Group gap={6} wrap='nowrap'>
                   <IconCalendar size={14} stroke={1.6} />
                   <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
-                    {new Date(request.scheduled_at).toLocaleString()}
+                    {new Date(scheduledAt).toLocaleString()}
                   </Text>
                 </Group>
               ) : null}
-              <Anchor href={meetingLink} target='_blank' rel='noreferrer' size='xs' fw={600}>
-                Join meeting
-              </Anchor>
+              {meetingLink ? (
+                <Anchor href={meetingLink} target='_blank' rel='noreferrer' size='xs' fw={600}>
+                  Join meeting
+                </Anchor>
+              ) : null}
             </Stack>
           );
         }
@@ -176,7 +188,6 @@ export function useDoctorCasesTableColumns({
         minSize: 180,
         Cell: ({ row }) => {
           const request = row.original;
-          const preview = consultationNotesPreview(request);
           const hasNotes = hasPatientConsultationNotes(request);
 
           if (!hasNotes) {
@@ -189,13 +200,6 @@ export function useDoctorCasesTableColumns({
 
           return (
             <Stack gap={6}>
-              {/* {preview ? (
-                <Tooltip label={preview} multiline maw={360} withArrow>
-                  <Text size='sm' lineClamp={2} className='doctors-mgmt-muted'>
-                    {preview}
-                  </Text>
-                </Tooltip>
-              ) : null} */}
               <Button
                 variant='light'
                 color='teal'

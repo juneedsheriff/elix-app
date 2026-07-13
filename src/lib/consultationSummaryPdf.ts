@@ -1,8 +1,8 @@
 import {
   ELIX_BRAND,
-  formatDoctorClinicAddressLines,
-  formatDoctorContactPhone,
-  loadElixLogoDataUrl
+  loadElixLogoDataUrl,
+  resolvePdfClinicContext,
+  writePdfIssuerContactBlock
 } from './pdfBranding';
 import type { Doctor } from '../types/doctor';
 import type { ConsultationSummary } from '../types/opinionRequest';
@@ -17,6 +17,9 @@ export type ConsultationSummaryPdfMeta = {
   doctorSpecialty?: string | null;
   scheduledAt?: string | null;
   requestId?: string | null;
+  /** When set, request belongs to a PSE clinic workspace (not global PSE). */
+  clinicId?: string | null;
+  clinicName?: string | null;
   issuedAt?: Date;
 };
 
@@ -120,10 +123,13 @@ async function buildConsultationSummaryPdf(
   y += 16;
 
   const leftColWidth = contentWidth * 0.52;
-  addLine(ELIX_BRAND.legalName, 11, true, margin, leftColWidth);
-  addLine(ELIX_BRAND.tagline, 10, false, margin, leftColWidth);
-  addLine(ELIX_BRAND.email, 10, false, margin, leftColWidth);
-  addLine(ELIX_BRAND.website, 10, false, margin, leftColWidth);
+  writePdfIssuerContactBlock(addLine, {
+    margin,
+    leftColWidth,
+    clinicId: meta.clinicId,
+    clinicName: meta.clinicName,
+    doctor: meta.doctor
+  });
 
   let rightY = margin + 52;
   const writeRight = (text: string, size: number, bold = false) => {
@@ -137,18 +143,12 @@ async function buildConsultationSummaryPdf(
     writeRight(`Request ID: ${meta.requestId.slice(0, 8).toUpperCase()}`, 9);
   }
 
-  const doctorAddressLines = meta.doctor ? formatDoctorClinicAddressLines(meta.doctor) : [];
-  const doctorPhone = meta.doctor ? formatDoctorContactPhone(meta.doctor) : null;
-  const doctorWebsite = meta.doctor?.clinic_website?.trim() || null;
-  for (const line of doctorAddressLines) addLine(line, 10, false, margin, leftColWidth);
-  if (doctorPhone) addLine(`Phone: ${doctorPhone}`, 10, false, margin, leftColWidth);
-  if (doctorWebsite) addLine(doctorWebsite, 10, false, margin, leftColWidth);
-
   y = Math.max(y, rightY) + 12;
 
   addLine('Patient', 11, true);
   const patientName = withPatientHonorific(meta.patientName ?? null, meta.patientGender);
   if (patientName) addLine(patientName, 11);
+  if (meta.patientEmail?.trim()) addLine(meta.patientEmail.trim(), 10);
   if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 10);
   y += 8;
 
@@ -206,6 +206,8 @@ export function consultationSummaryPdfMetaFromRequest(
     doctor_name?: string | null;
     doctor_specialty?: string | null;
     scheduled_at?: string | null;
+    clinic_id?: string | null;
+    clinic_name?: string | null;
   },
   doctor?: Doctor | null
 ): ConsultationSummaryPdfMeta {
@@ -219,6 +221,8 @@ export function consultationSummaryPdfMetaFromRequest(
     doctorSpecialty: request.doctor_specialty,
     scheduledAt: request.scheduled_at,
     requestId: request.id,
+    clinicId: request.clinic_id ?? null,
+    clinicName: request.clinic_name ?? null,
     issuedAt: new Date()
   };
 }
@@ -228,7 +232,17 @@ export async function generateConsultationSummaryPdfBlob(
   summary: ConsultationSummary,
   meta: ConsultationSummaryPdfMeta
 ): Promise<Blob> {
-  const doc = await buildConsultationSummaryPdf(summary, meta);
+  const clinic = await resolvePdfClinicContext({
+    clinicId: meta.clinicId,
+    clinicName: meta.clinicName,
+    doctor: meta.doctor,
+    patientId: meta.patientId
+  });
+  const doc = await buildConsultationSummaryPdf(summary, {
+    ...meta,
+    clinicId: clinic.clinicId,
+    clinicName: clinic.clinicName
+  });
   return doc.output('blob');
 }
 

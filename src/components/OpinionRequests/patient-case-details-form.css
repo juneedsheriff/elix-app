@@ -9,6 +9,13 @@
   font-weight: 700;
 }
 
+.patient-case-details-form__subsection-title {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text, #111827);
+}
+
 .patient-case-details-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

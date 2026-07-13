@@ -7,15 +7,18 @@ import {
   MultiSelect,
   Paper,
   SegmentedControl,
+  Select,
   Stack,
   Text
 } from '@mantine/core';
-import { IconShare } from '@tabler/icons-react';
+import { IconCheck, IconShare } from '@tabler/icons-react';
 import {
   fetchOpinionRequestRecommendations,
   markRecommendationsShared,
+  pseAssignAndApproveDoctor,
   saveOpinionRequestRecommendations
 } from '../../../lib/opinionRequests';
+import { isScheduleConfirmed } from '../../../lib/consultationWizard';
 import {
   consultationDurationSelectOptions,
   doctorConsultationCurrency,
@@ -49,6 +52,9 @@ export default function RecommendDoctorsSection({
 }: RecommendDoctorsSectionProps) {
   const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [selectedDoctorIds, setSelectedDoctorIds] = useState<string[]>([]);
+  const [assignDoctorId, setAssignDoctorId] = useState<string | null>(
+    () => request.selected_doctor_id ?? request.doctor_id ?? null
+  );
   const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<string>(
     String(request.consultation_duration_minutes ?? 30)
   );
@@ -70,7 +76,21 @@ export default function RecommendDoctorsSection({
     void loadRecommendations();
   }, [loadRecommendations]);
 
+  useEffect(() => {
+    const preferred =
+      request.selected_doctor_id ??
+      request.doctor_id ??
+      (selectedDoctorIds.length === 1 ? selectedDoctorIds[0] : null);
+    setAssignDoctorId((current) => current ?? preferred);
+  }, [request.id, request.selected_doctor_id, request.doctor_id, selectedDoctorIds]);
+
+  useEffect(() => {
+    setAssignDoctorId(request.selected_doctor_id ?? request.doctor_id ?? null);
+  }, [request.id]);
+
   const durationMinutes = Number(consultationDurationMinutes);
+  const scheduleConfirmed = isScheduleConfirmed(request);
+  const canAssignWithoutPatient = canCoordinate && !scheduleConfirmed;
 
   const doctorOptions = doctors.map((doctor) => {
     const fee = Number.isFinite(durationMinutes)
@@ -159,6 +179,45 @@ export default function RecommendDoctorsSection({
     onUpdated();
   };
 
+  const assignAndApproveDoctor = async () => {
+    if (!assignDoctorId) {
+      onError('Select a doctor to assign.');
+      return;
+    }
+
+    setBusy(true);
+    const recommendation = recommendations.find((item) => item.doctor_id === assignDoctorId);
+    const { error } = await pseAssignAndApproveDoctor(request.id, assignDoctorId, {
+      consultationDurationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : undefined,
+      recommendation: recommendation
+        ? {
+            doctor_id: recommendation.doctor_id,
+            doctor_name: recommendation.doctor_name,
+            doctor_consultation_tiers: recommendation.doctor_consultation_tiers,
+            doctor_consultation_currency: recommendation.doctor_consultation_currency
+          }
+        : undefined
+    });
+    setBusy(false);
+    if (error) {
+      onError(error.message);
+      return;
+    }
+
+    // Keep the assigned doctor on the recommendation list for history.
+    if (!selectedDoctorIds.includes(assignDoctorId)) {
+      await saveOpinionRequestRecommendations(request.id, [
+        ...selectedDoctorIds.map((doctorId, index) => ({ doctorId, rank: index + 1 })),
+        { doctorId: assignDoctorId, rank: selectedDoctorIds.length + 1 }
+      ]);
+    }
+
+    onSuccess('Doctor assigned and approved. Continue to Step 4 — Send payment link.');
+    void loadRecommendations();
+    onUpdated();
+    onPatientSelectionApproved?.();
+  };
+
   return (
     <Stack gap='md' className='doctors-mgmt-recommend'>
       <PsePatientDoctorSummary
@@ -182,78 +241,120 @@ export default function RecommendDoctorsSection({
       ) : null}
 
       {canCoordinate ? (
-      <Paper radius='md' p='md' withBorder className='doctors-mgmt-detail-block doctors-mgmt-recommend__actions'>
-      <Group justify='space-between' align='flex-start' wrap='wrap' gap='sm' mb='sm'>
-        <Stack gap={4}>
-          <Text size='sm' fw={700}>
-            Manage recommendation list
-          </Text>
-          <Text size='xs' c='dimmed'>
-            Add or update doctors, then share the list with the patient.
-          </Text>
-        </Stack>
-        <Badge
-          variant='light'
-          color={isSharedWithPatient ? 'green' : 'orange'}
-          radius='xl'
-        >
-          {isSharedWithPatient ? 'Shared with patient' : 'Not shared yet'}
-        </Badge>
-      </Group>
-
-      <Stack gap={4} mb='sm'>
-        <Text size='sm' fw={600}>
-          Consultation duration for this case
-        </Text>
-        <Text size='xs' c='dimmed'>
-          Patients will see each doctor&apos;s fee for this session length.
-        </Text>
-        <SegmentedControl
-          value={consultationDurationMinutes}
-          onChange={setConsultationDurationMinutes}
-          data={consultationDurationSelectOptions()}
-          disabled={busy}
-        />
-      </Stack>
-
-      <MultiSelect
-        label='Doctors to recommend'
-        placeholder='Search and select doctors…'
-        data={doctorOptions}
-        value={selectedDoctorIds}
-        onChange={setSelectedDoctorIds}
-        searchable
-        clearable
-        disabled={busy || !doctors.length}
-        mb='sm'
-      />
-
-      {!doctors.length ? (
-        <Alert color='orange' radius='md' mb='sm' title='No doctors available'>
-          Add doctors under ElixClinix → Doctors before you can build a recommendation list.
-        </Alert>
-      ) : null}
-
-      <Group gap='sm'>
-        <Button
-          variant='default'
+        <Paper
           radius='md'
-          loading={busy}
-          onClick={() => void saveRecommendations(false)}
+          p='md'
+          withBorder
+          className='doctors-mgmt-detail-block doctors-mgmt-recommend__actions'
         >
-          Save list
-        </Button>
-        <Button
-          radius='md'
-          className='doctors-mgmt-header__primary'
-          leftSection={<IconShare size={16} />}
-          loading={busy}
-          onClick={() => void saveRecommendations(true)}
-        >
-          Share with patient
-        </Button>
-      </Group>
-    </Paper>
+          <Group justify='space-between' align='flex-start' wrap='wrap' gap='sm' mb='sm'>
+            <Stack gap={4}>
+              <Text size='sm' fw={700}>
+                Manage recommendation list
+              </Text>
+              <Text size='xs' c='dimmed'>
+                Add or update doctors, then share the list with the patient — or assign a doctor
+                directly without waiting for patient approval.
+              </Text>
+            </Stack>
+            <Badge
+              variant='light'
+              color={isSharedWithPatient ? 'green' : 'orange'}
+              radius='xl'
+            >
+              {isSharedWithPatient ? 'Shared with patient' : 'Not shared yet'}
+            </Badge>
+          </Group>
+
+          <Stack gap={4} mb='sm'>
+            <Text size='sm' fw={600}>
+              Consultation duration for this case
+            </Text>
+            <Text size='xs' c='dimmed'>
+              Patients will see each doctor&apos;s fee for this session length.
+            </Text>
+            <SegmentedControl
+              value={consultationDurationMinutes}
+              onChange={setConsultationDurationMinutes}
+              data={consultationDurationSelectOptions()}
+              disabled={busy}
+            />
+          </Stack>
+
+          <MultiSelect
+            label='Doctors to recommend'
+            placeholder='Search and select doctors…'
+            data={doctorOptions}
+            value={selectedDoctorIds}
+            onChange={setSelectedDoctorIds}
+            searchable
+            clearable
+            disabled={busy || !doctors.length}
+            mb='sm'
+          />
+
+          {!doctors.length ? (
+            <Alert color='orange' radius='md' mb='sm' title='No doctors available'>
+              Add doctors under ElixClinix → Doctors before you can build a recommendation list.
+            </Alert>
+          ) : null}
+
+          <Group gap='sm' mb={canAssignWithoutPatient ? 'md' : undefined}>
+            <Button
+              variant='default'
+              radius='md'
+              loading={busy}
+              onClick={() => void saveRecommendations(false)}
+            >
+              Save list
+            </Button>
+            <Button
+              radius='md'
+              className='doctors-mgmt-header__primary'
+              leftSection={<IconShare size={16} />}
+              loading={busy}
+              onClick={() => void saveRecommendations(true)}
+            >
+              Share with patient
+            </Button>
+          </Group>
+
+          {canAssignWithoutPatient ? (
+            <Stack gap='sm' pt='sm' style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
+              <Stack gap={2}>
+                <Text size='sm' fw={600}>
+                  Assign doctor without patient approval
+                </Text>
+                <Text size='xs' c='dimmed'>
+                  Select the consulting doctor and approve immediately — the patient does not need to
+                  choose or confirm first. You can then send the payment link.
+                </Text>
+              </Stack>
+              <Select
+                label='Doctor to assign'
+                placeholder='Select doctor…'
+                data={doctorOptions}
+                value={assignDoctorId}
+                onChange={setAssignDoctorId}
+                searchable
+                clearable
+                disabled={busy || !doctors.length}
+              />
+              <Group>
+                <Button
+                  radius='md'
+                  color='teal'
+                  leftSection={<IconCheck size={16} />}
+                  loading={busy}
+                  disabled={!assignDoctorId || !doctors.length}
+                  onClick={() => void assignAndApproveDoctor()}
+                >
+                  Assign &amp; approve doctor
+                </Button>
+              </Group>
+            </Stack>
+          ) : null}
+        </Paper>
       ) : null}
     </Stack>
   );

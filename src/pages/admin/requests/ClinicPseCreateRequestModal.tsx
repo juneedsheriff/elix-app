@@ -76,10 +76,14 @@ export default function ClinicPseCreateRequestModal({
 
   const patientOptions = useMemo(
     () =>
-      patients.map((patient) => ({
-        value: patient.id,
-        label: patient.full_name
-      })),
+      patients.map((patient) => {
+        const name = patient.full_name?.trim() || 'Unnamed patient';
+        const email = patient.email?.trim();
+        return {
+          value: patient.id,
+          label: email ? `${name} (${email})` : name
+        };
+      }),
     [patients]
   );
 

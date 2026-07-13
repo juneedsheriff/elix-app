@@ -45,13 +45,17 @@ async function r2ApiRequest<T>(
     return { data: null, error: { message: 'Could not reach the records storage API.' } };
   }
 
-  const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
+  const payload = (await response.json().catch(() => ({}))) as T & {
+    error?: string;
+    hint?: string;
+  };
 
   if (!response.ok) {
+    const detail = [payload.error, payload.hint].filter(Boolean).join(' — ');
     return {
       data: null,
       error: {
-        message: payload.error ?? `Storage API error (${response.status}).`
+        message: detail || `Storage API error (${response.status}).`
       }
     };
   }
@@ -96,9 +100,10 @@ export async function uploadFileToR2(
     });
 
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; hint?: string };
+      const detail = [payload.error, payload.hint].filter(Boolean).join(' — ');
       return {
-        error: { message: payload.error ?? `Upload to Cloudflare failed (${response.status}).` }
+        error: { message: detail || `Upload to Cloudflare failed (${response.status}).` }
       };
     }
 
@@ -129,7 +134,8 @@ export async function createConsultationInvoiceUploadUrl(requestId: string, cont
 export async function createConsultationSummaryUploadUrl(
   requestId: string,
   contentLength: number,
-  fileName: string
+  fileName: string,
+  doctorId?: string | null
 ) {
   return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
     '/v1/consultation-summary/upload-url',
@@ -138,7 +144,8 @@ export async function createConsultationSummaryUploadUrl(
       json: {
         requestId,
         contentLength,
-        fileName
+        fileName,
+        ...(doctorId?.trim() ? { doctorId: doctorId.trim() } : {})
       }
     }
   );

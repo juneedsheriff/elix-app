@@ -1,6 +1,21 @@
 import type { OpinionRequest } from '../types/opinionRequest';
 import type { Patient } from '../types/patient';
-import type { PatientCaseDetails } from '../types/patientCaseDetails';
+import type { PatientCaseDetails, PatientCaseVitalSigns } from '../types/patientCaseDetails';
+
+export function emptyPatientCaseVitalSigns(
+  overrides: Partial<PatientCaseVitalSigns> = {}
+): PatientCaseVitalSigns {
+  return {
+    bloodPressure: '',
+    pulseRate: '',
+    respiratoryRate: '',
+    temperature: '',
+    spo2: '',
+    height: '',
+    weight: '',
+    ...overrides
+  };
+}
 
 export function emptyPatientCaseDetails(
   overrides: Partial<PatientCaseDetails> = {}
@@ -12,6 +27,7 @@ export function emptyPatientCaseDetails(
     reasonForSecondOpinionOther: '',
     symptomsDescription: '',
     symptomsStartedDate: '',
+    vitalSigns: emptyPatientCaseVitalSigns(),
     currentDiagnosis: '',
     symptomSeverity: '',
     currentTreatmentPlan: '',
@@ -34,7 +50,8 @@ export function emptyPatientCaseDetails(
     consentInformationAccurate: false,
     consentShareRecords: false,
     consentNotEmergencyCare: false,
-    ...overrides
+    ...overrides,
+    vitalSigns: emptyPatientCaseVitalSigns(overrides.vitalSigns)
   };
 }
 
@@ -62,6 +79,19 @@ function readTimeSlots(value: unknown): PatientCaseDetails['preferredTimeSlots']
     .filter((slot) => slot.date && slot.time);
 }
 
+function parseVitalSigns(value: unknown): PatientCaseVitalSigns {
+  if (!isRecord(value)) return emptyPatientCaseVitalSigns();
+  return emptyPatientCaseVitalSigns({
+    bloodPressure: readString(value.bloodPressure),
+    pulseRate: readString(value.pulseRate),
+    respiratoryRate: readString(value.respiratoryRate),
+    temperature: readString(value.temperature),
+    spo2: readString(value.spo2),
+    height: readString(value.height),
+    weight: readString(value.weight)
+  });
+}
+
 export function parsePatientCaseDetails(value: unknown): PatientCaseDetails | null {
   if (!isRecord(value)) return null;
   return emptyPatientCaseDetails({
@@ -71,6 +101,7 @@ export function parsePatientCaseDetails(value: unknown): PatientCaseDetails | nu
     reasonForSecondOpinionOther: readString(value.reasonForSecondOpinionOther),
     symptomsDescription: readString(value.symptomsDescription),
     symptomsStartedDate: readString(value.symptomsStartedDate),
+    vitalSigns: parseVitalSigns(value.vitalSigns),
     currentDiagnosis: readString(value.currentDiagnosis),
     symptomSeverity: readString(value.symptomSeverity) as PatientCaseDetails['symptomSeverity'],
     currentTreatmentPlan: readString(value.currentTreatmentPlan),
@@ -134,6 +165,15 @@ export function serializePatientCaseDetails(details: PatientCaseDetails): Record
     reasonForSecondOpinionOther: details.reasonForSecondOpinionOther.trim() || null,
     symptomsDescription: details.symptomsDescription.trim(),
     symptomsStartedDate: details.symptomsStartedDate || null,
+    vitalSigns: {
+      bloodPressure: details.vitalSigns.bloodPressure.trim() || null,
+      pulseRate: details.vitalSigns.pulseRate.trim() || null,
+      respiratoryRate: details.vitalSigns.respiratoryRate.trim() || null,
+      temperature: details.vitalSigns.temperature.trim() || null,
+      spo2: details.vitalSigns.spo2.trim() || null,
+      height: details.vitalSigns.height.trim() || null,
+      weight: details.vitalSigns.weight.trim() || null
+    },
     currentDiagnosis: details.currentDiagnosis.trim() || null,
     symptomSeverity: details.symptomSeverity || null,
     currentTreatmentPlan: details.currentTreatmentPlan.trim() || null,
@@ -172,7 +212,16 @@ export function applyPatientProfileHistoryDefaults(
     familyHistory: details.familyHistory || patient.family_history || '',
     socialHistory: details.socialHistory || patient.social_history || '',
     knownAllergies: details.knownAllergies || patient.allergies || '',
-    currentMedications: details.currentMedications || patient.current_medications || ''
+    currentMedications: details.currentMedications || patient.current_medications || '',
+    vitalSigns: emptyPatientCaseVitalSigns({
+      ...details.vitalSigns,
+      height:
+        details.vitalSigns.height ||
+        (patient.height_cm != null ? String(patient.height_cm) : ''),
+      weight:
+        details.vitalSigns.weight ||
+        (patient.weight_kg != null ? String(patient.weight_kg) : '')
+    })
   });
 }
 

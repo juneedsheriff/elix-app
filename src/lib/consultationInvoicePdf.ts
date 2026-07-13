@@ -1,11 +1,15 @@
 import type { ConsultationCurrency } from '../types/doctor';
 import type { Doctor } from '../types/doctor';
 import {
-  formatConsultationFeeForPdf,
-  normalizeConsultationCurrency
+  formatConsultationFeeForPdf
 } from './consultationCurrency';
 import { formatDurationMinutesLabel } from './consultationTiers';
-import { loadElixLogoDataUrl } from './pdfBranding';
+import {
+  ELIX_BRAND,
+  loadElixLogoDataUrl,
+  resolvePdfClinicContext,
+  writePdfIssuerContactBlock
+} from './pdfBranding';
 
 export type ConsultationInvoiceTotals = {
   subtotal: number;
@@ -26,13 +30,9 @@ export type ConsultationInvoicePdfInput = {
   durationMinutes: number | null;
   currency: ConsultationCurrency;
   totals: ConsultationInvoiceTotals;
-};
-
-const ELIX_BILLING = {
-  legalName: 'ElixClinix',
-  tagline: 'Doctor consultation & teleconsultation platform',
-  email: 'support@elixhealth.com',
-  website: 'www.elixhealth.com'
+  /** When set, request belongs to a PSE clinic workspace (not global PSE). */
+  clinicId?: string | null;
+  clinicName?: string | null;
 };
 
 function hasHonorificPrefix(name: string): boolean {
@@ -84,20 +84,6 @@ export function buildConsultationInvoiceNumber(requestId: string, issuedAt = new
   return `ELIX-INV-${datePart}-${idPart}`;
 }
 
-function formatClinicAddress(doctor: Doctor): string[] {
-  const lines: string[] = [];
-  const clinicName = doctor.clinic_name?.trim() || doctor.hospital?.trim();
-  if (clinicName) lines.push(clinicName);
-  const street = [doctor.clinic_street, doctor.clinic_location].filter(Boolean).join(', ');
-  if (street) lines.push(street);
-  const cityLine = [doctor.clinic_city, doctor.clinic_state, doctor.clinic_zipcode]
-    .filter(Boolean)
-    .join(', ');
-  if (cityLine) lines.push(cityLine);
-  if (doctor.clinic_country?.trim()) lines.push(doctor.clinic_country.trim());
-  return lines;
-}
-
 function wrapText(
   doc: { splitTextToSize: (text: string, maxWidth: number) => string[] },
   text: string,
@@ -138,10 +124,10 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
     try {
       doc.addImage(logo, 'PNG', margin, y - 6, 96, 32);
     } catch {
-      addLine(ELIX_BILLING.legalName, 18, true);
+      addLine(ELIX_BRAND.legalName, 18, true);
     }
   } else {
-    addLine(ELIX_BILLING.legalName, 18, true);
+    addLine(ELIX_BRAND.legalName, 18, true);
   }
 
   doc.setFont('helvetica', 'bold');
@@ -154,18 +140,16 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   y += 16;
 
   const leftColWidth = contentWidth * 0.52;
-  const rightX = margin + leftColWidth + 16;
-  const clinicLines = formatClinicAddress(input.doctor);
-  const contactPhone = input.doctor.mobile_no?.trim() || input.doctor.phone?.trim();
   const doctorDisplayName = withDoctorHonorific(input.doctor.full_name) ?? input.doctor.full_name;
   const patientDisplayName = withPatientHonorific(input.patientName, input.patientGender);
 
-  addLine(ELIX_BILLING.legalName, 11, true, margin, leftColWidth);
-  addLine(ELIX_BILLING.tagline, 10, false, margin, leftColWidth);
-  for (const line of clinicLines) addLine(line, 10, false, margin, leftColWidth);
-  if (contactPhone) addLine(`Phone: ${contactPhone}`, 10, false, margin, leftColWidth);
-  addLine(ELIX_BILLING.email, 10, false, margin, leftColWidth);
-  addLine(ELIX_BILLING.website, 10, false, margin, leftColWidth);
+  writePdfIssuerContactBlock(addLine, {
+    margin,
+    leftColWidth,
+    clinicId: input.clinicId,
+    clinicName: input.clinicName,
+    doctor: input.doctor
+  });
 
   const rightStartY = y - 4 * 10 * 1.35;
   let rightY = Math.max(margin + 52, rightStartY);
@@ -267,7 +251,16 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
 export async function generateConsultationInvoicePdfBlob(
   input: ConsultationInvoicePdfInput
 ): Promise<Blob> {
-  const doc = await buildConsultationInvoicePdf(input);
+  const clinic = await resolvePdfClinicContext({
+    clinicId: input.clinicId,
+    clinicName: input.clinicName,
+    doctor: input.doctor
+  });
+  const doc = await buildConsultationInvoicePdf({
+    ...input,
+    clinicId: clinic.clinicId,
+    clinicName: clinic.clinicName
+  });
   return doc.output('blob');
 }
 

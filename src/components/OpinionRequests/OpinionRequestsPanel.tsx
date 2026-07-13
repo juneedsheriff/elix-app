@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { ClipboardList, Loader2 } from 'lucide-react';
+import { Button, Group } from '@mantine/core';
+import { ClipboardList, Loader2, RefreshCw } from 'lucide-react';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorIncomingRequestsCardList from './DoctorIncomingRequestsCardList';
 import DoctorIncomingRequestsTable from './DoctorIncomingRequestsTable';
@@ -13,6 +14,8 @@ import {
   subscribeDoctorOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
+
+const DOCTOR_CASES_POLL_MS = 25_000;
 
 function statusLabel(status: string, view: 'patient' | 'doctor', request?: OpinionRequest): string {
   if (view === 'patient' && request) {
@@ -73,6 +76,7 @@ export default function OpinionRequestsPanel({
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [doctorSearch, setDoctorSearch] = useState('');
@@ -90,17 +94,21 @@ export default function OpinionRequestsPanel({
   const doctorPendingCount = doctorConsultationQueue.filter(isAwaitingDoctorReply).length;
 
   const load = useCallback(
-    async (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean; manual?: boolean }) => {
       if (!canLoad) {
         setRequests([]);
         setLoading(false);
+        setRefreshing(false);
         hasLoadedOnceRef.current = false;
         return;
       }
 
       const silent = options?.silent ?? hasLoadedOnceRef.current;
+      const manual = options?.manual ?? false;
 
-      if (!silent) {
+      if (manual) {
+        setRefreshing(true);
+      } else if (!silent) {
         setLoading(true);
         setError(null);
       }
@@ -111,17 +119,18 @@ export default function OpinionRequestsPanel({
           : await fetchDoctorOpinionRequests();
 
       if (result.error) {
-        if (!silent) {
+        if (!silent || manual) {
           setError(result.error.message);
-          setRequests([]);
+          if (!silent) setRequests([]);
         }
       } else {
         setRequests(result.data ?? []);
-        if (!silent) setError(null);
+        if (!silent || manual) setError(null);
       }
 
       hasLoadedOnceRef.current = true;
       setLoading(false);
+      setRefreshing(false);
     },
     [canLoad, view, patientAuthUserId, doctorId, doctorEmail]
   );
@@ -135,6 +144,34 @@ export default function OpinionRequestsPanel({
     if (view !== 'doctor' || !canLoad) return;
     return subscribeDoctorOpinionRequestUpdates(() => void load({ silent: true }), { doctorId });
   }, [view, canLoad, doctorId, load]);
+
+  // Catch cases realtime may miss (e.g. row newly assigned to this doctor under RLS).
+  useEffect(() => {
+    if (view !== 'doctor' || !canLoad || !isElixHealthWorkspace) return;
+
+    const refreshSilently = () => {
+      if (document.visibilityState === 'hidden') return;
+      void load({ silent: true });
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshSilently();
+    };
+
+    window.addEventListener('focus', refreshSilently);
+    document.addEventListener('visibilitychange', onVisibility);
+    const intervalId = window.setInterval(refreshSilently, DOCTOR_CASES_POLL_MS);
+
+    return () => {
+      window.removeEventListener('focus', refreshSilently);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [view, canLoad, isElixHealthWorkspace, load]);
+
+  const handleRefresh = useCallback(() => {
+    void load({ manual: true });
+  }, [load]);
 
   const patchDoctorRequest = useCallback((updated: OpinionRequest) => {
     setRequests((prev) => prev.map((request) => (request.id === updated.id ? updated : request)));
@@ -153,11 +190,27 @@ export default function OpinionRequestsPanel({
       }
     >
       <section className={isElixHealthWorkspace ? 'section-card doctor-cases-workspace__card' : 'section-card'}>
-        <div className='section-head'>
-          <h3>
-            <ClipboardList size={22} className='inline-icon' aria-hidden /> {title}
-          </h3>
-          <p>{subtitle}</p>
+        <div className='section-head doctor-cases-workspace__head'>
+          <div className='doctor-cases-workspace__head-copy'>
+            <h3>
+              <ClipboardList size={22} className='inline-icon' aria-hidden /> {title}
+            </h3>
+            <p>{subtitle}</p>
+          </div>
+          {view === 'doctor' && canLoad ? (
+            <Group gap='xs' className='doctor-cases-workspace__head-actions'>
+              <Button
+                variant='default'
+                radius='md'
+                size='sm'
+                leftSection={<RefreshCw size={16} className={refreshing ? 'spin' : undefined} />}
+                loading={refreshing}
+                onClick={handleRefresh}
+              >
+                Refresh
+              </Button>
+            </Group>
+          ) : null}
         </div>
 
         {!configured ? (
@@ -210,7 +263,24 @@ export default function OpinionRequestsPanel({
           </div>
         ) : null}
 
-        {!loading && !error && canLoad && requests.length === 0 ? (
+        {!loading && !error && canLoad && view === 'doctor' && isElixHealthWorkspace ? (
+          <DoctorIncomingRequestsTable
+            data={visibleRequests}
+            isLoading={loading}
+            search={doctorSearch}
+            onSearchChange={setDoctorSearch}
+            hasActiveFilters={Boolean(doctorSearch.trim())}
+            onClearFilters={() => setDoctorSearch('')}
+            onNavigate={onNavigate}
+            returnScreen={doctorReturnScreen}
+            onOpenError={showOpenRecordError}
+            onRequestUpdated={patchDoctorRequest}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+          />
+        ) : null}
+
+        {!loading && !error && canLoad && requests.length === 0 && !(view === 'doctor' && isElixHealthWorkspace) ? (
           <p className='muted'>
             {emptyHint}
             {view === 'doctor' && doctorEmail ? (
@@ -222,39 +292,20 @@ export default function OpinionRequestsPanel({
           </p>
         ) : null}
 
-        {!loading && !error && requests.length > 0 ? (
-          <>
-            {view === 'doctor' ? (
-              isElixHealthWorkspace ? (
-                <DoctorIncomingRequestsTable
-                  data={visibleRequests}
-                  isLoading={loading}
-                  search={doctorSearch}
-                  onSearchChange={setDoctorSearch}
-                  hasActiveFilters={Boolean(doctorSearch.trim())}
-                  onClearFilters={() => setDoctorSearch('')}
-                  onNavigate={onNavigate}
-                  returnScreen={doctorReturnScreen}
-                  onOpenError={showOpenRecordError}
-                  onRequestUpdated={patchDoctorRequest}
-                />
-              ) : (
-                <div className='doctor-cases-cards'>
-                  <DoctorIncomingRequestsCardList
-                    data={visibleRequests}
-                    search={doctorSearch}
-                    onSearchChange={setDoctorSearch}
-                    hasActiveFilters={Boolean(doctorSearch.trim())}
-                    onClearFilters={() => setDoctorSearch('')}
-                    onNavigate={onNavigate}
-                    returnScreen={doctorReturnScreen}
-                    onOpenError={showOpenRecordError}
-                    onRequestUpdated={patchDoctorRequest}
-                  />
-                </div>
-              )
-            ) : null}
-          </>
+        {!loading && !error && requests.length > 0 && view === 'doctor' && !isElixHealthWorkspace ? (
+          <div className='doctor-cases-cards'>
+            <DoctorIncomingRequestsCardList
+              data={visibleRequests}
+              search={doctorSearch}
+              onSearchChange={setDoctorSearch}
+              hasActiveFilters={Boolean(doctorSearch.trim())}
+              onClearFilters={() => setDoctorSearch('')}
+              onNavigate={onNavigate}
+              returnScreen={doctorReturnScreen}
+              onOpenError={showOpenRecordError}
+              onRequestUpdated={patchDoctorRequest}
+            />
+          </div>
         ) : null}
       </section>
     </div>

@@ -24,6 +24,7 @@ export type OpinionRequestAuditAction =
   | 'schedule_proposed'
   | 'schedule_alternatives_proposed'
   | 'patient_selection_approved'
+  | 'doctor_assigned_by_pse'
   | 'schedule_confirmed'
   | 'payment_proof_submitted'
   | 'invoice_generated'
@@ -58,6 +59,7 @@ export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditActi
   schedule_proposed: 'PSE proposed an appointment schedule',
   schedule_alternatives_proposed: 'PSE proposed alternative appointment times',
   patient_selection_approved: 'PSE approved patient doctor selection',
+  doctor_assigned_by_pse: 'PSE assigned doctor without patient selection',
   schedule_confirmed: 'Patient confirmed the appointment schedule',
   payment_proof_submitted: 'Patient uploaded payment proof',
   invoice_generated: 'PSE generated consultation invoice',
@@ -169,6 +171,8 @@ function patientAuditSummary(
       return 'PSE proposed alternative appointment times';
     case 'patient_selection_approved':
       return 'PSE approved your doctor selection';
+    case 'doctor_assigned_by_pse':
+      return 'PSE assigned your consultation doctor';
     case 'schedule_confirmed':
       return 'You confirmed the appointment schedule';
     case 'payment_proof_submitted':
@@ -247,6 +251,8 @@ function staffAuditSummary(
       return 'PSE proposed alternative appointment times';
     case 'patient_selection_approved':
       return 'PSE approved patient doctor selection';
+    case 'doctor_assigned_by_pse':
+      return 'PSE assigned doctor without patient selection';
     case 'schedule_confirmed':
       return 'Patient confirmed the appointment schedule';
     case 'payment_proof_submitted':

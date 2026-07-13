@@ -31,6 +31,8 @@ type DoctorIncomingRequestsTableProps = {
   returnScreen?: string;
   onOpenError?: (message: string) => void;
   onRequestUpdated: (request: OpinionRequest) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 };
 
 function DoctorCasesEmptyState({
@@ -80,7 +82,9 @@ function DoctorIncomingRequestsTable({
   onNavigate,
   returnScreen,
   onOpenError,
-  onRequestUpdated
+  onRequestUpdated,
+  onRefresh,
+  refreshing = false
 }: DoctorIncomingRequestsTableProps) {
   const [fullScreen, setFullScreen] = useState(false);
   const [caseDetailsRequest, setCaseDetailsRequest] = useState<OpinionRequest | null>(null);
@@ -231,6 +235,8 @@ function DoctorIncomingRequestsTable({
             search={search}
             onSearchChange={onSearchChange}
             totalCount={data.length}
+            onRefresh={onRefresh}
+            refreshing={refreshing}
           />
         </div>
         <MantineReactTable table={table} />

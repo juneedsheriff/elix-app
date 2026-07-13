@@ -54,6 +54,17 @@ export async function elixhealthSignIn(email: string, password: string) {
   let doctor: Doctor | null = (await fetchDoctorByAuthUserId(user.id)).data;
   if (!doctor && user.email) {
     doctor = (await fetchDoctorByEmail(user.email)).data;
+    // Link auth so RLS / medical-records worker resolve the same doctor profile.
+    if (doctor && !doctor.auth_user_id) {
+      const { error: linkError } = await supabase
+        .from('doctors')
+        .update({ auth_user_id: user.id })
+        .eq('id', doctor.id)
+        .is('auth_user_id', null);
+      if (!linkError) {
+        doctor = { ...doctor, auth_user_id: user.id };
+      }
+    }
   }
 
   if (!doctor) {

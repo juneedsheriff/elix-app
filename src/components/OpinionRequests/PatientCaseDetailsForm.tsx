@@ -209,6 +209,37 @@ export default function PatientCaseDetailsForm({
           </select>
         </label>
 
+        <p className='patient-case-details-form__subsection-title patient-case-details-form__full'>
+          Vital Signs
+        </p>
+        {(
+          [
+            ['Blood Pressure', 'bloodPressure', 'e.g. 120/80'],
+            ['Pulse Rate', 'pulseRate', 'bpm'],
+            ['Respiratory Rate', 'respiratoryRate', 'breaths/min'],
+            ['Temperature', 'temperature', '°C / °F'],
+            ['SpO₂', 'spo2', '%'],
+            ['Height', 'height', 'cm'],
+            ['Weight', 'weight', 'kg']
+          ] as const
+        ).map(([label, key, placeholder]) => (
+          <label key={key} className='opinion-message-label'>
+            {label}
+            <input
+              className='opinion-select'
+              type='text'
+              value={value.vitalSigns[key]}
+              placeholder={placeholder}
+              onChange={(event) =>
+                patch(value, onChange, {
+                  vitalSigns: { ...value.vitalSigns, [key]: event.target.value }
+                })
+              }
+              disabled={isDisabled}
+            />
+          </label>
+        ))}
+
         <label className='opinion-message-label patient-case-details-form__full'>
           Current Diagnosis (if any)
           <textarea

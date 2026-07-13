@@ -31,6 +31,16 @@ export type PreferredTimeSlot = {
   time: string;
 };
 
+export type PatientCaseVitalSigns = {
+  bloodPressure: string;
+  pulseRate: string;
+  respiratoryRate: string;
+  temperature: string;
+  spo2: string;
+  height: string;
+  weight: string;
+};
+
 export type PatientCaseDetails = {
   primaryHealthConcern: string;
   specialtyRequired: string;
@@ -38,6 +48,7 @@ export type PatientCaseDetails = {
   reasonForSecondOpinionOther: string;
   symptomsDescription: string;
   symptomsStartedDate: string;
+  vitalSigns: PatientCaseVitalSigns;
   currentDiagnosis: string;
   symptomSeverity: SymptomSeverity | '';
   currentTreatmentPlan: string;

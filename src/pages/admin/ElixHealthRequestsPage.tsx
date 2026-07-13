@@ -181,6 +181,9 @@ export default function ElixHealthRequestsPage() {
           schedule_confirmed_at: updated.schedule_confirmed_at ?? current.schedule_confirmed_at,
           payment_link: updated.payment_link ?? current.payment_link,
           payment_status: updated.payment_status ?? current.payment_status,
+          payment_amount:
+            updated.payment_amount != null ? updated.payment_amount : current.payment_amount,
+          payment_currency: updated.payment_currency ?? current.payment_currency,
           payment_proof_submitted_at:
             updated.payment_proof_submitted_at ?? current.payment_proof_submitted_at,
           payment_proof_storage_path:

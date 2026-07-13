@@ -40,6 +40,23 @@
   flex-shrink: 0;
 }
 
+.doctor-cases-workspace__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.doctor-cases-workspace__head-copy {
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+
+.doctor-cases-workspace__head-actions {
+  flex-shrink: 0;
+}
+
 .doctor-cases-cards-toolbar {
   display: flex;
   flex-direction: column;

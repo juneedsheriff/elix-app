@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
 import {
   consultationSummaryPdfMetaFromRequest,
+  generateConsultationSummaryPdfBlob,
   downloadConsultationSummaryPdf,
   getConsultationSummarySections
 } from '../../lib/consultationSummaryPdf';
@@ -9,9 +10,12 @@ import {
   downloadLabOrderPdf,
   downloadPrescriptionOrderPdf
 } from '../../lib/consultationOrdersPdf';
+import { fetchDoctorById } from '../../lib/doctors';
 import { isImageFileName } from '../../lib/imageFiles';
+import { resolvePdfClinicContext } from '../../lib/pdfBranding';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import { normalizeStorageAuthError } from '../../lib/supabaseSession';
+import type { Doctor } from '../../types/doctor';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
 import './consultation-wizard.css';
 
@@ -46,6 +50,10 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [prescriptionDownloading, setPrescriptionDownloading] = useState(false);
   const [labOrderDownloading, setLabOrderDownloading] = useState(false);
+  const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [clinicId, setClinicId] = useState<string | null>(request.clinic_id?.trim() || null);
+  const [clinicName, setClinicName] = useState<string | null>(request.clinic_name ?? null);
+  const [clinicReady, setClinicReady] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
   const sections = getConsultationSummarySections(summary);
   const storedPath = summary.pdf_storage_path?.trim() ?? '';
@@ -58,69 +66,166 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const hasLabOrder = Boolean(summary.labs_diagnostics?.trim());
   const patientDisplayName = withPatientHonorific(request.patient_name, request.patient_gender);
   const doctorDisplayName = withDoctorHonorific(request.doctor_name);
+  const doctorId =
+    request.doctor_id?.trim() ||
+    request.selected_doctor_id?.trim() ||
+    summary.doctor_id?.trim() ||
+    null;
 
   useEffect(() => {
-    if (!storedPath) {
-      setPdfUrl(null);
-      setPdfError(null);
-      setPdfLoading(false);
+    if (!doctorId) {
+      setDoctor(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchDoctorById(doctorId).then(({ data }) => {
+      if (!cancelled) setDoctor(data ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [doctorId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setClinicReady(false);
+    void resolvePdfClinicContext({
+      clinicId: request.clinic_id,
+      clinicName: request.clinic_name,
+      doctor,
+      patientId: request.patient_id
+    }).then((clinic) => {
+      if (cancelled) return;
+      setClinicId(clinic.clinicId);
+      setClinicName(clinic.clinicName);
+      setClinicReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [request.clinic_id, request.clinic_name, request.patient_id, doctor]);
+
+  const meta = consultationSummaryPdfMetaFromRequest(
+    { ...request, clinic_id: clinicId, clinic_name: clinicName },
+    doctor
+  );
+  const orderMeta = {
+    patientName: request.patient_name,
+    patientGender: request.patient_gender,
+    patientEmail: request.patient_email,
+    patientId: request.patient_id,
+    doctorName: doctor?.full_name ?? request.doctor_name ?? summary.doctor_name,
+    doctorSpecialty: doctor?.specialty ?? request.doctor_specialty ?? summary.doctor_specialty,
+    doctorQualification: doctor?.qualification ?? summary.doctor_qualification,
+    doctorMedicalLicenseNo: doctor?.medical_license_no ?? summary.doctor_medical_license_no,
+    doctor,
+    scheduledAt: request.scheduled_at ?? summary.scheduled_at,
+    requestId: request.id,
+    clinicId,
+    clinicName,
+    issuedAt: new Date(summary.updated_at || summary.created_at)
+  };
+
+  useEffect(() => {
+    // Prefer a live-generated PDF so clinic branding matches the invoice.
+    if (!hasStructuredPreview) {
+      if (!storedPath) {
+        setPdfUrl(null);
+        setPdfError(null);
+        setPdfLoading(false);
+        return;
+      }
+
+      let cancelled = false;
+      const loadStored = async () => {
+        setPdfLoading(true);
+        setPdfError(null);
+        const { data, error } = await getMedicalRecordDownloadUrl(storedPath, {
+          requestId: request.id
+        });
+        if (cancelled) return;
+        if (error || !data?.signedUrl) {
+          setPdfUrl(null);
+          setPdfError(
+            normalizeStorageAuthError(error?.message ?? 'Could not load consultation notes file.')
+          );
+          setPdfLoading(false);
+          return;
+        }
+        if (objectUrlRef.current?.startsWith('blob:')) {
+          URL.revokeObjectURL(objectUrlRef.current);
+        }
+        objectUrlRef.current = data.signedUrl;
+        setPdfUrl(data.signedUrl);
+        setPdfLoading(false);
+      };
+      void loadStored();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!clinicReady) {
+      setPdfLoading(true);
       return;
     }
 
     let cancelled = false;
-
-    const load = async () => {
+    const loadGenerated = async () => {
       setPdfLoading(true);
       setPdfError(null);
-      const { data, error } = await getMedicalRecordDownloadUrl(storedPath, { requestId: request.id });
-      if (cancelled) return;
-      if (error || !data?.signedUrl) {
+      try {
+        const blob = await generateConsultationSummaryPdfBlob(summary, meta);
+        if (cancelled) return;
+        if (objectUrlRef.current?.startsWith('blob:')) {
+          URL.revokeObjectURL(objectUrlRef.current);
+        }
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        setPdfUrl(url);
+      } catch (err) {
+        if (cancelled) return;
         setPdfUrl(null);
-        setPdfError(normalizeStorageAuthError(error?.message ?? 'Could not load consultation notes file.'));
-        setPdfLoading(false);
-        return;
+        setPdfError(err instanceof Error ? err.message : 'Could not generate consultation notes PDF.');
+      } finally {
+        if (!cancelled) setPdfLoading(false);
       }
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-      objectUrlRef.current = data.signedUrl;
-      setPdfUrl(data.signedUrl);
-      setPdfLoading(false);
     };
-
-    void load();
-
+    void loadGenerated();
     return () => {
       cancelled = true;
     };
-  }, [storedPath, request.id]);
+  }, [
+    hasStructuredPreview,
+    storedPath,
+    request.id,
+    summary,
+    clinicReady,
+    clinicId,
+    clinicName,
+    doctor?.id,
+    doctor?.clinic_id,
+    doctor?.clinic_street,
+    doctor?.clinic_city,
+    doctor?.clinic_name
+  ]);
 
   useEffect(() => {
     return () => {
-      if (objectUrlRef.current) {
+      if (objectUrlRef.current?.startsWith('blob:')) {
         URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
       }
+      objectUrlRef.current = null;
     };
   }, []);
-
-  const meta = consultationSummaryPdfMetaFromRequest(request);
-  const orderMeta = {
-    patientName: request.patient_name,
-    patientGender: request.patient_gender,
-    patientId: request.patient_id,
-    doctorName: request.doctor_name ?? summary.doctor_name,
-    doctorSpecialty: request.doctor_specialty ?? summary.doctor_specialty,
-    doctorQualification: summary.doctor_qualification,
-    doctorMedicalLicenseNo: summary.doctor_medical_license_no,
-    scheduledAt: request.scheduled_at ?? summary.scheduled_at,
-    requestId: request.id,
-    issuedAt: new Date(summary.updated_at || summary.created_at)
-  };
 
   const handleDownload = async () => {
     setDownloading(true);
     try {
+      if (hasStructuredPreview) {
+        await downloadConsultationSummaryPdf(summary, meta);
+        return;
+      }
       if (storedPath && pdfUrl) {
         const anchor = document.createElement('a');
         anchor.href = pdfUrl;

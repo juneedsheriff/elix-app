@@ -2183,7 +2183,9 @@ export async function fetchDoctorOpinionRequests(): Promise<FetchOpinionRequests
     const mapped = (rows ?? []).map((row) => mapRequestRow(row, patientMap));
     const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
     const withRecords = await attachRequestRecords(withWorkflow);
-    const data = await enrichRequestsWithConsultationSummaries(withRecords);
+    const withPatientClinic = await enrichRequestsWithPatientClinic(withRecords);
+    const withClinics = await enrichRequestsWithClinicNames(withPatientClinic);
+    const data = await enrichRequestsWithConsultationSummaries(withClinics);
     return {
       data,
       error: null,
@@ -3181,6 +3183,78 @@ export async function pseApprovePatientSelection(requestId: string) {
   return { data, error: null };
 }
 
+/**
+ * PSE assigns a doctor and confirms the schedule in one step — skips waiting for the
+ * patient to choose a doctor / confirm availability (clinic coordination).
+ */
+export async function pseAssignAndApproveDoctor(
+  requestId: string,
+  doctorId: string,
+  input?: {
+    consultationDurationMinutes?: number | null;
+    recommendation?: ResolveDoctorRecommendationHint;
+  }
+) {
+  const { doctor, error: doctorError } = await resolveDoctorRecord(doctorId, {
+    requestId,
+    recommendation: input?.recommendation
+  });
+  if (doctorError || !doctor) {
+    return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
+  }
+
+  const durationMinutes = input?.consultationDurationMinutes ?? null;
+  const consultationFeeUsd =
+    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+  const confirmedAt = new Date().toISOString();
+
+  const payload = {
+    selected_doctor_id: doctor.id,
+    doctor_id: doctor.id,
+    doctor_name: doctor.full_name,
+    consultation_stage: 'schedule_confirmed' as const,
+    schedule_confirmed_at: confirmedAt,
+    ...(durationMinutes != null
+      ? {
+          consultation_duration_minutes: durationMinutes,
+          consultation_fee_usd: consultationFeeUsd,
+          consultation_currency: doctorConsultationCurrency(doctor)
+        }
+      : {})
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', requestId)
+    .select(
+      'id, selected_doctor_id, doctor_id, doctor_name, consultation_stage, schedule_confirmed_at, consultation_duration_minutes, consultation_fee_usd, consultation_currency'
+    )
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    const retry = await supabase
+      .from('opinion_requests')
+      .update({
+        selected_doctor_id: doctor.id,
+        doctor_id: doctor.id,
+        doctor_name: doctor.full_name,
+        consultation_stage: 'schedule_confirmed'
+      })
+      .eq('id', requestId)
+      .select('id, selected_doctor_id, doctor_id, doctor_name, consultation_stage')
+      .single();
+    data = retry.data as typeof data;
+    error = retry.error;
+  }
+
+  if (error) return { data: null, error };
+  await logRequestAudit(requestId, 'doctor_assigned_by_pse', 'pse', {
+    metadata: { doctor_id: doctor.id, doctor_name: doctor.full_name }
+  });
+  return { data, error: null };
+}
+
 /** Patient accepts the proposed schedule (or alternatives) so PSE can send payment. */
 export async function patientConfirmSchedule(requestId: string) {
   const confirmedAt = new Date().toISOString();
@@ -3334,7 +3408,9 @@ async function uploadConsultationInvoicePdf(
     doctor: input.doctor,
     durationMinutes: request.consultation_duration_minutes,
     currency,
-    totals
+    totals,
+    clinicId: request.clinic_id,
+    clinicName: request.clinic_name
   });
 
   const file = new File([blob], `consultation-invoice-${request.id}.pdf`, {
@@ -3802,9 +3878,22 @@ export async function saveDoctorConsultation(
   }
 
   let doctor = doctorProfile ?? null;
-  if (!doctor && request.doctor_id) {
-    const doctorResult = await fetchDoctorById(request.doctor_id);
-    doctor = doctorResult.data ?? null;
+  if (!doctor) {
+    const resolvedDoctorId = request.doctor_id?.trim() || request.selected_doctor_id?.trim() || null;
+    if (resolvedDoctorId) {
+      const doctorResult = await fetchDoctorById(resolvedDoctorId);
+      doctor = doctorResult.data ?? null;
+    }
+  }
+
+  const resolvedDoctorId =
+    doctor?.id?.trim() ||
+    input.doctor_id?.trim() ||
+    request.doctor_id?.trim() ||
+    request.selected_doctor_id?.trim() ||
+    null;
+  if (!resolvedDoctorId) {
+    return { data: null, error: { message: 'This request is missing doctor information.' } };
   }
 
   const summaryForPdf: ConsultationSummary = {
@@ -3813,7 +3902,9 @@ export async function saveDoctorConsultation(
     pdf_storage_path: null,
     created_at: '',
     updated_at: '',
-    ...input
+    ...input,
+    doctor_id: resolvedDoctorId,
+    patient_auth_user_id: input.patient_auth_user_id ?? request.patient_id ?? null
   };
 
   const blob = await generateConsultationSummaryPdfBlob(
@@ -3824,10 +3915,16 @@ export async function saveDoctorConsultation(
     type: 'application/pdf'
   });
 
+  const linkResult = await ensureRequestAssignedToDoctor(requestId, request, resolvedDoctorId);
+  if (linkResult.error) {
+    return { data: null, error: { message: normalizeStorageAuthError(linkResult.error.message) } };
+  }
+
   const { data: uploadTarget, error: presignError } = await createConsultationSummaryUploadUrl(
     requestId,
     file.size,
-    file.name
+    file.name,
+    resolvedDoctorId
   );
   if (presignError || !uploadTarget) {
     return {
@@ -3856,8 +3953,8 @@ export async function saveDoctorConsultation(
   const now = new Date().toISOString();
   const summaryPayload = {
     request_id: requestId,
-    doctor_id: input.doctor_id,
-    patient_auth_user_id: input.patient_auth_user_id,
+    doctor_id: resolvedDoctorId,
+    patient_auth_user_id: input.patient_auth_user_id ?? request.patient_id ?? null,
     chief_complaint: input.chief_complaint,
     history_present_illness: input.history_present_illness,
     vital_signs: input.vital_signs,
@@ -3979,6 +4076,8 @@ async function finalizeDoctorConsultationRequest(
     responded_at: string;
     consultation_stage?: ConsultationStage;
     status?: OpinionRequestStatus;
+    doctor_id?: string;
+    selected_doctor_id?: string;
   } = {
     doctor_response: trimmedResponse,
     responded_at: now
@@ -3998,6 +4097,50 @@ async function finalizeDoctorConsultationRequest(
   await logRequestAudit(requestId, 'consultation_summary_saved', 'doctor', {
     metadata: { consultation_completed: shouldCloseRequestAfterConsultation(request) }
   });
+  return { error: null };
+}
+
+/** Ensure the request is linked to this doctor before R2 upload authorization runs. */
+async function ensureRequestAssignedToDoctor(
+  requestId: string,
+  request: OpinionRequest,
+  doctorId: string
+): Promise<{ error: { message: string } | null }> {
+  // Already assigned via doctor_id or selected_doctor_id — worker accepts either.
+  // Skip update when only selected_doctor_id matches: doctor RLS often cannot set doctor_id.
+  if (request.doctor_id === doctorId || request.selected_doctor_id === doctorId) {
+    return { error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      doctor_id: doctorId,
+      selected_doctor_id: request.selected_doctor_id?.trim() || doctorId
+    })
+    .eq('id', requestId)
+    .select('id, doctor_id, selected_doctor_id')
+    .maybeSingle();
+
+  if (error) {
+    return {
+      error: {
+        message:
+          error.message ||
+          'Could not link this consultation to your doctor profile before uploading notes.'
+      }
+    };
+  }
+
+  if (!data) {
+    return {
+      error: {
+        message:
+          'Could not link this consultation to your doctor profile before uploading notes. Ask PSE to re-assign the case to you.'
+      }
+    };
+  }
+
   return { error: null };
 }
 
@@ -4029,10 +4172,19 @@ export async function saveDoctorConsultationUpload(
     };
   }
 
-  const doctorId = doctorProfile?.id ?? request.doctor_id;
-  const patientId = request.patient_id;
-  if (!doctorId || !patientId) {
-    return { data: null, error: { message: 'This request is missing doctor or patient information.' } };
+  const doctorId =
+    doctorProfile?.id?.trim() ||
+    request.doctor_id?.trim() ||
+    request.selected_doctor_id?.trim() ||
+    null;
+  const patientId = request.patient_id?.trim() || null;
+  if (!doctorId) {
+    return { data: null, error: { message: 'This request is missing doctor information.' } };
+  }
+
+  const linkResult = await ensureRequestAssignedToDoctor(requestId, request, doctorId);
+  if (linkResult.error) {
+    return { data: null, error: { message: normalizeStorageAuthError(linkResult.error.message) } };
   }
 
   const uploadFileName = file.name.trim() || `consultation-notes.${consultationNotesFileExtension(file)}`;
@@ -4041,7 +4193,8 @@ export async function saveDoctorConsultationUpload(
   const { data: uploadTarget, error: presignError } = await createConsultationSummaryUploadUrl(
     requestId,
     file.size,
-    uploadFileName
+    uploadFileName,
+    doctorId
   );
   if (presignError || !uploadTarget) {
     return {
@@ -4215,7 +4368,12 @@ const PAYMENT_WORKFLOW_REALTIME_FIELDS = new Set([
   'invoice_subtotal',
   'invoice_tax_rate',
   'invoice_tax_amount',
-  'invoice_total'
+  'invoice_total',
+  'scheduled_at',
+  'meeting_link',
+  'doctor_id',
+  'selected_doctor_id',
+  'schedule_confirmed_at'
 ]);
 
 const CASE_DETAILS_REALTIME_FIELDS = new Set([
@@ -4555,22 +4713,32 @@ export function subscribeDoctorOpinionRequestUpdates(
   const doctorId = options?.doctorId?.trim() || null;
   const channelName = doctorId ? `doctor-opinion-requests:${doctorId}` : 'doctor-opinion-requests';
 
-  const requestChangeConfig = doctorId
-    ? {
-        event: '*' as const,
-        schema: 'public',
-        table: 'opinion_requests',
-        filter: `doctor_id=eq.${doctorId}`
-      }
-    : {
-        event: '*' as const,
-        schema: 'public',
-        table: 'opinion_requests'
-      };
+  const matchesDoctor = (payload: {
+    new?: { doctor_id?: string | null; selected_doctor_id?: string | null } | null;
+    old?: { doctor_id?: string | null; selected_doctor_id?: string | null } | null;
+  }) => {
+    if (!doctorId) return true;
+    const rows = [payload.new, payload.old];
+    for (const row of rows) {
+      if (!row) continue;
+      if (row.doctor_id === doctorId || row.selected_doctor_id === doctorId) return true;
+      // Partial UPDATE payloads may omit doctor ids — still refresh the queue.
+      if (row.doctor_id === undefined && row.selected_doctor_id === undefined) return true;
+    }
+    return false;
+  };
 
+  // No server-side filter: newly assigned rows may not match a doctor_id filter until after
+  // the UPDATE, and RLS may hide the old row. Client match + refetch keeps the queue current.
   const channel = supabase
     .channel(channelName)
-    .on('postgres_changes', requestChangeConfig, (payload) => scheduleRefresh(payload))
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'opinion_requests' },
+      (payload) => {
+        if (matchesDoctor(payload)) scheduleRefresh(payload);
+      }
+    )
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'opinion_request_records' },

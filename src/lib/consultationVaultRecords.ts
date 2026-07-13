@@ -27,13 +27,17 @@ function orderPdfMeta(input: SyncConsultationOrdersInput): ConsultationOrderPdfM
   return {
     patientName: request.patient_name,
     patientGender: request.patient_gender,
+    patientEmail: request.patient_email,
     patientId: request.patient_id,
     doctorName: doctor?.full_name ?? request.doctor_name,
     doctorSpecialty: doctor?.specialty ?? request.doctor_specialty,
     doctorQualification: doctor?.qualification ?? null,
     doctorMedicalLicenseNo: doctor?.medical_license_no ?? null,
+    doctor: doctor ?? null,
     scheduledAt: request.scheduled_at,
     requestId: request.id,
+    clinicId: request.clinic_id,
+    clinicName: request.clinic_name,
     issuedAt
   };
 }
@@ -98,8 +102,9 @@ export async function syncConsultationOrdersToPatientVault(
   input: SyncConsultationOrdersInput
 ): Promise<{ error: { message: string } | null }> {
   const { request, prescription, labsDiagnostics } = input;
+  // Clinic patients may not have claimed a login yet — skip vault sync until patient_id exists.
   if (!request.patient_id?.trim()) {
-    return { error: { message: 'This request is missing patient information.' } };
+    return { error: null };
   }
 
   const meta = orderPdfMeta(input);

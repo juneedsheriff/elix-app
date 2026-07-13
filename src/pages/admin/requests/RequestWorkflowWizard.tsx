@@ -35,7 +35,8 @@ import {
 } from '../../../lib/opinionRequests';
 import {
   formatConsultationFee,
-  normalizeConsultationCurrency
+  normalizeConsultationCurrency,
+  type ConsultationCurrency
 } from '../../../lib/consultationCurrency';
 import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
 import AppointmentDateTimePicker from './AppointmentDateTimePicker';
@@ -53,6 +54,47 @@ const ELIX_EXTERNAL_PAYMENT_BASE_URL = 'https://elixclinix.com/pay.html?amount='
 function buildExternalPaymentLink(amount: number | null) {
   if (amount == null || !Number.isFinite(amount) || amount <= 0) return '';
   return `${ELIX_EXTERNAL_PAYMENT_BASE_URL}${encodeURIComponent(amount.toFixed(2))}`;
+}
+
+/** Read `amount` from a payment URL (query or trailing `amount=`). */
+function parseAmountFromPaymentLink(link: string): number | null {
+  const trimmed = link.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    const raw = url.searchParams.get('amount');
+    if (raw != null && raw.trim()) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  } catch {
+    // fall through to regex for non-absolute / partial URLs
+  }
+  const match = trimmed.match(/[?&]amount=([^&]+)/i) ?? trimmed.match(/amount=([^&\s]+)/i);
+  if (!match?.[1]) return null;
+  const parsed = Number(decodeURIComponent(match[1]));
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+/** Keep custom URLs; for Elix pay links, rewrite the amount query to `amount`. */
+function withPaymentLinkAmount(link: string, amount: number): string {
+  const trimmed = link.trim();
+  if (!trimmed || !Number.isFinite(amount) || amount <= 0) return trimmed;
+  const amountText = amount.toFixed(2);
+  try {
+    const url = new URL(trimmed);
+    if (url.origin === 'https://elixclinix.com' && url.pathname.endsWith('/pay.html')) {
+      url.searchParams.set('amount', amountText);
+      return url.toString();
+    }
+  } catch {
+    // ignore
+  }
+  if (trimmed.startsWith(ELIX_EXTERNAL_PAYMENT_BASE_URL) || /pay\.html\?amount=/i.test(trimmed)) {
+    return buildExternalPaymentLink(amount);
+  }
+  return trimmed;
 }
 
 function resolveInvoiceDoctor(request: OpinionRequest, doctors: Doctor[]): Doctor | null {
@@ -106,6 +148,10 @@ export default function RequestWorkflowWizard({
   const [meetingLink, setMeetingLink] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLink, setPaymentLink] = useState('');
+  const [paymentCurrency, setPaymentCurrency] = useState<ConsultationCurrency>(() =>
+    normalizeConsultationCurrency(request.payment_currency ?? request.consultation_currency)
+  );
+  const paymentCurrencyTouchedRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -197,12 +243,47 @@ export default function RequestWorkflowWizard({
   );
 
   useEffect(() => {
+    const storedLink = request.payment_link?.trim() ?? '';
+    if (storedLink) {
+      setPaymentLink(storedLink);
+      return;
+    }
     if (autoPaymentLink) {
       setPaymentLink(autoPaymentLink);
       return;
     }
-    setPaymentLink(request.payment_link ?? '');
-  }, [autoPaymentLink, request.payment_link]);
+    setPaymentLink('');
+  }, [request.id, request.payment_link, autoPaymentLink]);
+
+  useEffect(() => {
+    paymentCurrencyTouchedRef.current = false;
+    setPaymentCurrency(
+      normalizeConsultationCurrency(
+        request.payment_currency ?? paymentQuote.currency ?? request.consultation_currency
+      )
+    );
+  }, [request.id]);
+
+  useEffect(() => {
+    if (request.payment_currency) {
+      paymentCurrencyTouchedRef.current = false;
+      setPaymentCurrency(normalizeConsultationCurrency(request.payment_currency));
+    }
+  }, [request.payment_currency]);
+
+  useEffect(() => {
+    if (request.payment_currency || paymentCurrencyTouchedRef.current) return;
+    setPaymentCurrency(normalizeConsultationCurrency(paymentQuote.currency));
+  }, [paymentQuote.currency, request.payment_currency]);
+
+  const handlePaymentLinkChange = (value: string) => {
+    setPaymentLink(value);
+  };
+
+  const handlePaymentCurrencyChange = (value: ConsultationCurrency) => {
+    paymentCurrencyTouchedRef.current = true;
+    setPaymentCurrency(value);
+  };
 
   const canNavigateStep = (index: number) =>
     isClosedRequest || isReadOnlyView
@@ -333,11 +414,16 @@ export default function RequestWorkflowWizard({
       onError('Enter a payment link for the patient.');
       return;
     }
-    const { amount, currency } = paymentQuote;
+    const { amount: quoteAmount } = paymentQuote;
+    const linkAmount = parseAmountFromPaymentLink(paymentLink);
+    const amount = linkAmount ?? quoteAmount;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
       onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
       return;
     }
+
+    const linkToStore = withPaymentLinkAmount(paymentLink, amount);
+    const currency = normalizeConsultationCurrency(paymentCurrency);
 
     setBusy(true);
     const doctor = resolveInvoiceDoctor(request, doctors);
@@ -347,8 +433,8 @@ export default function RequestWorkflowWizard({
       return;
     }
 
-    const { error } = await pseSendInvoiceAndPaymentLink(request, {
-      paymentLink,
+    const { data, error } = await pseSendInvoiceAndPaymentLink(request, {
+      paymentLink: linkToStore,
       amount,
       currency,
       doctor
@@ -357,6 +443,10 @@ export default function RequestWorkflowWizard({
     if (error) {
       onError(error.message);
       return;
+    }
+    if (data) {
+      onRequestPatch?.(data as Partial<OpinionRequest> & { id: string });
+      setPaymentLink(data.payment_link?.trim() || linkToStore);
     }
     onSuccess(
       request.payment_link?.trim()
@@ -371,11 +461,12 @@ export default function RequestWorkflowWizard({
       onError('Wait for the patient to confirm the schedule before marking payment pending.');
       return;
     }
-    const { amount, currency } = paymentQuote;
+    const { amount } = paymentQuote;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
       onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
       return;
     }
+    const currency = normalizeConsultationCurrency(paymentCurrency);
     const doctor = resolveInvoiceDoctor(request, doctors);
     if (!doctor) {
       onError('Could not load the selected doctor profile. Refresh and try again.');
@@ -403,11 +494,11 @@ export default function RequestWorkflowWizard({
 
   const handleConfirmPayment = async () => {
     setBusy(true);
-    const { amount, currency } = paymentQuote;
+    const { amount } = paymentQuote;
     const chargeAmount = request.invoice_total ?? amount;
     const { error } = await pseConfirmPayment(request.id, {
       amount: chargeAmount,
-      currency,
+      currency: normalizeConsultationCurrency(paymentCurrency),
       reference: paymentReference
     });
     setBusy(false);
@@ -651,11 +742,13 @@ export default function RequestWorkflowWizard({
             request={request}
             paymentLink={paymentLink}
             paymentAmount={paymentQuote.amount}
-            paymentCurrency={paymentQuote.currency}
+            paymentCurrency={paymentCurrency}
             paymentReference={paymentReference}
             paymentLinkPlaceholder={autoPaymentLink || ELIX_EXTERNAL_PAYMENT_BASE_URL}
             busy={busy}
             readOnly={!canCoordinate}
+            onPaymentLinkChange={handlePaymentLinkChange}
+            onPaymentCurrencyChange={handlePaymentCurrencyChange}
             onPaymentReferenceChange={setPaymentReference}
             onSendInvoiceAndPaymentLink={() => void handleSendInvoiceAndPaymentLink()}
             onMarkPending={() => void handlePaymentPending()}

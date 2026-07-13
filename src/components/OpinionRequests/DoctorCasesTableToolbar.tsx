@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { ActionIcon, Group, Text, TextInput, Tooltip } from '@mantine/core';
-import { IconMaximize, IconMinimize, IconSearch } from '@tabler/icons-react';
+import { IconMaximize, IconMinimize, IconRefresh, IconSearch } from '@tabler/icons-react';
 import { MRT_ShowHideColumnsButton, type MRT_TableInstance } from 'mantine-react-table';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
@@ -11,6 +11,8 @@ type DoctorCasesTableToolbarProps = {
   search: string;
   onSearchChange: (value: string) => void;
   totalCount: number;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 };
 
 function DoctorCasesTableToolbar({
@@ -19,7 +21,9 @@ function DoctorCasesTableToolbar({
   onToggleFullScreen,
   search,
   onSearchChange,
-  totalCount
+  totalCount,
+  onRefresh,
+  refreshing = false
 }: DoctorCasesTableToolbarProps) {
   return (
     <div className='doctors-mgmt-table-toolbar__inner doctor-cases-table-toolbar__inner'>
@@ -38,6 +42,21 @@ function DoctorCasesTableToolbar({
       </Text>
 
       <Group gap='xs' className='doctors-mgmt-table-toolbar__tools' wrap='nowrap'>
+        {onRefresh ? (
+          <Tooltip label='Refresh cases'>
+            <ActionIcon
+              variant='subtle'
+              color='gray'
+              size='lg'
+              radius='md'
+              aria-label='Refresh cases'
+              loading={refreshing}
+              onClick={onRefresh}
+            >
+              <IconRefresh size={18} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
         <MRT_ShowHideColumnsButton table={table} />
         <Tooltip label={fullScreen ? 'Exit full screen' : 'Full screen'}>
           <ActionIcon

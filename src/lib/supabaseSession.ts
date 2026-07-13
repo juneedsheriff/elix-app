@@ -19,8 +19,20 @@ export async function ensureFreshAccessToken(): Promise<string | null> {
 }
 
 export function normalizeStorageAuthError(message: string): string {
-  if (message === 'Unauthorized' || message === 'Forbidden') {
+  const normalized = message.trim();
+  if (normalized === 'Unauthorized' || normalized.startsWith('Unauthorized ')) {
     return 'Could not upload or open the consultation PDF. Sign out, sign in again, and retry. If it persists, ensure VITE_R2_API_URL points to the medical-records worker.';
+  }
+  if (
+    normalized === 'Forbidden' ||
+    normalized.startsWith('Forbidden') ||
+    normalized.includes('not the assigned doctor') ||
+    normalized.includes('No doctor profile is linked')
+  ) {
+    if (normalized.includes(' — ')) {
+      return normalized.replace(/^Forbidden\s*—\s*/i, '');
+    }
+    return 'Could not upload the consultation PDF. Confirm this case is assigned to your doctor profile, then sign out and sign in again. If it persists, ensure VITE_R2_API_URL points to the medical-records worker.';
   }
   return message;
 }

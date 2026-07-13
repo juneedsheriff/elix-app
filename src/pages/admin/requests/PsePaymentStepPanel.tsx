@@ -6,14 +6,17 @@ import {
   Grid,
   Group,
   Paper,
+  Select,
   Stack,
   Text,
   TextInput
 } from '@mantine/core';
 import { IconExternalLink, IconReceipt } from '@tabler/icons-react';
 import {
+  CONSULTATION_CURRENCY_OPTIONS,
   formatConsultationFee,
-  normalizeConsultationCurrency
+  normalizeConsultationCurrency,
+  type ConsultationCurrency
 } from '../../../lib/consultationCurrency';
 import {
   canPseSendPaymentLink,
@@ -29,16 +32,38 @@ type PsePaymentStepPanelProps = {
   paymentLink: string;
   paymentLinkPlaceholder?: string;
   paymentAmount: number | null;
-  paymentCurrency: string;
+  paymentCurrency: ConsultationCurrency;
   paymentReference: string;
   busy: boolean;
   readOnly?: boolean;
+  onPaymentLinkChange: (value: string) => void;
+  onPaymentCurrencyChange: (value: ConsultationCurrency) => void;
   onPaymentReferenceChange: (value: string) => void;
   onSendInvoiceAndPaymentLink: () => void;
   onMarkPending: () => void;
   onConfirmPayment: () => void;
   onReleaseToDoctor: () => void;
 };
+
+function parseAmountFromPaymentLink(link: string): number | null {
+  const trimmed = link.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    const raw = url.searchParams.get('amount');
+    if (raw != null && raw.trim()) {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  } catch {
+    // fall through
+  }
+  const match = trimmed.match(/[?&]amount=([^&]+)/i) ?? trimmed.match(/amount=([^&\s]+)/i);
+  if (!match?.[1]) return null;
+  const parsed = Number(decodeURIComponent(match[1]));
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
 
 export default function PsePaymentStepPanel({
   request,
@@ -49,6 +74,8 @@ export default function PsePaymentStepPanel({
   paymentReference,
   busy,
   readOnly = false,
+  onPaymentLinkChange,
+  onPaymentCurrencyChange,
   onPaymentReferenceChange,
   onSendInvoiceAndPaymentLink,
   onMarkPending,
@@ -58,17 +85,19 @@ export default function PsePaymentStepPanel({
   const canSend = canPseSendPaymentLink(request);
   const linkShared = Boolean(request.payment_link?.trim());
   const invoiceReady = Boolean(request.invoice_pdf_storage_path?.trim());
+  const linkAmount = parseAmountFromPaymentLink(paymentLink);
+  const effectiveAmount =
+    linkAmount ??
+    (request.invoice_total != null && Number.isFinite(Number(request.invoice_total))
+      ? Number(request.invoice_total)
+      : null) ??
+    paymentAmount;
   const canSubmitToPatient =
-    canSend && paymentAmount != null && Boolean(paymentLink.trim());
+    canSend && effectiveAmount != null && Boolean(paymentLink.trim());
   const formattedAmount =
-    request.invoice_total != null
-      ? formatConsultationFee(
-          Number(request.invoice_total),
-          normalizeConsultationCurrency(paymentCurrency)
-        )
-      : paymentAmount != null
-        ? formatConsultationFee(paymentAmount, normalizeConsultationCurrency(paymentCurrency))
-        : null;
+    effectiveAmount != null
+      ? formatConsultationFee(effectiveAmount, normalizeConsultationCurrency(paymentCurrency))
+      : null;
   const statusLabel =
     request.payment_status === 'paid'
       ? 'Paid'
@@ -135,11 +164,11 @@ export default function PsePaymentStepPanel({
           <Grid.Col span={{ base: 12, sm: 8 }}>
             <TextInput
               label='Payment link (external)'
-              description='Auto-generated from consultation amount.'
+              description='Pre-filled from consultation amount. You can edit if needed.'
               placeholder={paymentLinkPlaceholder}
               value={paymentLink}
-              readOnly
-              disabled
+              readOnly={readOnly}
+              onChange={(e) => onPaymentLinkChange(e.currentTarget.value)}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
@@ -153,14 +182,20 @@ export default function PsePaymentStepPanel({
             </Stack>
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <Stack gap={4}>
-              <Text size='sm' fw={500}>
-                Currency
-              </Text>
-              <Text size='sm' fw={600}>
-                {paymentCurrency}
-              </Text>
-            </Stack>
+            <Select
+              label='Currency'
+              description='Invoice & payment currency'
+              data={CONSULTATION_CURRENCY_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.value
+              }))}
+              value={normalizeConsultationCurrency(paymentCurrency)}
+              disabled={readOnly}
+              allowDeselect={false}
+              onChange={(value) => {
+                if (value) onPaymentCurrencyChange(normalizeConsultationCurrency(value));
+              }}
+            />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 8 }}>
             <TextInput
@@ -189,7 +224,7 @@ export default function PsePaymentStepPanel({
               variant='default'
               radius='md'
               loading={busy}
-              disabled={!canSend || paymentAmount == null}
+              disabled={!canSend || effectiveAmount == null}
               onClick={onMarkPending}
             >
               Mark pending (no link)
@@ -229,7 +264,9 @@ export default function PsePaymentStepPanel({
             <Badge size='sm' variant='outline' color='gray'>
               {request.payment_amount != null
                 ? `${request.payment_amount} ${request.payment_currency ?? 'USD'}`
-                : 'Amount missing'}
+                : effectiveAmount != null
+                  ? `${effectiveAmount} ${paymentCurrency}`
+                  : 'Amount missing'}
             </Badge>
           </Group>
           <Anchor
