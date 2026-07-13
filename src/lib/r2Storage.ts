@@ -179,6 +179,39 @@ export async function registerConsultationOrderVaultRecord(input: {
   });
 }
 
+export async function createRequestRecordUploadUrl(
+  requestId: string,
+  file: Pick<File, 'name' | 'type' | 'size'>
+) {
+  return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
+    '/v1/request-records/upload-url',
+    {
+      method: 'POST',
+      json: {
+        requestId,
+        fileName: file.name,
+        contentType: file.type || 'application/octet-stream',
+        contentLength: file.size
+      }
+    }
+  );
+}
+
+export async function registerRequestRecord(input: {
+  requestId: string;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  recordCategory: string;
+  summary: string;
+}) {
+  return r2ApiRequest<{ ok: boolean; recordId: string }>('/v1/request-records/register', {
+    method: 'POST',
+    json: input
+  });
+}
+
 export async function downloadMedicalRecordBlob(
   storagePath: string,
   options?: MedicalRecordDownloadOptions

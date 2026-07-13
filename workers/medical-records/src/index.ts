@@ -171,6 +171,167 @@ async function canAccessConsultationSummaryPdfForRequest(
   return Boolean(doctorId && summary.doctor_id === doctorId);
 }
 
+const REQUEST_RECORD_CATEGORIES = new Set([
+  'doctors_notes',
+  'medical_reports',
+  'lab_results',
+  'imaging_reports',
+  'discharge_summary',
+  'prescriptions',
+  'pathology_biopsy',
+  'other_supporting'
+]);
+
+const REQUEST_RECORD_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'doc', 'docx']);
+
+function requestRecordStoragePrefix(folder: string, requestId: string): string {
+  return `${folder}/request-records/${requestId.trim()}/`;
+}
+
+function isAllowedRequestRecordFileName(fileName: string): boolean {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return REQUEST_RECORD_EXTENSIONS.has(ext);
+}
+
+async function canStaffCoordinateRequest(
+  userId: string,
+  authHeader: string,
+  requestId: string,
+  env: Env
+): Promise<boolean> {
+  const staff = await isStaffMember(userId, authHeader, env);
+  if (!staff) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=id,assigned_to,clinic_id&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!res.ok) return false;
+
+  const rows = (await res.json()) as { assigned_to?: string | null; clinic_id?: string | null }[];
+  const row = rows[0];
+  if (!row) return false;
+
+  const staffUrl = `${base}/rest/v1/admins?auth_user_id=eq.${encodeURIComponent(userId)}&select=id,role,clinic_id&limit=1`;
+  const staffRes = await fetch(staffUrl, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!staffRes.ok) return false;
+  const staffRows = (await staffRes.json()) as {
+    id?: string;
+    role?: string;
+    clinic_id?: string | null;
+  }[];
+  const staffRow = staffRows[0];
+  if (!staffRow?.id) return false;
+
+  if (staffRow.role === 'administrator') return true;
+  if (row.assigned_to === staffRow.id) return true;
+  if (
+    staffRow.role === 'patient_service_executive_clinic' &&
+    row.clinic_id &&
+    staffRow.clinic_id &&
+    row.clinic_id === staffRow.clinic_id
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+async function canStaffUploadRequestRecordPath(
+  userId: string,
+  authHeader: string,
+  storagePath: string,
+  env: Env
+): Promise<{ ok: boolean; requestId?: string }> {
+  const match = storagePath.match(/^([^/]+)\/request-records\/([^/]+)\//);
+  if (!match) return { ok: false };
+
+  const folder = match[1];
+  const requestId = match[2];
+  if (!(await canStaffCoordinateRequest(userId, authHeader, requestId, env))) {
+    return { ok: false };
+  }
+
+  const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+  if (!patientContext || patientContext.folder !== folder) return { ok: false };
+
+  return { ok: true, requestId };
+}
+
+async function insertRequestRecordAndAttach(
+  env: Env,
+  authHeader: string,
+  input: {
+    requestId: string;
+    patientAuthUserId: string;
+    patientRowId: string | null;
+    fileName: string;
+    mimeType: string;
+    fileSizeBytes: number;
+    storagePath: string;
+    recordCategory: string;
+    summary: string;
+  }
+): Promise<{ recordId: string | null }> {
+  if (!env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_URL) return { recordId: null };
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const insertRes = await fetch(`${base}/rest/v1/uploaded_files`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(authHeader, env, true),
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation'
+    },
+    body: JSON.stringify({
+      user_id: input.patientAuthUserId,
+      patient_id: input.patientRowId,
+      file_name: input.fileName,
+      mime_type: input.mimeType,
+      file_size_bytes: input.fileSizeBytes,
+      storage_bucket: env.R2_BUCKET_NAME || 'medical-records',
+      storage_path: input.storagePath,
+      summary: input.summary,
+      record_category: input.recordCategory,
+      external_url: null
+    })
+  });
+
+  if (!insertRes.ok) return { recordId: null };
+
+  const inserted = (await insertRes.json()) as { id?: string }[];
+  const recordId = inserted[0]?.id ?? null;
+  if (!recordId) return { recordId: null };
+
+  await fetch(`${base}/rest/v1/opinion_request_records`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(authHeader, env, true),
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=ignore-duplicates'
+    },
+    body: JSON.stringify({
+      request_id: input.requestId,
+      record_id: recordId
+    })
+  });
+
+  await fetch(`${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(input.requestId)}`, {
+    method: 'PATCH',
+    headers: {
+      ...supabaseRestHeaders(authHeader, env, true),
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify({
+      patient_proceeded_without_records_at: null,
+      records_rejected_at: null,
+      records_rejection_reason: null
+    })
+  });
+
+  return { recordId };
+}
+
 async function canStaffUploadConsultationInvoice(
   userId: string,
   authHeader: string,
@@ -894,6 +1055,135 @@ export default {
         return jsonResponse({ ok: true }, 200, origin, env);
       }
 
+      if (pathname === '/v1/request-records/upload-url' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          fileName?: string;
+          contentType?: string;
+          contentLength?: number;
+        };
+
+        if (!body.requestId?.trim() || !body.fileName?.trim() || !body.contentType?.trim()) {
+          return jsonResponse(
+            { error: 'requestId, fileName, and contentType are required' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const contentLength = Number(body.contentLength ?? 0);
+        if (!contentLength || contentLength > 10 * 1024 * 1024) {
+          return jsonResponse({ error: 'File must be between 1 byte and 10 MB' }, 400, origin, env);
+        }
+
+        const fileName = body.fileName.trim();
+        if (!isAllowedRequestRecordFileName(fileName)) {
+          return jsonResponse(
+            { error: 'Unsupported file type. Use PDF, JPG, or DOC/DOCX.' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const requestId = body.requestId.trim();
+        if (!(await canStaffCoordinateRequest(user.id, authHeader, requestId, env))) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+        if (!patientContext) {
+          return jsonResponse({ error: 'Patient vault folder could not be resolved.' }, 400, origin, env);
+        }
+
+        const storagePath = storagePathFor(
+          `${patientContext.folder}/request-records/${requestId}`,
+          fileName
+        );
+
+        return jsonResponse(
+          {
+            uploadUrl: `${workerOrigin(request)}/v1/records/object`,
+            storagePath,
+            storageBucket: env.R2_BUCKET_NAME || 'medical-records'
+          },
+          200,
+          origin,
+          env
+        );
+      }
+
+      if (pathname === '/v1/request-records/register' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          storagePath?: string;
+          fileName?: string;
+          mimeType?: string;
+          fileSizeBytes?: number;
+          recordCategory?: string;
+          summary?: string;
+        };
+
+        if (!body.requestId?.trim() || !body.storagePath?.trim() || !body.fileName?.trim()) {
+          return jsonResponse(
+            { error: 'requestId, storagePath, and fileName are required' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const recordCategory = body.recordCategory?.trim() || 'other_supporting';
+        if (!REQUEST_RECORD_CATEGORIES.has(recordCategory)) {
+          return jsonResponse({ error: 'Invalid record category.' }, 400, origin, env);
+        }
+
+        const requestId = body.requestId.trim();
+        const storagePath = body.storagePath.trim();
+        const uploadAccess = await canStaffUploadRequestRecordPath(
+          user.id,
+          authHeader,
+          storagePath,
+          env
+        );
+        if (!uploadAccess.ok || uploadAccess.requestId !== requestId) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+          return jsonResponse(
+            { error: 'Service role is not configured for vault record registration.' },
+            500,
+            origin,
+            env
+          );
+        }
+
+        const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+        if (!patientContext) {
+          return jsonResponse({ error: 'Patient vault folder could not be resolved.' }, 400, origin, env);
+        }
+
+        const { recordId } = await insertRequestRecordAndAttach(env, authHeader, {
+          requestId,
+          patientAuthUserId: patientContext.patientAuthUserId,
+          patientRowId: patientContext.patientRowId,
+          fileName: body.fileName.trim(),
+          mimeType: body.mimeType?.trim() || 'application/octet-stream',
+          fileSizeBytes: Number(body.fileSizeBytes ?? 0),
+          storagePath,
+          recordCategory,
+          summary: body.summary?.trim() || recordCategory
+        });
+
+        if (!recordId) {
+          return jsonResponse({ error: 'Could not register and attach vault record.' }, 500, origin, env);
+        }
+
+        return jsonResponse({ ok: true, recordId }, 200, origin, env);
+      }
+
       if (pathname === '/v1/records/upload-url' && request.method === 'POST') {
         const body = (await request.json()) as {
           fileName?: string;
@@ -975,6 +1265,16 @@ export default {
               env
             );
             if (!canUpload) {
+              throw new Error('Forbidden');
+            }
+          } else if (storagePath.includes('/request-records/')) {
+            const canUpload = await canStaffUploadRequestRecordPath(
+              user.id,
+              authHeader,
+              storagePath,
+              env
+            );
+            if (!canUpload.ok) {
               throw new Error('Forbidden');
             }
           } else {

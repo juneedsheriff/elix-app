@@ -6,6 +6,8 @@ export type ConsultationOrderPdfMeta = {
   patientId?: string | null;
   doctorName?: string | null;
   doctorSpecialty?: string | null;
+  doctorQualification?: string | null;
+  doctorMedicalLicenseNo?: string | null;
   scheduledAt?: string | null;
   requestId?: string | null;
   issuedAt?: Date;
@@ -154,6 +156,10 @@ async function buildOrderPdf(
       `${doctorDisplayName}${meta.doctorSpecialty ? ` · ${meta.doctorSpecialty}` : ''}`,
       11
     );
+  }
+  if (meta.doctorQualification?.trim()) addLine(meta.doctorQualification.trim(), 10);
+  if (meta.doctorMedicalLicenseNo?.trim()) {
+    addLine(`License: ${meta.doctorMedicalLicenseNo.trim()}`, 10);
   }
   y += 12;
 

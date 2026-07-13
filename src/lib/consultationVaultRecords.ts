@@ -30,6 +30,8 @@ function orderPdfMeta(input: SyncConsultationOrdersInput): ConsultationOrderPdfM
     patientId: request.patient_id,
     doctorName: doctor?.full_name ?? request.doctor_name,
     doctorSpecialty: doctor?.specialty ?? request.doctor_specialty,
+    doctorQualification: doctor?.qualification ?? null,
+    doctorMedicalLicenseNo: doctor?.medical_license_no ?? null,
     scheduledAt: request.scheduled_at,
     requestId: request.id,
     issuedAt

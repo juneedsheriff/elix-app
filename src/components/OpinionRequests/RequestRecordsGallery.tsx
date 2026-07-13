@@ -117,7 +117,7 @@ export default function RequestRecordsGallery({
   if (records.length === 0) {
     return (
       <Text size='sm' c='dimmed'>
-        No files attached by the patient.
+        No medical records attached yet.
       </Text>
     );
   }

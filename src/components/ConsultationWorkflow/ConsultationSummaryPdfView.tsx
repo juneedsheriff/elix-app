@@ -109,9 +109,11 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
     patientName: request.patient_name,
     patientGender: request.patient_gender,
     patientId: request.patient_id,
-    doctorName: request.doctor_name,
-    doctorSpecialty: request.doctor_specialty,
-    scheduledAt: request.scheduled_at,
+    doctorName: request.doctor_name ?? summary.doctor_name,
+    doctorSpecialty: request.doctor_specialty ?? summary.doctor_specialty,
+    doctorQualification: summary.doctor_qualification,
+    doctorMedicalLicenseNo: summary.doctor_medical_license_no,
+    scheduledAt: request.scheduled_at ?? summary.scheduled_at,
     requestId: request.id,
     issuedAt: new Date(summary.updated_at || summary.created_at)
   };

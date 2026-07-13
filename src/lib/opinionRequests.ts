@@ -24,6 +24,8 @@ import {
   normalizeDoctor
 } from './doctors';
 import { fetchPatientByAuthUserId } from './patients';
+import type { MedicalRecordCategoryId } from './medicalRecordCategories';
+import { uploadMedicalRecordForRequest } from './records';
 import {
   consultationSummaryPdfMetaFromRequest,
   generateConsultationSummaryPdfBlob
@@ -1976,11 +1978,13 @@ async function enrichRequestsWithConsultationSummaries(
     .from('consultation_summaries')
     .select(CONSULTATION_SUMMARY_SELECT)
     .in('request_id', requestIds)
-    .returns<ConsultationSummary[]>();
+    .returns<ConsultationSummaryRow[]>();
 
   if (error || !data?.length) return requests;
 
-  const summaryByRequestId = new Map(data.map((summary) => [summary.request_id, summary]));
+  const summaryByRequestId = new Map(
+    data.map((summary) => [summary.request_id, mapConsultationSummaryRow(summary)])
+  );
 
   return requests.map((request) => {
     const summary = summaryByRequestId.get(request.id);
@@ -2640,6 +2644,29 @@ export async function patientProceedWithoutRecords(requestId: string) {
   });
   notifyOpinionRequestLiveChange(requestId);
   return { data, error: null };
+}
+
+export function canPseManageRequestRecords(
+  request: Pick<OpinionRequest, 'records_verified_at' | 'status'>
+): boolean {
+  return !request.records_verified_at && request.status !== 'closed';
+}
+
+export async function pseUploadRecordToRequest(
+  requestId: string,
+  file: File,
+  options?: { category?: MedicalRecordCategoryId }
+) {
+  const { data, error } = await uploadMedicalRecordForRequest(file, requestId, options);
+  if (error || !data) {
+    return { data: null, error: error ?? { message: 'Upload failed.' } };
+  }
+
+  await logRequestAudit(requestId, 'pse_records_attached', 'pse', {
+    metadata: { record_id: data.recordId, file_name: data.fileName }
+  });
+  notifyOpinionRequestLiveChange(requestId);
+  return { data: { recordId: data.recordId, fileName: data.fileName }, error: null };
 }
 
 export async function patientAttachRecordsToRequest(requestId: string, recordIds: string[]) {
@@ -3621,7 +3648,12 @@ export async function pseReleaseToDoctor(requestId: string) {
 }
 
 type ConsultationSummaryPatientRow = ConsultationSummary & {
-  doctor?: { full_name: string | null; specialty: string | null } | null;
+  doctor?: {
+    full_name: string | null;
+    specialty: string | null;
+    qualification: string | null;
+    medical_license_no: string | null;
+  } | null;
   request?: { scheduled_at: string | null; doctor_name: string | null; patient_name: string | null } | null;
 };
 
@@ -3636,6 +3668,8 @@ function mapPatientConsultationSummary(
     patient_gender: patientProfile?.gender ?? null,
     doctor_name: doctor?.full_name ?? request?.doctor_name ?? null,
     doctor_specialty: doctor?.specialty ?? null,
+    doctor_qualification: doctor?.qualification ?? null,
+    doctor_medical_license_no: doctor?.medical_license_no ?? null,
     scheduled_at: request?.scheduled_at ?? null
   };
 }
@@ -3661,7 +3695,7 @@ export async function fetchPatientConsultationSummaries(patientAuthUserId: strin
         pdf_storage_path,
         created_at,
         updated_at,
-        doctor:doctors(full_name, specialty),
+        doctor:doctors(full_name, specialty, qualification, medical_license_no),
         request:opinion_requests(scheduled_at, doctor_name, patient_name)
       `
       )
@@ -3696,18 +3730,39 @@ const CONSULTATION_SUMMARY_SELECT = `
   prescription,
   pdf_storage_path,
   created_at,
-  updated_at
+  updated_at,
+  doctor:doctors(full_name, specialty, qualification, medical_license_no)
 `;
+
+type ConsultationSummaryRow = ConsultationSummary & {
+  doctor?: {
+    full_name: string | null;
+    specialty: string | null;
+    qualification: string | null;
+    medical_license_no: string | null;
+  } | null;
+};
+
+function mapConsultationSummaryRow(row: ConsultationSummaryRow): ConsultationSummary {
+  const { doctor, ...summary } = row;
+  return {
+    ...summary,
+    doctor_name: doctor?.full_name ?? summary.doctor_name ?? null,
+    doctor_specialty: doctor?.specialty ?? summary.doctor_specialty ?? null,
+    doctor_qualification: doctor?.qualification ?? summary.doctor_qualification ?? null,
+    doctor_medical_license_no: doctor?.medical_license_no ?? summary.doctor_medical_license_no ?? null
+  };
+}
 
 export async function fetchConsultationSummary(requestId: string) {
   const { data, error } = await supabase
     .from('consultation_summaries')
     .select(CONSULTATION_SUMMARY_SELECT)
     .eq('request_id', requestId)
-    .maybeSingle<ConsultationSummary>();
+    .maybeSingle<ConsultationSummaryRow>();
 
   if (error) return { data: null, error };
-  return { data: data ?? null, error: null };
+  return { data: data ? mapConsultationSummaryRow(data) : null, error: null };
 }
 
 function shouldCloseRequestAfterConsultation(request: OpinionRequest): boolean {
@@ -3819,7 +3874,7 @@ export async function saveDoctorConsultation(
     .from('consultation_summaries')
     .upsert(summaryPayload, { onConflict: 'request_id' })
     .select(CONSULTATION_SUMMARY_SELECT)
-    .single<ConsultationSummary>();
+    .single<ConsultationSummaryRow>();
 
   if (error) {
     const hint =
@@ -3853,7 +3908,7 @@ export async function saveDoctorConsultation(
     };
   }
 
-  return { data, error: null };
+  return { data: mapConsultationSummaryRow(data), error: null };
 }
 
 const CONSULTATION_NOTES_MAX_BYTES = 10 * 1024 * 1024;
@@ -4036,7 +4091,7 @@ export async function saveDoctorConsultationUpload(
     .from('consultation_summaries')
     .upsert(summaryPayload, { onConflict: 'request_id' })
     .select(CONSULTATION_SUMMARY_SELECT)
-    .single<ConsultationSummary>();
+    .single<ConsultationSummaryRow>();
 
   if (error) {
     const hint =
@@ -4055,7 +4110,7 @@ export async function saveDoctorConsultationUpload(
       error: { message: normalizeStorageAuthError(finalize.error.message) }
     };
   }
-  return { data, error: null };
+  return { data: mapConsultationSummaryRow(data), error: null };
 }
 
 /** @deprecated Use saveDoctorConsultation — kept for any legacy callers. */

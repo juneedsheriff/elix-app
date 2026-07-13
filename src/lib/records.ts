@@ -9,9 +9,11 @@ import {
 import { fetchPatientByAuthUserId } from './patients';
 import {
   createR2UploadUrl,
+  createRequestRecordUploadUrl,
   deleteR2Object,
   downloadMedicalRecordBlob,
   isR2StorageConfigured,
+  registerRequestRecord,
   uploadFileToR2,
   type MedicalRecordDownloadOptions
 } from './r2Storage';
@@ -195,6 +197,79 @@ export async function uploadMedicalRecord(
   }
 
   return { data: toMedicalRecord(normalizeRow(data)), error: null };
+}
+
+/** PSE uploads a medical record into the patient's vault and attaches it to a request. */
+export async function uploadMedicalRecordForRequest(
+  file: File,
+  requestId: string,
+  options?: { category?: MedicalRecordCategoryId }
+) {
+  const validationError = medicalFileValidationError(file);
+  if (validationError) {
+    return { data: null, error: { message: validationError } };
+  }
+
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: { message: 'Cloudflare R2 is not configured. Set VITE_R2_API_URL in .env.local.' }
+    };
+  }
+
+  const trimmedRequestId = requestId.trim();
+  if (!trimmedRequestId) {
+    return { data: null, error: { message: 'Request id is required.' } };
+  }
+
+  const contentType = mimeForFile(file);
+  const category = options?.category ?? DEFAULT_MEDICAL_RECORD_CATEGORY;
+  const categoryLabel = medicalRecordCategoryLabel(category);
+
+  const { data: uploadTarget, error: presignError } = await createRequestRecordUploadUrl(
+    trimmedRequestId,
+    file
+  );
+  if (presignError || !uploadTarget) {
+    return { data: null, error: presignError ?? { message: 'Could not prepare upload.' } };
+  }
+
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    contentType,
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { data: null, error: uploadError };
+  }
+
+  const { data: registered, error: registerError } = await registerRequestRecord({
+    requestId: trimmedRequestId,
+    storagePath: uploadTarget.storagePath,
+    fileName: file.name,
+    mimeType: contentType,
+    fileSizeBytes: file.size,
+    recordCategory: category,
+    summary: categoryLabel
+  });
+
+  if (registerError || !registered?.recordId) {
+    await deleteR2Object(uploadTarget.storagePath);
+    return {
+      data: null,
+      error: registerError ?? { message: 'Could not save the uploaded record to this request.' }
+    };
+  }
+
+  return {
+    data: {
+      recordId: registered.recordId,
+      fileName: file.name,
+      summary: categoryLabel
+    },
+    error: null
+  };
 }
 
 export async function saveExternalMedicalRecordLink(

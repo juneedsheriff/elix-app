@@ -30,6 +30,7 @@ import {
   pseScheduleAppointment,
   pseSendInvoiceAndPaymentLink,
   pseMarkPaymentPendingNoLink,
+  canPseManageRequestRecords,
   subscribeOpinionRequestLiveUpdates
 } from '../../../lib/opinionRequests';
 import {
@@ -41,6 +42,7 @@ import AppointmentDateTimePicker from './AppointmentDateTimePicker';
 import PsePatientCaseDetailsPanel from './PsePatientCaseDetailsPanel';
 import PsePaymentStepPanel from './PsePaymentStepPanel';
 import PseRequestRecordsGallery from './PseRequestRecordsGallery';
+import PseUploadRecordsModal from './PseUploadRecordsModal';
 import RecommendDoctorsSection from './RecommendDoctorsSection';
 import type { Doctor } from '../../../types/doctor';
 import type { ConsultationSummary, OpinionRequest, OpinionRequestRecommendation } from '../../../types/opinionRequest';
@@ -107,6 +109,7 @@ export default function RequestWorkflowWizard({
   const [busy, setBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [showUploadRecords, setShowUploadRecords] = useState(false);
 
   const loadMeta = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -496,12 +499,23 @@ export default function RequestWorkflowWizard({
         );
       case 2: {
         const hasRecords = request.records.length > 0;
+        const canUploadRecords = canCoordinate && canPseManageRequestRecords(request);
         return (
           <Stack gap='sm' className='request-workflow-step'>
             <Text size='xs' c='dimmed'>
               Open each file and confirm it matches the patient&apos;s case before recommending
               doctors.
             </Text>
+            {canUploadRecords ? (
+              <Button
+                variant='light'
+                color='cyan'
+                radius='md'
+                onClick={() => setShowUploadRecords(true)}
+              >
+                Upload record for patient
+              </Button>
+            ) : null}
             {request.patient_proceeded_without_records_at && !hasRecords ? (
               <Text size='sm' c='blue'>
                 Patient chose to proceed without documents on{' '}
@@ -735,16 +749,29 @@ export default function RequestWorkflowWizard({
   };
 
   return (
-    <ConsultationWizardAccordion
-      className='request-workflow-wizard patient-consultation-wizard--accordion'
-      heading='Coordination workflow'
-      subheading='Manage each step of this patient request.'
-      steps={wizardSteps}
-      expandedIndex={expandedStep}
-      suggestedIndex={suggestedStep}
-      canNavigate={canNavigateStep}
-      onToggle={toggleStep}
-      renderPanel={renderStepContent}
-    />
+    <>
+      <ConsultationWizardAccordion
+        className='request-workflow-wizard patient-consultation-wizard--accordion'
+        heading='Coordination workflow'
+        subheading='Manage each step of this patient request.'
+        steps={wizardSteps}
+        expandedIndex={expandedStep}
+        suggestedIndex={suggestedStep}
+        canNavigate={canNavigateStep}
+        onToggle={toggleStep}
+        renderPanel={renderStepContent}
+      />
+      <PseUploadRecordsModal
+        open={showUploadRecords}
+        requestId={request.id}
+        onClose={() => setShowUploadRecords(false)}
+        onSuccess={onSuccess}
+        onError={onError}
+        onUploaded={() => {
+          onUpdated();
+          void loadMeta();
+        }}
+      />
+    </>
   );
 }

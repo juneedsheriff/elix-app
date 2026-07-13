@@ -437,6 +437,8 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
           requestId: summary.request_id,
           doctorName: summary.doctor_name,
           doctorSpecialty: summary.doctor_specialty,
+          doctorQualification: summary.doctor_qualification,
+          doctorMedicalLicenseNo: summary.doctor_medical_license_no,
           scheduledAt: summary.scheduled_at,
           issuedAt: new Date(summary.updated_at || summary.created_at)
         };

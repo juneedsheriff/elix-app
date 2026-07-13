@@ -50,6 +50,8 @@ export type ConsultationSummary = {
   /** Enriched from doctors / opinion_requests when fetched for patient records. */
   doctor_name?: string | null;
   doctor_specialty?: string | null;
+  doctor_qualification?: string | null;
+  doctor_medical_license_no?: string | null;
   scheduled_at?: string | null;
   chief_complaint: string | null;
   history_present_illness: string | null;

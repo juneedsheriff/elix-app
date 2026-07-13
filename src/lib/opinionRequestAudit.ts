@@ -12,6 +12,8 @@ export type OpinionRequestAuditAction =
   | 'case_details_reviewed'
   | 'case_details_updated'
   | 'records_rejected'
+  | 'patient_records_attached'
+  | 'pse_records_attached'
   | 'patient_proceeded_without_records'
   | 'pse_proceeded_without_records'
   | 'doctors_recommended'
@@ -44,6 +46,8 @@ export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditActi
   case_details_reviewed: 'PSE reviewed patient case details',
   case_details_updated: 'Patient case details updated',
   records_rejected: 'PSE rejected medical records — patient notified',
+  patient_records_attached: 'Patient attached medical records',
+  pse_records_attached: 'PSE uploaded medical records on behalf of patient',
   patient_proceeded_without_records: 'Patient chose to proceed without medical records',
   pse_proceeded_without_records: 'PSE proceeded without attached medical records',
   doctors_recommended: 'PSE recommended doctors to patient',
@@ -141,6 +145,10 @@ function patientAuditSummary(
         : 'PSE updated your case details';
     case 'records_rejected':
       return 'PSE asked you to re-upload your medical records';
+    case 'patient_records_attached':
+      return 'You attached medical records to this request';
+    case 'pse_records_attached':
+      return 'PSE uploaded medical records on your behalf';
     case 'patient_proceeded_without_records':
       return 'You chose to proceed without medical records';
     case 'pse_proceeded_without_records':
@@ -215,6 +223,10 @@ function staffAuditSummary(
         : 'PSE updated patient case details';
     case 'records_rejected':
       return 'PSE rejected medical records — patient notified';
+    case 'patient_records_attached':
+      return 'Patient attached medical records';
+    case 'pse_records_attached':
+      return 'PSE uploaded medical records on behalf of patient';
     case 'patient_proceeded_without_records':
       return 'Patient chose to proceed without medical records';
     case 'pse_proceeded_without_records':
