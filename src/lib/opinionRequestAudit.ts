@@ -14,6 +14,8 @@ export type OpinionRequestAuditAction =
   | 'records_rejected'
   | 'patient_records_attached'
   | 'pse_records_attached'
+  | 'patient_record_detached'
+  | 'pse_record_deleted'
   | 'patient_proceeded_without_records'
   | 'pse_proceeded_without_records'
   | 'doctors_recommended'
@@ -49,6 +51,8 @@ export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditActi
   records_rejected: 'PSE rejected medical records — patient notified',
   patient_records_attached: 'Patient attached medical records',
   pse_records_attached: 'PSE uploaded medical records on behalf of patient',
+  patient_record_detached: 'Patient removed a medical record from the request',
+  pse_record_deleted: 'PSE deleted a medical record from the request',
   patient_proceeded_without_records: 'Patient chose to proceed without medical records',
   pse_proceeded_without_records: 'PSE proceeded without attached medical records',
   doctors_recommended: 'PSE recommended doctors to patient',
@@ -151,6 +155,10 @@ function patientAuditSummary(
       return 'You attached medical records to this request';
     case 'pse_records_attached':
       return 'PSE uploaded medical records on your behalf';
+    case 'patient_record_detached':
+      return 'You removed a medical record from this request';
+    case 'pse_record_deleted':
+      return 'PSE removed a medical record from this request';
     case 'patient_proceeded_without_records':
       return 'You chose to proceed without medical records';
     case 'pse_proceeded_without_records':
@@ -231,6 +239,10 @@ function staffAuditSummary(
       return 'Patient attached medical records';
     case 'pse_records_attached':
       return 'PSE uploaded medical records on behalf of patient';
+    case 'patient_record_detached':
+      return 'Patient removed a medical record from the request';
+    case 'pse_record_deleted':
+      return 'PSE deleted a medical record from the request';
     case 'patient_proceeded_without_records':
       return 'Patient chose to proceed without medical records';
     case 'pse_proceeded_without_records':

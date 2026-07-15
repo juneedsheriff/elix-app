@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Group, Paper, Stack, Text } from '@mantine/core';
-import { IconExternalLink, IconFileText } from '@tabler/icons-react';
+import { ActionIcon, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { IconExternalLink, IconFileText, IconTrash } from '@tabler/icons-react';
 import ImageLightboxGallery, { type LightboxImageItem } from '../common/ImageLightboxGallery';
 import { isImageFileName } from '../../lib/imageFiles';
 import { getMedicalRecordDownloadUrl, openMedicalRecordByPath } from '../../lib/records';
@@ -13,6 +13,9 @@ type RequestRecordsGalleryProps = {
   onOpenRecord?: (storagePath: string) => void;
   /** Opens non-image documents in a new browser tab. Images use the lightbox. */
   onOpenDocument?: (storagePath: string, requestId: string) => void;
+  /** When set, shows delete controls for each record (PSE verify-records). */
+  onDeleteRecord?: (record: OpinionRequestFile) => void;
+  deletingRecordId?: string | null;
   lightboxModalZIndex?: number;
 };
 
@@ -21,6 +24,8 @@ export default function RequestRecordsGallery({
   requestId,
   onOpenRecord,
   onOpenDocument,
+  onDeleteRecord,
+  deletingRecordId = null,
   lightboxModalZIndex = 500
 }: RequestRecordsGalleryProps) {
   const imageRecords = useMemo(
@@ -135,6 +140,33 @@ export default function RequestRecordsGallery({
             error={loadError}
             modalZIndex={lightboxModalZIndex}
           />
+          {onDeleteRecord
+            ? imageRecords.map((record) => (
+                <Paper key={record.id} radius='md' p='sm' withBorder>
+                  <Group justify='space-between' wrap='nowrap'>
+                    <Group gap='sm' wrap='nowrap'>
+                      <IconFileText size={18} />
+                      <Text size='sm' fw={600}>
+                        {record.file_name}
+                      </Text>
+                    </Group>
+                    <Tooltip label='Delete record'>
+                      <ActionIcon
+                        variant='subtle'
+                        color='red'
+                        radius='md'
+                        aria-label={`Delete ${record.file_name}`}
+                        loading={deletingRecordId === record.id}
+                        disabled={Boolean(deletingRecordId)}
+                        onClick={() => onDeleteRecord(record)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
+                </Paper>
+              ))
+            : null}
         </Stack>
       ) : null}
 
@@ -161,18 +193,35 @@ export default function RequestRecordsGallery({
                     ) : null}
                   </Stack>
                 </Group>
-                {record.storage_path ? (
-                  <Button
-                    variant='light'
-                    color='cyan'
-                    size='xs'
-                    leftSection={<IconExternalLink size={14} stroke={1.6} />}
-                    loading={openingPath === record.storage_path}
-                    onClick={() => void openDocument(record.storage_path!)}
-                  >
-                    Open
-                  </Button>
-                ) : null}
+                <Group gap='xs' wrap='nowrap'>
+                  {record.storage_path ? (
+                    <Button
+                      variant='light'
+                      color='cyan'
+                      size='xs'
+                      leftSection={<IconExternalLink size={14} stroke={1.6} />}
+                      loading={openingPath === record.storage_path}
+                      onClick={() => void openDocument(record.storage_path!)}
+                    >
+                      Open
+                    </Button>
+                  ) : null}
+                  {onDeleteRecord ? (
+                    <Tooltip label='Delete record'>
+                      <ActionIcon
+                        variant='subtle'
+                        color='red'
+                        radius='md'
+                        aria-label={`Delete ${record.file_name}`}
+                        loading={deletingRecordId === record.id}
+                        disabled={Boolean(deletingRecordId)}
+                        onClick={() => onDeleteRecord(record)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  ) : null}
+                </Group>
               </Group>
             </Paper>
           ))}

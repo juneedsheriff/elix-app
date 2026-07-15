@@ -39,10 +39,12 @@ export default function PseUploadRecordsModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState<MedicalRecordCategoryId>(DEFAULT_MEDICAL_RECORD_CATEGORY);
   const [uploading, setUploading] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setCategory(DEFAULT_MEDICAL_RECORD_CATEGORY);
+    setProgressLabel(null);
   }, [open]);
 
   useEffect(() => {
@@ -55,34 +57,52 @@ export default function PseUploadRecordsModal({
   }, [open, onClose, uploading]);
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const selected = Array.from(event.target.files ?? []);
     event.target.value = '';
-    if (!file) return;
+    if (!selected.length) return;
 
-    const validationError = medicalFileValidationError(file);
-    if (validationError) {
-      onError(validationError);
-      return;
+    const files: File[] = [];
+    for (const file of selected) {
+      const validationError = medicalFileValidationError(file);
+      if (validationError) {
+        onError(validationError);
+        return;
+      }
+      files.push(file);
     }
 
     setUploading(true);
-    const { data, error } = await pseUploadRecordToRequest(requestId, file, { category });
+    let uploadedCount = 0;
+    const failures: string[] = [];
+
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      setProgressLabel(`Uploading ${index + 1} of ${files.length}…`);
+      const { data, error } = await pseUploadRecordToRequest(requestId, file, { category });
+      if (error || !data) {
+        failures.push(`${truncateFileName(file.name)}: ${error?.message ?? 'Upload failed.'}`);
+        continue;
+      }
+      uploadedCount += 1;
+    }
+
     setUploading(false);
+    setProgressLabel(null);
 
-    if (error) {
-      onError(error.message);
+    if (uploadedCount > 0) {
+      onUploaded();
+      onSuccess(
+        uploadedCount === 1
+          ? `1 file uploaded for the patient and added to this request.`
+          : `${uploadedCount} files uploaded for the patient and added to this request.`
+      );
+    }
+
+    if (failures.length) {
+      onError(failures.join(' '));
       return;
     }
 
-    if (!data) {
-      onError('Upload failed. Please try again.');
-      return;
-    }
-
-    onSuccess(
-      `"${truncateFileName(data.fileName)}" uploaded for the patient and added to this request.`
-    );
-    onUploaded();
     onClose();
   };
 
@@ -105,9 +125,10 @@ export default function PseUploadRecordsModal({
       >
         <div className='elixhealth-modal-head'>
           <div>
-            <h2 id='pse-upload-records-modal-title'>Upload record for patient</h2>
+            <h2 id='pse-upload-records-modal-title'>Upload records for patient</h2>
             <p className='muted'>
-              Files are saved to the patient&apos;s records vault and attached to this request.
+              Files are saved to the patient&apos;s records vault and attached to this request. You
+              can select multiple files.
             </p>
           </div>
           <button
@@ -137,15 +158,17 @@ export default function PseUploadRecordsModal({
 
           <section className='patient-attach-records-modal__section' aria-labelledby='pse-upload-heading'>
             <h3 id='pse-upload-heading' className='patient-attach-records-modal__heading'>
-              Upload file
+              Upload files
             </h3>
             <p className='muted patient-attach-records-modal__hint'>
-              PDF, JPG, or DOC/DOCX up to 10 MB. The patient will see this on their dashboard.
+              PDF, JPG, or DOC/DOCX up to 10 MB each. Select one or more files. The patient will see
+              these on their dashboard.
             </p>
             <input
               ref={fileInputRef}
               type='file'
               accept={ACCEPT}
+              multiple
               className='patient-attach-records-modal__file-input'
               onChange={(event) => void handleUpload(event)}
               disabled={uploading}
@@ -158,11 +181,12 @@ export default function PseUploadRecordsModal({
             >
               {uploading ? (
                 <>
-                  <Loader2 size={16} className='spin' aria-hidden /> Uploading…
+                  <Loader2 size={16} className='spin' aria-hidden />{' '}
+                  {progressLabel ?? 'Uploading…'}
                 </>
               ) : (
                 <>
-                  <CloudUpload size={16} aria-hidden /> Choose file to upload
+                  <CloudUpload size={16} aria-hidden /> Choose files to upload
                 </>
               )}
             </button>

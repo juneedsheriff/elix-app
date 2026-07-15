@@ -219,6 +219,13 @@ export async function registerRequestRecord(input: {
   });
 }
 
+export async function deleteRequestRecord(input: { requestId: string; recordId: string }) {
+  return r2ApiRequest<{ ok: boolean }>('/v1/request-records/delete', {
+    method: 'POST',
+    json: input
+  });
+}
+
 export async function downloadMedicalRecordBlob(
   storagePath: string,
   options?: MedicalRecordDownloadOptions

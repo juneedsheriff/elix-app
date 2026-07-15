@@ -31,6 +31,7 @@ import {
   pseSendInvoiceAndPaymentLink,
   pseMarkPaymentPendingNoLink,
   canPseManageRequestRecords,
+  pseDeleteRequestRecord,
   subscribeOpinionRequestLiveUpdates
 } from '../../../lib/opinionRequests';
 import {
@@ -46,7 +47,12 @@ import PseRequestRecordsGallery from './PseRequestRecordsGallery';
 import PseUploadRecordsModal from './PseUploadRecordsModal';
 import RecommendDoctorsSection from './RecommendDoctorsSection';
 import type { Doctor } from '../../../types/doctor';
-import type { ConsultationSummary, OpinionRequest, OpinionRequestRecommendation } from '../../../types/opinionRequest';
+import type {
+  ConsultationSummary,
+  OpinionRequest,
+  OpinionRequestFile,
+  OpinionRequestRecommendation
+} from '../../../types/opinionRequest';
 import { formatRequestDate } from './requestsUtils';
 
 const ELIX_EXTERNAL_PAYMENT_BASE_URL = 'https://elixclinix.com/pay.html?amount=';
@@ -156,6 +162,7 @@ export default function RequestWorkflowWizard({
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showUploadRecords, setShowUploadRecords] = useState(false);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
 
   const loadMeta = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -322,6 +329,26 @@ export default function RequestWorkflowWizard({
   const goToStep = (index: number) => {
     if (!canNavigateStep(index)) return;
     setExpandedStepTracked(index);
+  };
+
+  const deleteRequestRecord = async (record: OpinionRequestFile) => {
+    const confirmed = window.confirm(
+      `Delete "${record.file_name}" from this request? The file will be removed from the patient's vault for this request.`
+    );
+    if (!confirmed) return;
+
+    setDeletingRecordId(record.id);
+    const { error } = await pseDeleteRequestRecord(request.id, record.id);
+    setDeletingRecordId(null);
+
+    if (error) {
+      onError(error.message);
+      return;
+    }
+
+    onSuccess(`"${record.file_name}" deleted.`);
+    onUpdated();
+    void loadMeta();
   };
 
   const markRecordsVerified = async () => {
@@ -604,7 +631,7 @@ export default function RequestWorkflowWizard({
                 radius='md'
                 onClick={() => setShowUploadRecords(true)}
               >
-                Upload record for patient
+                Upload records for patient
               </Button>
             ) : null}
             {request.patient_proceeded_without_records_at && !hasRecords ? (
@@ -617,6 +644,8 @@ export default function RequestWorkflowWizard({
               records={request.records}
               requestId={request.id}
               onOpenRecord={onOpenRecord}
+              onDeleteRecord={canUploadRecords ? (record) => void deleteRequestRecord(record) : undefined}
+              deletingRecordId={deletingRecordId}
             />
             {request.records_verified_at ? (
               <Text size='sm' c='green'>

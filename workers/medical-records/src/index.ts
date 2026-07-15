@@ -243,11 +243,16 @@ async function canStaffCoordinateRequest(
   if (!staff) return false;
 
   const base = env.SUPABASE_URL.replace(/\/$/, '');
-  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=id,assigned_to,clinic_id&limit=1`;
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=id,assigned_to,clinic_id,records_verified_at,status&limit=1`;
   const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
   if (!res.ok) return false;
 
-  const rows = (await res.json()) as { assigned_to?: string | null; clinic_id?: string | null }[];
+  const rows = (await res.json()) as {
+    assigned_to?: string | null;
+    clinic_id?: string | null;
+    records_verified_at?: string | null;
+    status?: string | null;
+  }[];
   const row = rows[0];
   if (!row) return false;
 
@@ -274,6 +279,78 @@ async function canStaffCoordinateRequest(
   }
 
   return false;
+}
+
+async function canStaffManageRequestRecords(
+  userId: string,
+  authHeader: string,
+  requestId: string,
+  env: Env
+): Promise<boolean> {
+  if (!(await canStaffCoordinateRequest(userId, authHeader, requestId, env))) return false;
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId.trim())}&select=records_verified_at,status&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env) });
+  if (!res.ok) return false;
+  const rows = (await res.json()) as { records_verified_at?: string | null; status?: string | null }[];
+  const row = rows[0];
+  if (!row) return false;
+  if (row.records_verified_at) return false;
+  if (row.status === 'closed') return false;
+  return true;
+}
+
+async function deleteRequestRecordForStaff(
+  env: Env,
+  authHeader: string,
+  requestId: string,
+  recordId: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!env.SUPABASE_SERVICE_ROLE_KEY || !env.SUPABASE_URL) {
+    return { ok: false, error: 'Service role is not configured.' };
+  }
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const linkUrl =
+    `${base}/rest/v1/opinion_request_records?request_id=eq.${encodeURIComponent(requestId)}` +
+    `&record_id=eq.${encodeURIComponent(recordId)}&select=record_id&limit=1`;
+  const linkRes = await fetch(linkUrl, { headers: supabaseRestHeaders(authHeader, env, true) });
+  if (!linkRes.ok) return { ok: false, error: 'Could not verify record attachment.' };
+  const links = (await linkRes.json()) as unknown[];
+  if (!Array.isArray(links) || links.length === 0) {
+    return { ok: false, error: 'Record is not attached to this request.' };
+  }
+
+  const fileUrl = `${base}/rest/v1/uploaded_files?id=eq.${encodeURIComponent(recordId)}&select=id,storage_path&limit=1`;
+  const fileRes = await fetch(fileUrl, { headers: supabaseRestHeaders(authHeader, env, true) });
+  if (!fileRes.ok) return { ok: false, error: 'Could not load record file.' };
+  const files = (await fileRes.json()) as { id?: string; storage_path?: string | null }[];
+  const file = files[0];
+
+  const detachUrl =
+    `${base}/rest/v1/opinion_request_records?request_id=eq.${encodeURIComponent(requestId)}` +
+    `&record_id=eq.${encodeURIComponent(recordId)}`;
+  const detachRes = await fetch(detachUrl, {
+    method: 'DELETE',
+    headers: supabaseRestHeaders(authHeader, env, true)
+  });
+  if (!detachRes.ok) {
+    return { ok: false, error: 'Could not remove record from request.' };
+  }
+
+  if (file?.storage_path?.trim()) {
+    await env.MEDICAL_RECORDS.delete(file.storage_path.trim());
+  }
+
+  if (file?.id) {
+    await fetch(`${base}/rest/v1/uploaded_files?id=eq.${encodeURIComponent(file.id)}`, {
+      method: 'DELETE',
+      headers: supabaseRestHeaders(authHeader, env, true)
+    });
+  }
+
+  return { ok: true };
 }
 
 async function canStaffUploadRequestRecordPath(
@@ -1308,6 +1385,26 @@ export default {
         }
 
         return jsonResponse({ ok: true, recordId }, 200, origin, env);
+      }
+
+      if (pathname === '/v1/request-records/delete' && request.method === 'POST') {
+        const body = (await request.json()) as { requestId?: string; recordId?: string };
+        const requestId = body.requestId?.trim() ?? '';
+        const recordId = body.recordId?.trim() ?? '';
+        if (!requestId || !recordId) {
+          return jsonResponse({ error: 'requestId and recordId are required' }, 400, origin, env);
+        }
+
+        if (!(await canStaffManageRequestRecords(user.id, authHeader, requestId, env))) {
+          return jsonResponse({ error: 'Forbidden' }, 403, origin, env);
+        }
+
+        const result = await deleteRequestRecordForStaff(env, authHeader, requestId, recordId);
+        if (!result.ok) {
+          return jsonResponse({ error: result.error ?? 'Could not delete record.' }, 400, origin, env);
+        }
+
+        return jsonResponse({ ok: true }, 200, origin, env);
       }
 
       if (pathname === '/v1/records/upload-url' && request.method === 'POST') {

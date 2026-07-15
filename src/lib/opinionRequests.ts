@@ -36,6 +36,7 @@ import {
   createConsultationInvoiceUploadUrl,
   createConsultationSummaryUploadUrl,
   createR2UploadUrl,
+  deleteRequestRecord,
   isR2StorageConfigured,
   uploadFileToR2
 } from './r2Storage';
@@ -2782,6 +2783,30 @@ export async function patientDetachRecordFromRequest(requestId: string, recordId
   });
   notifyOpinionRequestLiveChange(requestId);
   return { data: { recordId: trimmedId }, error: null };
+}
+
+/** PSE deletes a record from the request and removes the vault file. */
+export async function pseDeleteRequestRecord(requestId: string, recordId: string) {
+  const trimmedRequestId = requestId.trim();
+  const trimmedRecordId = recordId.trim();
+  if (!trimmedRequestId || !trimmedRecordId) {
+    return { data: null, error: { message: 'Request id and record id are required.' } };
+  }
+
+  const { error } = await deleteRequestRecord({
+    requestId: trimmedRequestId,
+    recordId: trimmedRecordId
+  });
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+
+  await logRequestAudit(trimmedRequestId, 'pse_record_deleted', 'pse', {
+    metadata: { record_id: trimmedRecordId }
+  });
+  notifyOpinionRequestLiveChange(trimmedRequestId);
+  return { data: { recordId: trimmedRecordId }, error: null };
 }
 
 export async function pseProceedWithoutRecords(requestId: string) {
