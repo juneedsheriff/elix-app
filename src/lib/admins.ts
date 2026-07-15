@@ -2,6 +2,7 @@ import type { AuthError } from '@supabase/supabase-js';
 import type { Admin } from '../types/admin';
 import type { AdminDoctorUpdateInput, Doctor } from '../types/doctor';
 import type { Patient } from '../types/patient';
+import { manageAccountAuth } from './adminAuth';
 import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
 import { supabase } from './supabase';
@@ -407,6 +408,10 @@ export async function deletePatientForAdmin(id: string) {
       }
     };
   }
+
+  // Best-effort Auth ban — soft delete + login_disabled already block profile access.
+  await manageAccountAuth('patient', id, 'disable');
+
   return { error: null };
 }
 

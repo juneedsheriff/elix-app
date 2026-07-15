@@ -26,6 +26,8 @@ export type Patient = {
   avatar_url: string | null;
   profile_completed_at: string | null;
   login_disabled?: boolean;
+  /** Soft-delete marker — deleted patients must not sign in or create requests */
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
   /** PSE clinic workspace when managed by clinic PSE */

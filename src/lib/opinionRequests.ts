@@ -23,7 +23,7 @@ import {
   fetchPatientBrowseDoctorById,
   normalizeDoctor
 } from './doctors';
-import { fetchPatientByAuthUserId } from './patients';
+import { fetchPatientByAuthUserId, isPatientLoginBlocked, PATIENT_LOGIN_BLOCKED_MESSAGE } from './patients';
 import type { MedicalRecordCategoryId } from './medicalRecordCategories';
 import { uploadMedicalRecordForRequest } from './records';
 import {
@@ -815,6 +815,13 @@ async function resolveNames(
 }
 
 export async function createOpinionRequest(input: CreateOpinionRequestInput) {
+  if (input.patientId) {
+    const { data: patient } = await fetchPatientByAuthUserId(input.patientId);
+    if (patient && isPatientLoginBlocked(patient)) {
+      return { data: null, error: { message: PATIENT_LOGIN_BLOCKED_MESSAGE } };
+    }
+  }
+
   const { doctor, error: doctorError } = await resolveDoctorRecord(input.doctorId);
   if (doctorError || !doctor) {
     return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };

@@ -71,6 +71,7 @@
     "db:apply-clinic-doctors-realtime": "node scripts/apply-clinic-doctors-realtime.mjs",
     "db:apply-admin-clinic-patients": "node scripts/apply-admin-clinic-patients.mjs",
     "db:apply-patient-soft-delete": "node scripts/apply-patient-soft-delete.mjs",
+    "db:apply-patient-claim-disabled": "node scripts/apply-patient-claim-disabled.mjs",
     "db:apply-recommendations-rls": "node scripts/apply-recommendations-rls.mjs",
     "db:apply-request-messages": "node scripts/apply-migration.mjs 069_request_messages.sql",
     "db:seed-admin": "node scripts/seed-admin.mjs",

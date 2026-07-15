@@ -4,13 +4,13 @@ import { isPatientProfileComplete } from './patientProfileCompleteness';
 import { supabase } from './supabase';
 
 const patientColumnsExtended =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, clinic_id, created_at, updated_at';
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, clinic_id, login_disabled, deleted_at, created_at, updated_at';
 
 const patientColumnsWithElix =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, deleted_at, created_at, updated_at';
 
 const patientColumnsLegacy =
-  'id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, created_at, updated_at';
+  'id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, created_at, updated_at';
 
 function withFallbackElixId(patient: Patient | null): Patient | null {
   if (!patient || patient.elix_id) return patient;
@@ -31,8 +31,27 @@ function normalizePatientRow(patient: Patient | null): Patient | null {
     social_history: patient.social_history ?? null,
     surgical_history: patient.surgical_history ?? null,
     medical_history: patient.medical_history ?? null,
-    profile_completed_at: patient.profile_completed_at ?? null
+    profile_completed_at: patient.profile_completed_at ?? null,
+    login_disabled: Boolean(patient.login_disabled),
+    deleted_at: patient.deleted_at ?? null
   };
+}
+
+/** Soft-deleted or login-disabled patients must not use the patient app. */
+export function isPatientLoginBlocked(patient: Patient | null | undefined): boolean {
+  if (!patient) return false;
+  return Boolean(patient.login_disabled) || Boolean(patient.deleted_at?.trim());
+}
+
+export const PATIENT_LOGIN_BLOCKED_MESSAGE =
+  'This patient account has been disabled. Contact your clinic or administrator if you need access.';
+
+export function patientLoginBlockedMessage(patient: Patient): string {
+  if (patient.deleted_at?.trim()) return PATIENT_LOGIN_BLOCKED_MESSAGE;
+  if (patient.login_disabled) {
+    return 'Your patient login is not enabled yet. Ask your clinic to enable login for your account.';
+  }
+  return PATIENT_LOGIN_BLOCKED_MESSAGE;
 }
 
 async function selectPatient(
@@ -44,7 +63,7 @@ async function selectPatient(
   }
 
   const missingColumn =
-    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|clinic_id|column/.test(
+    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|clinic_id|login_disabled|deleted_at|column/.test(
       extended.error.message
     );
   if (!missingColumn) {
@@ -111,7 +130,16 @@ export function defaultPatientNameFromUser(user: User): string {
 /** Attach auth login to an existing patients row (e.g. demo seed) or insert a new profile. */
 export async function ensurePatientProfile(user: User, input?: Partial<PatientUpsertInput>) {
   const byAuth = await fetchPatientByAuthUserId(user.id);
-  if (byAuth.data) return { data: byAuth.data, error: null, created: false };
+  if (byAuth.data) {
+    if (isPatientLoginBlocked(byAuth.data)) {
+      return {
+        data: null,
+        error: { message: PATIENT_LOGIN_BLOCKED_MESSAGE },
+        created: false
+      };
+    }
+    return { data: byAuth.data, error: null, created: false };
+  }
   if (byAuth.error) return { data: null, error: byAuth.error, created: false };
 
   const email = (input?.email ?? user.email ?? '').trim();
@@ -120,11 +148,27 @@ export async function ensurePatientProfile(user: User, input?: Partial<PatientUp
   }
 
   const claimed = await claimPatientProfileForLogin();
-  if (claimed.data) return { data: claimed.data, error: null, created: false };
+  if (claimed.data) {
+    if (isPatientLoginBlocked(claimed.data)) {
+      return {
+        data: null,
+        error: { message: PATIENT_LOGIN_BLOCKED_MESSAGE },
+        created: false
+      };
+    }
+    return { data: claimed.data, error: null, created: false };
+  }
   if (claimed.error) return { data: null, error: claimed.error, created: false };
   const byEmail = await fetchPatientByEmail(email);
 
   if (byEmail.data) {
+    if (isPatientLoginBlocked(byEmail.data)) {
+      return {
+        data: null,
+        error: { message: PATIENT_LOGIN_BLOCKED_MESSAGE },
+        created: false
+      };
+    }
     if (!byEmail.data.auth_user_id || byEmail.data.auth_user_id === user.id) {
       const { data, error } = await supabase
         .from('patients')

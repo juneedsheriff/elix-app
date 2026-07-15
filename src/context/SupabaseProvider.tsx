@@ -24,7 +24,7 @@ import {
 import { startEmaillessPatientSignup } from '../lib/patientSignupPreconfirm';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 import { fetchDoctorByAuthUserId, fetchDoctorByEmail, fetchDoctorById } from '../lib/doctors';
-import { claimPatientProfileForLogin, ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail } from '../lib/patients';
+import { claimPatientProfileForLogin, ensurePatientProfile, fetchPatientByAuthUserId, fetchPatientByEmail, isPatientLoginBlocked, PATIENT_LOGIN_BLOCKED_MESSAGE, patientLoginBlockedMessage } from '../lib/patients';
 import { fetchAdminByAuthUserId } from '../lib/admins';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import type { Doctor } from '../types/doctor';
@@ -205,6 +205,17 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data)
       ]);
 
+      if (patient && isPatientLoginBlocked(patient) && !admin && !doctor) {
+        await supabase.auth.signOut();
+        if (mounted) {
+          setSession(null);
+          setDoctorProfile(null);
+          setPatientProfile(null);
+          setLoading(false);
+        }
+        return;
+      }
+
       if (mounted) {
         setDoctorProfile(doctor);
         setPatientProfile(admin ? null : patient);
@@ -213,6 +224,15 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
       if (!doctor && !patient && !admin && nextSession.user.email) {
         const ensured = await ensurePatientProfile(nextSession.user);
+        if (ensured.error?.message === PATIENT_LOGIN_BLOCKED_MESSAGE) {
+          await supabase.auth.signOut();
+          if (mounted) {
+            setSession(null);
+            setDoctorProfile(null);
+            setPatientProfile(null);
+          }
+          return;
+        }
         if (mounted && ensured.data) setPatientProfile(ensured.data);
       }
     };
@@ -285,12 +305,11 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        if (patient?.login_disabled) {
+        if (patient && isPatientLoginBlocked(patient)) {
           await supabase.auth.signOut();
           return {
             error: {
-              message:
-                'Your patient login is not enabled yet. Ask your clinic to enable login for your account.',
+              message: patientLoginBlockedMessage(patient),
               name: 'AuthError',
               status: 403
             } as AuthError,
@@ -317,6 +336,19 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       } else if (user && !doctor && !patient && !admin) {
         const ensured = await ensurePatientProfile(user);
         patient = ensured.data;
+        if (ensured.error?.message === PATIENT_LOGIN_BLOCKED_MESSAGE) {
+          await supabase.auth.signOut();
+          return {
+            error: {
+              message: PATIENT_LOGIN_BLOCKED_MESSAGE,
+              name: 'AuthError',
+              status: 403
+            } as AuthError,
+            doctor: null,
+            patient: null,
+            mustChangePassword: false
+          };
+        }
         if (!patient && ensured.error) {
           await supabase.auth.signOut();
           return {
@@ -330,6 +362,18 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
             mustChangePassword: false
           };
         }
+      } else if (patient && isPatientLoginBlocked(patient) && !admin && !doctor) {
+        await supabase.auth.signOut();
+        return {
+          error: {
+            message: patientLoginBlockedMessage(patient),
+            name: 'AuthError',
+            status: 403
+          } as AuthError,
+          doctor: null,
+          patient: null,
+          mustChangePassword: false
+        };
       }
 
       setSession(data.session);
