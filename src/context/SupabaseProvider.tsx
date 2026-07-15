@@ -225,8 +225,8 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       }
 
       if (!doctor && !patient && !admin && nextSession.user.email) {
-        const ensured = await ensurePatientProfile(nextSession.user);
-        if (ensured.error?.message === PATIENT_LOGIN_BLOCKED_MESSAGE) {
+        const { data: authUser, error: authUserError } = await supabase.auth.getUser();
+        if (authUserError || !authUser.user) {
           await supabase.auth.signOut();
           if (mounted) {
             setSession(null);
@@ -235,7 +235,21 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
           }
           return;
         }
-        if (mounted && ensured.data) setPatientProfile(ensured.data);
+
+        // Claim an existing clinic profile only — never recreate a deleted patient row here.
+        const claimed = await claimPatientProfileForLogin();
+        if (claimed.error?.message === PATIENT_LOGIN_BLOCKED_MESSAGE || (claimed.data && isPatientLoginBlocked(claimed.data))) {
+          await supabase.auth.signOut();
+          if (mounted) {
+            setSession(null);
+            setDoctorProfile(null);
+            setPatientProfile(null);
+          }
+          return;
+        }
+        if (mounted && claimed.data && !isPatientLoginBlocked(claimed.data)) {
+          setPatientProfile(claimed.data);
+        }
       }
     };
 
@@ -255,6 +269,71 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  // If PSE/admin disables or deletes the patient while they are signed in, force logout.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !session?.user) return;
+
+    let cancelled = false;
+    const userId = session.user.id;
+
+    const forceSignOut = async () => {
+      await supabase.auth.signOut();
+      if (!cancelled) {
+        setSession(null);
+        setDoctorProfile(null);
+        setPatientProfile(null);
+      }
+    };
+
+    const verifyPatientSessionStillValid = async () => {
+      const [doctor, adminResult, patient, authUser] = await Promise.all([
+        resolveDoctorForUser(session.user),
+        fetchAdminByAuthUserId(userId),
+        resolvePatientForUser(session.user),
+        supabase.auth.getUser()
+      ]);
+
+      if (cancelled) return;
+
+      // Auth user banned/deleted — JWT no longer valid.
+      if (authUser.error || !authUser.data.user) {
+        await forceSignOut();
+        return;
+      }
+
+      // Staff/doctor sessions are managed separately.
+      if (adminResult.data || doctor) return;
+
+      if (patient && isPatientLoginBlocked(patient)) {
+        await forceSignOut();
+        return;
+      }
+
+      // Patient profile permanently deleted (or unlinked) while session is still open.
+      if (!patient && patientProfile) {
+        await forceSignOut();
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void verifyPatientSessionStillValid();
+      }
+    };
+
+    void verifyPatientSessionStillValid();
+    document.addEventListener('visibilitychange', onVisibility);
+    const intervalId = window.setInterval(() => {
+      void verifyPatientSessionStillValid();
+    }, 12_000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [session?.user?.id, patientProfile?.id, patientProfile?.login_disabled, patientProfile?.deleted_at]);
 
   const signIn = useCallback(async (email: string, password: string, options?: SignInOptions) => {
     try {

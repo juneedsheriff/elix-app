@@ -201,6 +201,18 @@ function App() {
   }, [authLoading, isDoctor, doctorProfile, location.pathname, activeScreen, stage, navigate]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (session) return;
+    if (stage !== 'app' && stage !== 'profile-setup') return;
+    setStage('auth');
+    setPasswordRecovery(false);
+    setForcePasswordChange(false);
+    setAuthError('Your account is no longer available. Please sign in again.');
+    setAuthSuccess(null);
+    navigate('/auth', { replace: true });
+  }, [authLoading, session, stage, navigate]);
+
+  useEffect(() => {
     if (!configured) {
       setDbConnected(false);
       return;

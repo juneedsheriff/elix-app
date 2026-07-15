@@ -1068,6 +1068,11 @@ async function permanentlyDeletePatient(
   let deletedRequests = 0;
 
   if (profile.auth_user_id) {
+    // Ban first so any open patient session fails refresh / getUser immediately.
+    await admin.auth.admin.updateUserById(profile.auth_user_id, {
+      ban_duration: BAN_DURATION
+    });
+
     // Delete requests first — do not rely only on auth.users cascade (soft-deleted
     // profiles previously left orphaned requests when login was only banned).
     const { data: removedRequests, error: requestError } = await admin
@@ -1078,11 +1083,12 @@ async function permanentlyDeletePatient(
     if (requestError) return { error: requestError.message };
     deletedRequests = removedRequests?.length ?? 0;
 
+    // Remove profile before auth user so open apps see the patient as gone.
+    await admin.from('patients').delete().eq('id', profile.id);
+
     const { error: authDeleteError } = await admin.auth.admin.deleteUser(profile.auth_user_id);
     if (authDeleteError) return { error: authDeleteError.message };
 
-    // Safety: remove profile if FK was set null / cascade did not fire
-    await admin.from('patients').delete().eq('id', profile.id);
     return { deletedRequests };
   }
 
