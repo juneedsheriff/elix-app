@@ -18,6 +18,8 @@ import {
   isDuplicateSignupResponse,
   isAuthEmailRegistered,
   isExistingUserSignupError,
+  LOGIN_NOT_REGISTERED_MESSAGE,
+  resolveLoginCredentialError,
   resolveSignupEmailError,
   type SendSignupEmailOtpResult
 } from '../lib/authEmailOtp';
@@ -265,7 +267,15 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         };
       }
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return { error, doctor: null, patient: null, mustChangePassword: false };
+      if (error) {
+        const message = await resolveLoginCredentialError(email, error);
+        return {
+          error: { ...error, message },
+          doctor: null,
+          patient: null,
+          mustChangePassword: false
+        };
+      }
 
       const user = data.user;
       const doctor = user ? await resolveDoctorForUser(user) : null;
@@ -277,7 +287,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
           return {
             error: {
-              message: 'No registration found.',
+              message: LOGIN_NOT_REGISTERED_MESSAGE,
               name: 'AuthError',
               status: 403
             } as AuthError,
@@ -323,8 +333,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
           return {
             error: {
-              message:
-                'No registration found. Use the email your clinic registered for you, or ask them to enable patient login.',
+              message: LOGIN_NOT_REGISTERED_MESSAGE,
               name: 'AuthError',
               status: 403
             } as AuthError,

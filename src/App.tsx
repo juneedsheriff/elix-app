@@ -314,7 +314,7 @@ function App() {
     }
     if (loginMode === 'doctor' && !doctor) {
       await signOut();
-      setAuthError('No doctor account found for this email. Use a doctor @elixapp.health address.');
+      setAuthError('This email is not registered as a doctor.');
       return;
     }
     const nextRole = doctor ? 'doctor' : 'patient';

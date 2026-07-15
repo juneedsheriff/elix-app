@@ -1,5 +1,8 @@
 export const PATIENT_GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'] as const;
 
+/** Clinic PSE patient forms — Gender is Male/Female only. */
+export const CLINIC_PSE_PATIENT_GENDER_OPTIONS = ['Male', 'Female'] as const;
+
 export const PATIENT_BLOOD_GROUP_OPTIONS = [
   'A+',
   'A-',
@@ -10,6 +13,18 @@ export const PATIENT_BLOOD_GROUP_OPTIONS = [
   'O+',
   'O-',
   'Unknown'
+] as const;
+
+/** Clinic PSE patient forms — standard ABO groups only. */
+export const CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS = [
+  'A+',
+  'A-',
+  'B+',
+  'B-',
+  'AB+',
+  'AB-',
+  'O+',
+  'O-'
 ] as const;
 
 const PREFERRED_LANGUAGE_PRIORITY = [

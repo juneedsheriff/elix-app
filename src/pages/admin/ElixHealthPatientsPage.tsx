@@ -5,7 +5,13 @@ import {
   countOpinionRequestsForPatient,
   deleteAllOpinionRequestsForPatientForAdmin
 } from '../../lib/opinionRequests';
-import { canCreatePatients, canEditProfiles, isAdministrator } from '../../lib/staffPermissions';
+import {
+  canCreatePatients,
+  canDeletePatients,
+  canDeleteRequests,
+  canEditProfiles,
+  isAdministrator
+} from '../../lib/staffPermissions';
 import type { Patient } from '../../types/patient';
 import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
 import PatientsDataTable from './patients/PatientsDataTable';
@@ -56,6 +62,8 @@ export default function ElixHealthPatientsPage() {
   const { staff } = useElixHealthStaff();
   const canEdit = canEditProfiles(staff);
   const canAddPatient = canCreatePatients(staff);
+  const canDeletePatient = canDeletePatients(staff);
+  const canDeletePatientRequests = canDeleteRequests(staff);
   const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -270,16 +278,16 @@ export default function ElixHealthPatientsPage() {
     setDeletePatient(null);
     setDeletePatientRequestsCount(null);
     setPatients((current) => current.filter((row) => row.id !== patient.id));
-    setSuccessMessage(
-      `${patient.full_name} was removed from active patient listings and login was disabled.`
-    );
+    setSuccessMessage(`${patient.full_name} was permanently deleted.`);
   }, [deletePatient]);
 
   const columns = usePatientsTableColumns({
     canEdit,
     isAdmin,
-    onDeleteAllRequests: isAdmin ? (patient) => void openDeleteAllRequests(patient) : undefined,
-    onDeletePatient: isAdmin ? (patient) => void openDeletePatient(patient) : undefined
+    onDeleteAllRequests: canDeletePatientRequests
+      ? (patient) => void openDeleteAllRequests(patient)
+      : undefined,
+    onDeletePatient: canDeletePatient ? (patient) => void openDeletePatient(patient) : undefined
   });
 
   const clearFilters = useCallback(() => {
@@ -440,14 +448,13 @@ export default function ElixHealthPatientsPage() {
           <Text size='sm'>
             {deletePatient ? (
               <>
-                Delete <strong>{deletePatient.full_name}</strong>? This removes them from active
-                patient listings and disables their login. Medical records in the vault and existing
-                opinion requests are not deleted
+                Permanently delete <strong>{deletePatient.full_name}</strong>? This cannot be undone.
+                Their profile, login account, and linked opinion requests will be removed
                 {deletePatientRequestsCount !== null && deletePatientRequestsCount > 0 ? (
                   <>
                     {' '}
-                    ({deletePatientRequestsCount} open request
-                    {deletePatientRequestsCount === 1 ? '' : 's'} remain in the system).
+                    ({deletePatientRequestsCount} request
+                    {deletePatientRequestsCount === 1 ? '' : 's'} will also be deleted).
                   </>
                 ) : (
                   '.'
@@ -474,7 +481,7 @@ export default function ElixHealthPatientsPage() {
               disabled={deletePatientRequestsCount === null}
               onClick={() => void confirmDeletePatient()}
             >
-              Delete patient
+              Delete permanently
             </Button>
           </Group>
         </Stack>

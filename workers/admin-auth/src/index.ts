@@ -1060,6 +1060,56 @@ async function getAccountStatus(role: Role, profileId: string, env: Env) {
   };
 }
 
+async function permanentlyDeletePatient(
+  profile: ProfileRow,
+  env: Env
+): Promise<{ error?: string; deletedRequests?: number }> {
+  const admin = serviceClient(env);
+  let deletedRequests = 0;
+
+  if (profile.auth_user_id) {
+    // Delete requests first — do not rely only on auth.users cascade (soft-deleted
+    // profiles previously left orphaned requests when login was only banned).
+    const { data: removedRequests, error: requestError } = await admin
+      .from('opinion_requests')
+      .delete()
+      .eq('patient_id', profile.auth_user_id)
+      .select('id');
+    if (requestError) return { error: requestError.message };
+    deletedRequests = removedRequests?.length ?? 0;
+
+    const { error: authDeleteError } = await admin.auth.admin.deleteUser(profile.auth_user_id);
+    if (authDeleteError) return { error: authDeleteError.message };
+
+    // Safety: remove profile if FK was set null / cascade did not fire
+    await admin.from('patients').delete().eq('id', profile.id);
+    return { deletedRequests };
+  }
+
+  // Clinic-created patients may have requests with null patient_id + matching name
+  let requestQuery = admin
+    .from('opinion_requests')
+    .delete()
+    .is('patient_id', null)
+    .eq('patient_name', profile.full_name)
+    .select('id');
+
+  if (profile.clinic_id) {
+    requestQuery = requestQuery.eq('clinic_id', profile.clinic_id);
+  } else {
+    requestQuery = requestQuery.is('clinic_id', null);
+  }
+
+  const { data: removedRequests, error: requestError } = await requestQuery;
+  if (requestError) return { error: requestError.message };
+  deletedRequests = removedRequests?.length ?? 0;
+
+  const { error: patientError } = await admin.from('patients').delete().eq('id', profile.id);
+  if (patientError) return { error: patientError.message };
+
+  return { deletedRequests };
+}
+
 async function provisionPatientLogin(profileId: string, env: Env) {
   const profile = await loadProfile('patient', profileId, env);
   if (!profile) return { error: 'Patient profile not found.' };
@@ -1290,6 +1340,38 @@ export default {
         origin,
         env
       );
+    }
+
+    if (request.method === 'POST' && pathname === '/patient/delete') {
+      let body: { profileId?: string };
+      try {
+        body = (await request.json()) as { profileId?: string };
+      } catch {
+        return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+      }
+
+      const profileId = body.profileId?.trim();
+      if (!profileId) {
+        return json({ error: 'profileId is required.' }, 400, origin, env);
+      }
+
+      const patient = await loadProfile('patient', profileId, env);
+      if (!patient) return json({ error: 'Profile not found.' }, 404, origin, env);
+      if (!canManagePatientAuth(caller, patient)) {
+        return json({ error: 'You do not have permission to delete this patient.' }, 403, origin, env);
+      }
+
+      // Platform PSE can manage login but must not permanently delete profiles.
+      if (caller.role === 'patient_service_executive') {
+        return json({ error: 'Only administrators or clinic PSE can permanently delete patients.' }, 403, origin, env);
+      }
+
+      const result = await permanentlyDeletePatient(patient, env);
+      if (result.error) {
+        return json({ error: result.error }, 400, origin, env);
+      }
+
+      return json({ ok: true, deletedRequests: result.deletedRequests ?? 0 }, 200, origin, env);
     }
 
     if (request.method === 'GET' && pathname === '/status') {

@@ -1,8 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { updatePatientForAdmin, type AdminPatientUpdateInput } from '../../../lib/admins';
+import {
+  CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS,
+  CLINIC_PSE_PATIENT_GENDER_OPTIONS
+} from '../../../lib/patientProfileOptions';
 import type { Patient } from '../../../types/patient';
 import AdminAccountAccessPanel from './AdminAccountAccessPanel';
+import { FieldLabel } from './adminDoctorFormUi';
 
 type AdminPatientEditFormProps = {
   patient: Patient;
@@ -46,6 +51,15 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!form.gender?.trim()) {
+      setError('Select gender.');
+      return;
+    }
+    if (!form.blood_group?.trim()) {
+      setError('Select blood group.');
+      return;
+    }
+
     setBusy(true);
     setError(null);
     const { data, error: saveError } = await updatePatientForAdmin(patient.id, form);
@@ -58,6 +72,23 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
 
     onSaved(data);
   };
+
+  const genderValue = form.gender?.trim() ?? '';
+  const bloodGroupValue = form.blood_group?.trim() ?? '';
+  const genderOptions = (
+    CLINIC_PSE_PATIENT_GENDER_OPTIONS as readonly string[]
+  ).includes(genderValue)
+    ? [...CLINIC_PSE_PATIENT_GENDER_OPTIONS]
+    : genderValue
+      ? [genderValue, ...CLINIC_PSE_PATIENT_GENDER_OPTIONS]
+      : [...CLINIC_PSE_PATIENT_GENDER_OPTIONS];
+  const bloodGroupOptions = (
+    CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS as readonly string[]
+  ).includes(bloodGroupValue)
+    ? [...CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS]
+    : bloodGroupValue
+      ? [bloodGroupValue, ...CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS]
+      : [...CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS];
 
   return (
     <form className='elixhealth-form' onSubmit={(e) => void handleSubmit(e)}>
@@ -74,7 +105,7 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
 
       <div className='elixhealth-form-grid'>
         <label className='elixhealth-field'>
-          <span>Full name</span>
+          <FieldLabel required>Full name</FieldLabel>
           <input
             type='text'
             value={form.full_name}
@@ -83,7 +114,7 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
           />
         </label>
         <label className='elixhealth-field'>
-          <span>Email</span>
+          <FieldLabel required>Email</FieldLabel>
           <input
             type='email'
             value={form.email}
@@ -108,20 +139,38 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
           />
         </label>
         <label className='elixhealth-field'>
-          <span>Gender</span>
-          <input
-            type='text'
+          <FieldLabel required>Gender</FieldLabel>
+          <select
             value={form.gender ?? ''}
             onChange={(e) => setField('gender', e.target.value || null)}
-          />
+            required
+          >
+            <option value='' disabled>
+              Select gender
+            </option>
+            {genderOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </label>
         <label className='elixhealth-field'>
-          <span>Blood group</span>
-          <input
-            type='text'
+          <FieldLabel required>Blood group</FieldLabel>
+          <select
             value={form.blood_group ?? ''}
             onChange={(e) => setField('blood_group', e.target.value || null)}
-          />
+            required
+          >
+            <option value='' disabled>
+              Select blood group
+            </option>
+            {bloodGroupOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </label>
         <label className='elixhealth-field'>
           <span>Country</span>

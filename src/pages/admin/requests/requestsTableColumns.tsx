@@ -221,7 +221,7 @@ export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseReques
                 <IconEye size={18} />
               </ActionIcon>
             </Tooltip>
-            {isAdmin && onDelete ? (
+            {onDelete ? (
               <Tooltip label='Delete request'>
                 <ActionIcon
                   variant='subtle'

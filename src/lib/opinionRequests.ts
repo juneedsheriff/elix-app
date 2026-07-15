@@ -2304,7 +2304,7 @@ function isMissingDeleteRpcError(error: { message?: string; code?: string } | nu
 }
 
 const DELETE_MIGRATION_HINT =
-  'Run npm run db:apply-admin-delete-requests or apply supabase/apply-admin-delete-requests-in-sql-editor.sql in the Supabase SQL Editor.';
+  'Run npm run db:apply-admin-delete-requests (and for clinic PSE: npm run db:apply-clinic-pse-delete-requests) or apply the matching SQL in the Supabase SQL Editor.';
 
 async function deleteOpinionRequestDirect(requestId: string) {
   return supabase.from('opinion_requests').delete().eq('id', requestId).select('id');
@@ -2332,7 +2332,10 @@ export async function deleteOpinionRequestForAdmin(requestId: string) {
     if (msg.toLowerCase().includes('administrator access required')) {
       return {
         data: null,
-        error: { message: 'Only administrators can delete requests. Sign in with an admin account.' }
+        error: {
+          message:
+            'You do not have permission to delete this request. Clinic PSE can only delete requests for their clinic.'
+        }
       };
     }
     return { data: null, error: rpcError };

@@ -9,6 +9,10 @@ const patientColumnsExtended =
 const patientColumnsWithElix =
   'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, deleted_at, created_at, updated_at';
 
+/** Pre–soft-delete schema (no deleted_at). */
+const patientColumnsWithoutDeletedAt =
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, created_at, updated_at';
+
 const patientColumnsLegacy =
   'id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, created_at, updated_at';
 
@@ -74,7 +78,19 @@ async function selectPatient(
   if (!withElix.error) {
     return { data: withFallbackElixId(normalizePatientRow(withElix.data as Patient | null)), error: null };
   }
-  if (!withElix.error.message.includes('elix_id')) {
+
+  if (/deleted_at/.test(withElix.error.message)) {
+    const withoutDeleted = await build(patientColumnsWithoutDeletedAt).maybeSingle();
+    if (!withoutDeleted.error) {
+      return {
+        data: withFallbackElixId(normalizePatientRow(withoutDeleted.data as Patient | null)),
+        error: null
+      };
+    }
+    if (!withoutDeleted.error.message.includes('elix_id')) {
+      return { data: null, error: withoutDeleted.error };
+    }
+  } else if (!withElix.error.message.includes('elix_id')) {
     return { data: null, error: withElix.error };
   }
 

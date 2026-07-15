@@ -10,8 +10,34 @@ export type SendSignupEmailOtpResult = {
 export const EXISTING_USER_EMAIL_MESSAGE =
   'This email is already registered. Please enter another email address.';
 
+export const LOGIN_NOT_REGISTERED_MESSAGE = 'This email is not registered.';
+export const LOGIN_INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password.';
+
 export function existingUserEmailMessage(): string {
   return EXISTING_USER_EMAIL_MESSAGE;
+}
+
+export function isInvalidLoginCredentialsError(error: { message?: string } | null | undefined): boolean {
+  const lower = (error?.message ?? '').toLowerCase();
+  return (
+    lower.includes('invalid login credentials') ||
+    lower.includes('invalid email or password') ||
+    lower.includes('invalid credentials')
+  );
+}
+
+/** Distinguish unknown email vs wrong password after a failed sign-in. */
+export async function resolveLoginCredentialError(
+  email: string,
+  error: { message?: string } | null | undefined
+): Promise<string> {
+  if (!isInvalidLoginCredentialsError(error)) {
+    return error?.message?.trim() || 'Sign in failed.';
+  }
+
+  const registered = await isAuthEmailRegistered(email);
+  if (registered === false) return LOGIN_NOT_REGISTERED_MESSAGE;
+  return LOGIN_INVALID_CREDENTIALS_MESSAGE;
 }
 
 export function createTempSignupPassword(): string {

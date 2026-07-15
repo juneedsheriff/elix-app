@@ -2,6 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { createPatientForAdmin, type AdminPatientUpdateInput } from '../../../lib/admins';
 import { provisionPatientLogin } from '../../../lib/adminAuth';
+import {
+  CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS,
+  CLINIC_PSE_PATIENT_GENDER_OPTIONS
+} from '../../../lib/patientProfileOptions';
 import { FieldLabel } from './adminDoctorFormUi';
 
 type AdminPatientCreateFormProps = {
@@ -46,6 +50,14 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
     }
     if (!form.email.trim()) {
       setError('Enter an email address.');
+      return;
+    }
+    if (!form.gender?.trim()) {
+      setError('Select gender.');
+      return;
+    }
+    if (!form.blood_group?.trim()) {
+      setError('Select blood group.');
       return;
     }
 
@@ -116,6 +128,40 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
               onChange={(e) => setField('email', e.target.value)}
               required
             />
+          </label>
+          <label className='elixhealth-field'>
+            <FieldLabel required>Gender</FieldLabel>
+            <select
+              value={form.gender ?? ''}
+              onChange={(e) => setField('gender', e.target.value || null)}
+              required
+            >
+              <option value='' disabled>
+                Select gender
+              </option>
+              {CLINIC_PSE_PATIENT_GENDER_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='elixhealth-field'>
+            <FieldLabel required>Blood group</FieldLabel>
+            <select
+              value={form.blood_group ?? ''}
+              onChange={(e) => setField('blood_group', e.target.value || null)}
+              required
+            >
+              <option value='' disabled>
+                Select blood group
+              </option>
+              {CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
           <label className='elixhealth-field'>
             <span>Phone</span>

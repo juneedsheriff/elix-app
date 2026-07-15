@@ -62,6 +62,16 @@ export function canCreateRequests(admin: Pick<Admin, 'role'>): boolean {
   return isClinicPatientServiceExecutive(admin);
 }
 
+/** Soft-delete patients (admin: all; clinic PSE: own clinic via RLS). */
+export function canDeletePatients(admin: Pick<Admin, 'role'>): boolean {
+  return isAdministrator(admin) || isClinicPatientServiceExecutive(admin);
+}
+
+/** Delete opinion requests (admin: all; clinic PSE: own clinic via RPC). */
+export function canDeleteRequests(admin: Pick<Admin, 'role'>): boolean {
+  return isAdministrator(admin) || isClinicPatientServiceExecutive(admin);
+}
+
 export function canRequestPlatformDoctors(admin: Pick<Admin, 'role'>): boolean {
   return isClinicPatientServiceExecutive(admin);
 }

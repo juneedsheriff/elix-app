@@ -255,7 +255,7 @@ export function usePatientsTableColumns({
                   {canEdit ? <IconPencil size={18} /> : <IconEye size={18} />}
                 </ActionIcon>
               </Tooltip>
-              {isAdmin && onDeletePatient ? (
+              {onDeletePatient ? (
                 <Tooltip label='Delete patient'>
                   <ActionIcon
                     variant='subtle'
@@ -305,7 +305,7 @@ export function usePatientsTableColumns({
                       Call patient
                     </Menu.Item>
                   ) : null}
-                  {isAdmin && onDeleteAllRequests ? (
+                  {onDeleteAllRequests ? (
                     <Menu.Item
                       color='red'
                       leftSection={<IconTrash size={16} />}
@@ -315,7 +315,7 @@ export function usePatientsTableColumns({
                       Delete all opinion requests
                     </Menu.Item>
                   ) : null}
-                  {isAdmin && onDeletePatient ? (
+                  {onDeletePatient ? (
                     <Menu.Item
                       color='red'
                       leftSection={<IconTrash size={16} />}

@@ -134,7 +134,7 @@ select {
 }
 
 .mobile-shell {
-  --phone-width: 430px;
+  --phone-width: 768px;
   width: min(100%, var(--phone-width));
   margin: 0 auto;
   min-height: 100dvh;

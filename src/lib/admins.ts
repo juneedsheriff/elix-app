@@ -2,7 +2,7 @@ import type { AuthError } from '@supabase/supabase-js';
 import type { Admin } from '../types/admin';
 import type { AdminDoctorUpdateInput, Doctor } from '../types/doctor';
 import type { Patient } from '../types/patient';
-import { manageAccountAuth } from './adminAuth';
+import { deletePatientPermanently } from './adminAuth';
 import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
 import { supabase } from './supabase';
@@ -376,43 +376,11 @@ export async function deleteDoctorForAdmin(id: string) {
   return { error: null };
 }
 
+/** Permanently delete a patient profile, login, and linked opinion requests. */
 export async function deletePatientForAdmin(id: string) {
-  const payload = {
-    login_disabled: true,
-    deleted_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
-
-  let { error: updateError, count } = await supabase
-    .from('patients')
-    .update(payload, { count: 'exact' })
-    .eq('id', id)
-    .is('deleted_at', null);
-
-  if (updateError && /deleted_at|column/.test(updateError.message)) {
-    ({ error: updateError, count } = await supabase
-      .from('patients')
-      .update(
-        { login_disabled: true, updated_at: payload.updated_at },
-        { count: 'exact' }
-      )
-      .eq('id', id));
-  }
-
-  if (updateError) return { error: updateError };
-  if (count === 0) {
-    return {
-      error: {
-        message:
-          'No patient row was updated. The patient may already be deleted, or run migration 067_patient_soft_delete.sql (npm run db:apply-patient-soft-delete).'
-      }
-    };
-  }
-
-  // Best-effort Auth ban — soft delete + login_disabled already block profile access.
-  await manageAccountAuth('patient', id, 'disable');
-
-  return { error: null };
+  const { data, error } = await deletePatientPermanently(id);
+  if (error) return { error: { message: error }, deletedRequests: 0 };
+  return { error: null, deletedRequests: data?.deletedRequests ?? 0 };
 }
 
 export async function updatePatientForAdmin(id: string, input: AdminPatientUpdateInput) {

@@ -10,7 +10,13 @@ import {
   subscribeStaffOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { openMedicalRecordByPath } from '../../lib/records';
-import { canCreateRequests, isAdministrator, isAnyPatientServiceExecutive, isClinicPatientServiceExecutive } from '../../lib/staffPermissions';
+import {
+  canCreateRequests,
+  canDeleteRequests,
+  isAdministrator,
+  isAnyPatientServiceExecutive,
+  isClinicPatientServiceExecutive
+} from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
 import type { Doctor } from '../../types/doctor';
 import type { OpinionRequest } from '../../types/opinionRequest';
@@ -57,6 +63,7 @@ function matchesSearch(request: OpinionRequest, query: string) {
 export default function ElixHealthRequestsPage() {
   const { staff } = useElixHealthStaff();
   const isAdmin = isAdministrator(staff);
+  const canDeleteRequest = canDeleteRequests(staff);
   const isPse = isAnyPatientServiceExecutive(staff);
   const isClinicPse = isClinicPatientServiceExecutive(staff);
   const canAddRequest = canCreateRequests(staff);
@@ -463,7 +470,7 @@ export default function ElixHealthRequestsPage() {
   const columns = useRequestsTableColumns({
     isAdmin,
     onView: openRequest,
-    onDelete: isAdmin ? (request) => void handleDeleteRequest(request) : undefined
+    onDelete: canDeleteRequest ? (request) => void handleDeleteRequest(request) : undefined
   });
 
   const openRecord = async (storagePath: string) => {

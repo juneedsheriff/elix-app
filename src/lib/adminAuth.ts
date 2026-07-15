@@ -176,6 +176,19 @@ export async function provisionPatientLogin(profileId: string) {
   });
 }
 
+export type PatientPermanentDeleteResult = {
+  ok: boolean;
+  deletedRequests?: number;
+};
+
+/** Permanently delete patient profile, Auth login, and linked opinion requests. */
+export async function deletePatientPermanently(profileId: string) {
+  return adminAuthFetch<PatientPermanentDeleteResult>('/patient/delete', {
+    method: 'POST',
+    body: JSON.stringify({ profileId })
+  });
+}
+
 export function loginStatusLabel(status: AccountAuthStatus | null, authUserId?: string | null, loginDisabled?: boolean): string {
   if (status) {
     if (!status.hasAuth) return 'No login';
