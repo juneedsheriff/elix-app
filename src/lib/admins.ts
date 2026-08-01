@@ -363,16 +363,41 @@ export async function setDoctorVisibilityForAdmin(id: string, isVisible: boolean
 }
 
 export async function deleteDoctorForAdmin(id: string) {
-  const { error: updateError } = await supabase
+  const { error: updateError, count } = await supabase
     .from('doctors')
-    .update({
-      is_visible: false,
-      deleted_at: new Date().toISOString()
-    })
+    .update(
+      {
+        is_visible: false,
+        deleted_at: new Date().toISOString(),
+        login_disabled: true
+      },
+      { count: 'exact' }
+    )
     .eq('id', id)
     .is('deleted_at', null);
 
-  if (updateError) return { error: updateError };
+  if (updateError) {
+    const msg = (updateError.message ?? '').toLowerCase();
+    if (msg.includes('row-level security') || msg.includes('policy')) {
+      return {
+        error: {
+          message:
+            'Could not delete doctor due to database permissions. Apply migration 073_doctor_soft_delete_select_rls.sql (npm run db:apply-doctor-soft-delete-select-rls).'
+        }
+      };
+    }
+    return { error: updateError };
+  }
+
+  if (count === 0) {
+    return {
+      error: {
+        message:
+          'No doctor row was deleted. The doctor may already be removed, or soft-delete RLS is blocking the update (run npm run db:apply-doctor-soft-delete-select-rls).'
+      }
+    };
+  }
+
   return { error: null };
 }
 
