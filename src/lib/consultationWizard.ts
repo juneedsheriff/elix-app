@@ -11,6 +11,7 @@ import {
   getTierFeeUsd,
   normalizeConsultationDurationMinutes
 } from './consultationTiers';
+import { isHomeCareOpinionRequest } from './homeCareServices';
 
 export type WizardAudience = 'pse' | 'patient';
 
@@ -36,6 +37,28 @@ export const PSE_WIZARD_STEPS: WizardStepDef[] = [
   { id: 7, title: 'Consultation notes', subtitle: 'View doctor consultation summary' }
 ];
 
+/** Home care coordination: request → payment → optional remarks/follow-up. */
+export const HOME_CARE_PSE_WIZARD_STEPS: WizardStepDef[] = [
+  {
+    id: 1,
+    title: 'Request received',
+    subtitle: 'Patient submitted a home care services request'
+  },
+  {
+    id: 2,
+    title: 'Send payment link',
+    subtitle: 'Collect payment for home care services'
+  },
+  {
+    id: 3,
+    title: 'Remarks & Complete Request',
+    subtitle: 'Add optional remarks, then complete the home care request'
+  }
+];
+
+/** Maps home-care accordion index → full PSE wizard content index (payment reuses step 5 / index 4). */
+export const HOME_CARE_PSE_CONTENT_INDEX = [0, 4, -1] as const;
+
 export const PATIENT_WIZARD_STEPS: WizardStepDef[] = [
   { id: 1, title: 'Request doctor consultation', subtitle: 'Review your submitted case details' },
   { id: 2, title: 'Document verification', subtitle: 'We verify your uploaded records' },
@@ -45,14 +68,48 @@ export const PATIENT_WIZARD_STEPS: WizardStepDef[] = [
   { id: 6, title: 'Consultation notes', subtitle: 'Summary from your doctor after the visit' }
 ];
 
+/** Patient home care: services requested + payment only. */
+export const HOME_CARE_PATIENT_WIZARD_STEPS: WizardStepDef[] = [
+  {
+    id: 1,
+    title: 'Home care request',
+    subtitle: 'Services you requested from your clinic'
+  },
+  {
+    id: 2,
+    title: 'Payment',
+    subtitle: 'Complete payment when your clinic sends a link'
+  }
+];
+
 export type WizardProgressContext = {
   request: OpinionRequest;
   recommendationsCount: number;
   hasSummary: boolean;
 };
 
-function wizardStepCount(audience: WizardAudience) {
-  return audience === 'pse' ? PSE_WIZARD_STEPS.length : PATIENT_WIZARD_STEPS.length;
+export function isPseHomeCareWizard(request: Pick<OpinionRequest, 'requested_specialty' | 'patient_case_details' | 'message'>) {
+  return isHomeCareOpinionRequest(request);
+}
+
+export function isPatientHomeCareWizard(
+  request: Pick<OpinionRequest, 'requested_specialty' | 'patient_case_details' | 'message'>
+) {
+  return isHomeCareOpinionRequest(request);
+}
+
+function wizardStepDefs(audience: WizardAudience, ctx: WizardProgressContext): WizardStepDef[] {
+  if (audience === 'pse' && isPseHomeCareWizard(ctx.request)) {
+    return HOME_CARE_PSE_WIZARD_STEPS;
+  }
+  if (audience === 'patient' && isPatientHomeCareWizard(ctx.request)) {
+    return HOME_CARE_PATIENT_WIZARD_STEPS;
+  }
+  return audience === 'pse' ? PSE_WIZARD_STEPS : PATIENT_WIZARD_STEPS;
+}
+
+function wizardStepCount(audience: WizardAudience, ctx: WizardProgressContext) {
+  return wizardStepDefs(audience, ctx).length;
 }
 
 function isRecordsVerified(request: OpinionRequest) {
@@ -146,6 +203,7 @@ export function isScheduleConfirmed(request: OpinionRequest) {
 
 /** PSE may send a payment link once the patient has confirmed (or submitted) the schedule. */
 export function canPseSendPaymentLink(request: OpinionRequest) {
+  if (isPseHomeCareWizard(request)) return true;
   if (isScheduleConfirmed(request)) return true;
   return (
     request.consultation_stage === 'availability_submitted' &&
@@ -214,6 +272,32 @@ export function isPaymentAccessible(request: OpinionRequest) {
 function isStepComplete(index: number, ctx: WizardProgressContext, audience: WizardAudience): boolean {
   const { request, recommendationsCount, hasSummary } = ctx;
 
+  if (audience === 'pse' && isPseHomeCareWizard(request)) {
+    switch (index) {
+      case 0:
+        return true;
+      case 1:
+        return isPaymentConfirmed(request);
+      case 2:
+        return (
+          request.consultation_stage === 'completed' || request.status === 'closed'
+        );
+      default:
+        return false;
+    }
+  }
+
+  if (audience === 'patient' && isPatientHomeCareWizard(request)) {
+    switch (index) {
+      case 0:
+        return true;
+      case 1:
+        return isPaymentConfirmed(request);
+      default:
+        return false;
+    }
+  }
+
   if (audience === 'pse') {
     switch (index) {
       case 0:
@@ -260,7 +344,7 @@ function isStepComplete(index: number, ctx: WizardProgressContext, audience: Wiz
 /** Highest step index (0-based) that is fully complete. */
 export function getMaxCompletedStepIndex(ctx: WizardProgressContext, audience: WizardAudience = 'patient'): number {
   let max = -1;
-  const count = wizardStepCount(audience);
+  const count = wizardStepCount(audience, ctx);
   for (let i = 0; i < count; i += 1) {
     if (isStepComplete(i, ctx, audience)) max = i;
   }
@@ -269,8 +353,35 @@ export function getMaxCompletedStepIndex(ctx: WizardProgressContext, audience: W
 
 /** First step that still needs work; used as default selection. */
 export function getSuggestedActiveStep(ctx: WizardProgressContext, audience: WizardAudience = 'patient'): number {
+  if (audience === 'pse' && isPseHomeCareWizard(ctx.request)) {
+    if (ctx.request.consultation_stage === 'completed' || ctx.request.status === 'closed') {
+      return 2;
+    }
+    if (isPaymentConfirmed(ctx.request)) return 2;
+    if (
+      hasPatientPaymentDue(ctx.request) ||
+      ctx.request.consultation_stage === 'payment_pending' ||
+      ctx.request.payment_status === 'pending'
+    ) {
+      return 1;
+    }
+    return 0;
+  }
+
+  if (audience === 'patient' && isPatientHomeCareWizard(ctx.request)) {
+    if (isPaymentConfirmed(ctx.request)) return 1;
+    if (
+      hasPatientPaymentDue(ctx.request) ||
+      ctx.request.consultation_stage === 'payment_pending' ||
+      ctx.request.payment_status === 'pending'
+    ) {
+      return 1;
+    }
+    return 0;
+  }
+
   const max = getMaxCompletedStepIndex(ctx, audience);
-  const lastIndex = wizardStepCount(audience) - 1;
+  const lastIndex = wizardStepCount(audience, ctx) - 1;
   let suggested = Math.min(max + 1, lastIndex);
 
   if (audience === 'pse') {
@@ -320,7 +431,7 @@ export function getWizardSteps(
   ctx: WizardProgressContext,
   activeIndex: number
 ): Array<WizardStepDef & { state: WizardStepState }> {
-  const defs = audience === 'pse' ? PSE_WIZARD_STEPS : PATIENT_WIZARD_STEPS;
+  const defs = wizardStepDefs(audience, ctx);
 
   return defs.map((step, index) => {
     let state: WizardStepState = 'upcoming';
@@ -342,6 +453,11 @@ export function canPseNavigateToStep(targetIndex: number, ctx: WizardProgressCon
 /** Patient may open completed steps and the current actionable step (unlocked by PSE actions). */
 export function canPatientNavigateToStep(targetIndex: number, ctx: WizardProgressContext): boolean {
   if (targetIndex === 0) return true;
+  if (isPatientHomeCareWizard(ctx.request)) {
+    const maxCompleted = getMaxCompletedStepIndex(ctx, 'patient');
+    const suggested = getSuggestedActiveStep(ctx, 'patient');
+    return targetIndex <= maxCompleted || targetIndex === suggested;
+  }
   const maxCompleted = getMaxCompletedStepIndex(ctx, 'patient');
   const suggested = getSuggestedActiveStep(ctx, 'patient');
   if (targetIndex <= maxCompleted || targetIndex === suggested) return true;
@@ -383,6 +499,12 @@ function initialPatientWizardStep(
 ) {
   const stored = readPatientWizardStoredStep(requestId);
   let step = Math.max(stored ?? suggestedStep, suggestedStep);
+  if (isPatientHomeCareWizard(ctx.request)) {
+    if (hasPatientPaymentDue(ctx.request)) {
+      step = Math.min(step, 1);
+    }
+    return clampWizardStep(step, maxNavigableStep);
+  }
   if (hasPatientPaymentDue(ctx.request)) {
     step = Math.min(step, 3);
   } else if (isPatientPaymentConfirmed(ctx.request) && isPatientAppointmentPhase(ctx.request) && !ctx.hasSummary) {
@@ -489,11 +611,15 @@ export function resolveWizardStepOnUpdate(
     }
 
     let step = clampWizardStep(state.step, maxNav);
-    if (ctx?.request && hasPatientPaymentDue(ctx.request) && step > 3) {
+    if (ctx?.request && isPatientHomeCareWizard(ctx.request) && hasPatientPaymentDue(ctx.request) && step > 1) {
+      step = 1;
+      writePatientWizardStoredStep(requestId, step);
+    } else if (ctx?.request && hasPatientPaymentDue(ctx.request) && step > 3) {
       step = 3;
       writePatientWizardStoredStep(requestId, step);
     } else if (
       ctx &&
+      !isPatientHomeCareWizard(ctx.request) &&
       isPatientPaymentConfirmed(ctx.request) &&
       isPatientAppointmentPhase(ctx.request) &&
       !ctx.hasSummary &&
@@ -528,6 +654,14 @@ export function resolvePsePaymentQuote(
   doctors: Doctor[] = [],
   recommendations: OpinionRequestRecommendation[] = []
 ): { amount: number | null; currency: ReturnType<typeof normalizeConsultationCurrency> } {
+  if (isPseHomeCareWizard(request)) {
+    const paymentAmount = Number(request.payment_amount);
+    return {
+      amount: Number.isFinite(paymentAmount) && paymentAmount > 0 ? paymentAmount : null,
+      currency: normalizeConsultationCurrency(request.payment_currency ?? 'INR')
+    };
+  }
+
   const durationMinutes = normalizeConsultationDurationMinutes(request.consultation_duration_minutes);
   const storedFee = Number(request.consultation_fee_usd);
   if (Number.isFinite(storedFee) && storedFee > 0) {
@@ -590,6 +724,7 @@ export function hasConsultationSummary(summary: ConsultationSummary | null | und
       summary.past_medical_history?.trim() ||
       summary.labs_diagnostics?.trim() ||
       summary.assessment_plan?.trim() ||
+      summary.followup_date?.trim() ||
       summary.prescription?.trim()
   );
 }

@@ -9,6 +9,7 @@ import AvailabilityPage from '../doctor/AvailabilityPage';
 import CaseReviewPage from '../doctor/CaseReviewPage';
 import DoctorConsultationPage from '../doctor/DoctorConsultationPage';
 import DoctorDashboardPage from '../doctor/DoctorDashboardPage';
+import DoctorHomeCarePage from '../doctor/DoctorHomeCarePage';
 import { doctorWorkspacePath, ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import ElixHealthDoctorLayout from './ElixHealthDoctorLayout';
 import ElixHealthMantineProvider from './ElixHealthMantineProvider';
@@ -45,6 +46,7 @@ function ElixHealthDoctorRoutes({ doctor }: { doctor: Doctor }) {
     <Routes>
       <Route index element={<DoctorDashboardPage {...pageProps} />} />
       <Route path='cases' element={<CaseReviewPage {...pageProps} />} />
+      <Route path='homecare' element={<DoctorHomeCarePage {...pageProps} />} />
       <Route path='consultation' element={<DoctorConsultationPage {...pageProps} />} />
       <Route path='availability' element={<AvailabilityPage {...pageProps} />} />
     </Routes>

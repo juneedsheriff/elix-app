@@ -3119,6 +3119,30 @@ select {
   color: var(--text);
 }
 
+.doctor-respond-date {
+  width: 100%;
+  max-width: 18rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 2.75rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.doctor-respond-date:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.doctor-respond-date:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .doctor-respond-textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -3964,6 +3988,52 @@ body:has(.elixhealth-app),
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Tablet / phone: page scrolls so the requests table is not crushed to 0 height */
+@media (max-width: 1024px) {
+  .elixhealth-content:has(.elixhealth-datatable-page),
+  .elixhealth-content:has(.doctor-cases-workspace) {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .elixhealth-datatable-page,
+  .doctors-mgmt-page.elixhealth-datatable-page {
+    flex: 1 0 auto;
+    min-height: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .elixhealth-datatable-card,
+  .doctors-mgmt-table-card.elixhealth-datatable-card {
+    flex: 1 0 auto;
+    min-height: min(68dvh, 36rem);
+    height: auto;
+  }
+
+  .elixhealth-datatable-card > *,
+  .doctors-mgmt-table-card.elixhealth-datatable-card > * {
+    flex: 1 1 auto;
+    min-height: min(60dvh, 32rem);
+  }
+
+  .doctors-mgmt-table-shell {
+    height: auto;
+    min-height: inherit;
+  }
+
+  .elixhealth-mrt-paper {
+    height: auto !important;
+    min-height: inherit;
+  }
+
+  .elixhealth-mrt-container,
+  .doctors-mgmt-mrt-container {
+    min-height: 16rem !important;
+  }
 }
 
 .elixhealth-datatable-toolbar {

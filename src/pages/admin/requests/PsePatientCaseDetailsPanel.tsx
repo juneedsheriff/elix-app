@@ -3,7 +3,6 @@ import { Badge, Group, Stack, Text } from '@mantine/core';
 import PatientCaseDetailsEditor from '../../../components/OpinionRequests/PatientCaseDetailsEditor';
 import PatientCaseDetailsReadOnlyView from '../../../components/OpinionRequests/PatientCaseDetailsReadOnlyView';
 import { fetchDoctorSpecialties } from '../../../lib/doctors';
-import { isRecommendationOpinionRequest } from '../../../lib/opinionRequests';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 
 type Props = {
@@ -26,7 +25,6 @@ export default function PsePatientCaseDetailsPanel({
   onSuccess
 }: Props) {
   const [specialties, setSpecialties] = useState<string[]>([]);
-  const needsRecommendation = isRecommendationOpinionRequest(request);
 
   const caseDetailsSyncKey = JSON.stringify({
     patientCaseDetails: request.patient_case_details ?? null,
@@ -68,7 +66,7 @@ export default function PsePatientCaseDetailsPanel({
           key={caseDetailsSyncKey}
           request={request}
           specialties={specialties}
-          specialtyMode={needsRecommendation ? 'patient_select' : 'from_doctor'}
+          specialtyMode='patient_select'
           doctorSpecialty={request.doctor_specialty}
           actorRole='pse'
           canMarkReviewed

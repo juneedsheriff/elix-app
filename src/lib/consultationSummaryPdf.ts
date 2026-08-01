@@ -4,6 +4,7 @@ import {
   resolvePdfClinicContext,
   writePdfIssuerContactBlock
 } from './pdfBranding';
+import { formatConsultationFollowupDate } from './consultationSummaryFields';
 import type { Doctor } from '../types/doctor';
 import type { ConsultationSummary } from '../types/opinionRequest';
 
@@ -31,8 +32,17 @@ const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'vital_signs', label: 'Vital signs' },
   { key: 'labs_diagnostics', label: 'Labs / diagnostics' },
   { key: 'assessment_plan', label: 'Assessment & plan' },
+  { key: 'followup_date', label: 'Follow-up date' },
   { key: 'prescription', label: 'Prescription' }
 ];
+
+function sectionDisplayValue(key: keyof ConsultationSummary, value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  if (key === 'followup_date') {
+    return formatConsultationFollowupDate(value);
+  }
+  return value.trim();
+}
 
 function wrapText(doc: { splitTextToSize: (text: string, maxWidth: number) => string[] }, text: string, maxWidth: number) {
   return doc.splitTextToSize(text, maxWidth);
@@ -173,10 +183,10 @@ async function buildConsultationSummaryPdf(
   y += 4;
 
   for (const { key, label } of SECTIONS) {
-    const value = summary[key];
-    if (typeof value !== 'string' || !value.trim()) continue;
+    const value = sectionDisplayValue(key, summary[key]);
+    if (!value) continue;
     addLine(label, 11, true);
-    addLine(value.trim(), 10);
+    addLine(value, 10);
     y += 8;
   }
 
@@ -264,6 +274,6 @@ export async function downloadConsultationSummaryPdf(
 export function getConsultationSummarySections(summary: ConsultationSummary) {
   return SECTIONS.map(({ key, label }) => ({
     label,
-    value: typeof summary[key] === 'string' ? summary[key]?.trim() ?? '' : ''
+    value: sectionDisplayValue(key, summary[key])
   })).filter((section) => section.value);
 }

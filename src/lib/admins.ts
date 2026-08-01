@@ -167,6 +167,26 @@ export async function fetchPatientServiceExecutives(clinicOnly = false) {
   return { data: (result.data ?? []).map((row) => normalizeAdmin(row as AdminRow)), error: null };
 }
 
+/** Platform + clinic PSEs (for admin assignment dropdowns). */
+export async function fetchAllAssignablePatientServiceExecutives() {
+  const [platform, clinic] = await Promise.all([
+    fetchPatientServiceExecutives(false),
+    fetchPatientServiceExecutives(true)
+  ]);
+
+  if (platform.error) return { data: null, error: platform.error };
+  if (clinic.error) return { data: null, error: clinic.error };
+
+  const byId = new Map<string, Admin>();
+  for (const executive of [...(platform.data ?? []), ...(clinic.data ?? [])]) {
+    byId.set(executive.id, executive);
+  }
+  return {
+    data: [...byId.values()].sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    error: null
+  };
+}
+
 export async function createPatientForAdmin(
   input: AdminPatientUpdateInput,
   options?: { clinicId?: string | null }

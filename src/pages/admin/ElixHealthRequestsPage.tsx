@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@mantine/core';
-import { fetchAllDoctorsForAdmin, fetchAllPatientsForAdmin, fetchPatientServiceExecutives } from '../../lib/admins';
+import { useSearchParams } from 'react-router-dom';
+import { fetchAllDoctorsForAdmin, fetchAllPatientsForAdmin, fetchAllAssignablePatientServiceExecutives } from '../../lib/admins';
 import {
   assignOpinionRequest,
   deleteOpinionRequestForAdmin,
@@ -10,6 +11,7 @@ import {
   subscribeStaffOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { openMedicalRecordByPath } from '../../lib/records';
+import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
   canCreateRequests,
   canDeleteRequests,
@@ -29,6 +31,7 @@ import RequestsDataTable from './requests/RequestsDataTable';
 import RequestsFilterDrawer from './requests/RequestsFilterDrawer';
 import RequestsPageHeader from './requests/RequestsPageHeader';
 import ClinicPseCreateRequestModal from './requests/ClinicPseCreateRequestModal';
+import ClinicPseHomeCareRequestModal from './requests/ClinicPseHomeCareRequestModal';
 import RequestsPageSkeleton from './requests/RequestsPageSkeleton';
 import RequestsTableToolbar from './requests/RequestsTableToolbar';
 import {
@@ -62,6 +65,7 @@ function matchesSearch(request: OpinionRequest, query: string) {
 
 export default function ElixHealthRequestsPage() {
   const { staff } = useElixHealthStaff();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = isAdministrator(staff);
   const canDeleteRequest = canDeleteRequests(staff);
   const isPse = isAnyPatientServiceExecutive(staff);
@@ -80,6 +84,9 @@ export default function ElixHealthRequestsPage() {
   const [filters, setFilters] = useState<RequestQuickFilters>(() => getDefaultRequestFilters(isAdmin));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
+  const [homeCareModalOpen, setHomeCareModalOpen] = useState(false);
+  const initialKind = searchParams.get('tab') === 'homecare' ? 'homecare' : 'consultations';
+  const [requestKindTab, setRequestKindTab] = useState<'consultations' | 'homecare'>(initialKind);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<OpinionRequest | null>(null);
@@ -114,7 +121,11 @@ export default function ElixHealthRequestsPage() {
 
     const [requestsRes, executivesRes, doctorsRes, patientsRes] = await Promise.all([
       fetchOpinionRequestsForStaff(),
-      isAdmin ? fetchPatientServiceExecutives() : isClinicPse ? Promise.resolve({ data: [staff], error: null }) : Promise.resolve({ data: [] as Admin[], error: null }),
+      isAdmin
+        ? fetchAllAssignablePatientServiceExecutives()
+        : isClinicPse
+          ? Promise.resolve({ data: [staff], error: null })
+          : Promise.resolve({ data: [] as Admin[], error: null }),
       isAdmin || isPse
         ? fetchAllDoctorsForAdmin()
         : Promise.resolve({ data: [] as Doctor[], error: null }),
@@ -230,16 +241,52 @@ export default function ElixHealthRequestsPage() {
   }, [initialLoad]);
 
   useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (requestKindTab === 'homecare') {
+      next.set('tab', 'homecare');
+    } else {
+      next.delete('tab');
+    }
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [requestKindTab, searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (!isAdmin && !isPse) return;
     return subscribeStaffOpinionRequestUpdates(() => void refresh(), {
       assignedToAdminId: isPse ? staff.id : null
     });
   }, [refresh, isAdmin, isPse, staff.id]);
 
+  const kindScopedRequests = useMemo(() => {
+    if (requestKindTab === 'homecare') {
+      return requests.filter(isHomeCareOpinionRequest);
+    }
+    return requests.filter((request) => !isHomeCareOpinionRequest(request));
+  }, [requestKindTab, requests]);
+
+  const consultationCount = useMemo(
+    () => requests.filter((request) => !isHomeCareOpinionRequest(request)).length,
+    [requests]
+  );
+  const homeCareCount = useMemo(
+    () => requests.filter(isHomeCareOpinionRequest).length,
+    [requests]
+  );
+
+  const requestKindTabs = useMemo(
+    () => [
+      { value: 'consultations', label: `Consultations (${consultationCount})` },
+      { value: 'homecare', label: `Home Care (${homeCareCount})` }
+    ],
+    [consultationCount, homeCareCount]
+  );
+
   const workspaceScopedRequests = useMemo(
     () =>
       applyRequestQuickFilters(
-        requests,
+        kindScopedRequests,
         {
           queue: 'all',
           status: 'all',
@@ -249,7 +296,7 @@ export default function ElixHealthRequestsPage() {
         },
         isAdmin
       ),
-    [filters.workspace, isAdmin, requests]
+    [filters.workspace, isAdmin, kindScopedRequests]
   );
 
   const analytics = useMemo(
@@ -258,13 +305,13 @@ export default function ElixHealthRequestsPage() {
   );
 
   const specialtyOptions = useMemo(
-    () => uniqueSorted(requests.map((request) => request.doctor_specialty)),
-    [requests]
+    () => uniqueSorted(kindScopedRequests.map((request) => request.doctor_specialty)),
+    [kindScopedRequests]
   );
 
   const assigneeOptions = useMemo(
-    () => uniqueSorted(requests.map((request) => request.assigned_to_name)),
-    [requests]
+    () => uniqueSorted(kindScopedRequests.map((request) => request.assigned_to_name)),
+    [kindScopedRequests]
   );
 
   const workspaceOptions = useMemo(() => {
@@ -272,7 +319,7 @@ export default function ElixHealthRequestsPage() {
     const clinics = new Map<string, { name: string; count: number }>();
     let globalCount = 0;
 
-    for (const request of requests) {
+    for (const request of kindScopedRequests) {
       if (!request.clinic_id) {
         globalCount += 1;
         continue;
@@ -309,20 +356,37 @@ export default function ElixHealthRequestsPage() {
       };
     });
 
-    return [{ value: 'global' as const, label: `Global (${globalCount})` }, ...clinicOptions];
-  }, [isAdmin, requests]);
+    return [
+      {
+        value: 'all' as const,
+        label: `All (${kindScopedRequests.length})`
+      },
+      { value: 'global' as const, label: `Global (${globalCount})` },
+      ...clinicOptions
+    ];
+  }, [isAdmin, kindScopedRequests]);
 
   const workspaceTabs = workspaceOptions;
 
   const normalizedSearch = search.trim().toLowerCase();
 
   const filteredRequests = useMemo(() => {
-    let list = applyRequestQuickFilters(requests, filters, isAdmin);
+    let list = applyRequestQuickFilters(kindScopedRequests, filters, isAdmin);
     if (normalizedSearch) {
       list = list.filter((request) => matchesSearch(request, normalizedSearch));
     }
+    if (isAdmin && filters.workspace === 'all') {
+      // Clinic-first merge: group by clinic name, Global last, newest within each group.
+      list = [...list].sort((a, b) => {
+        const aClinic = a.clinic_id ? a.clinic_name?.trim() || 'Clinic workspace' : 'ZZZ_Global';
+        const bClinic = b.clinic_id ? b.clinic_name?.trim() || 'Clinic workspace' : 'ZZZ_Global';
+        const byClinic = aClinic.localeCompare(bClinic);
+        if (byClinic !== 0) return byClinic;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+    }
     return list;
-  }, [requests, filters, isAdmin, normalizedSearch]);
+  }, [kindScopedRequests, filters, isAdmin, normalizedSearch]);
 
   const defaultFilters = useMemo(() => getDefaultRequestFilters(isAdmin), [isAdmin]);
 
@@ -469,6 +533,7 @@ export default function ElixHealthRequestsPage() {
 
   const columns = useRequestsTableColumns({
     isAdmin,
+    requestKind: requestKindTab,
     onView: openRequest,
     onDelete: canDeleteRequest ? (request) => void handleDeleteRequest(request) : undefined
   });
@@ -508,12 +573,22 @@ export default function ElixHealthRequestsPage() {
       executive?.full_name ??
       (assigneeId === staff.id ? staff.full_name : null) ??
       'Patient Service Executive';
+    const nextClinicId =
+      (assignData as { clinic_id?: string | null } | null)?.clinic_id ??
+      selectedRequest.clinic_id ??
+      executive?.clinic_id ??
+      null;
     const assignedRequest: OpinionRequest = {
       ...selectedRequest,
       assigned_to: assignData?.assigned_to ?? assigneeId,
       assigned_to_name: executiveName,
       assigned_at: assignedAt,
-      consultation_stage: assignData?.consultation_stage ?? 'assigned'
+      consultation_stage: assignData?.consultation_stage ?? 'assigned',
+      clinic_id: nextClinicId,
+      clinic_name:
+        selectedRequest.clinic_name ??
+        executive?.clinic_name ??
+        (nextClinicId ? 'Clinic workspace' : null)
     };
 
     setRequests((prev) =>
@@ -530,10 +605,22 @@ export default function ElixHealthRequestsPage() {
     );
   };
 
-  const pageTitle = isPse ? 'My assigned requests' : 'Opinion requests';
-  const pageSubtitle = isAdmin
-    ? `${analytics.pendingQueue} pending assignment · ${analytics.assignedQueue} assigned · ${analytics.total} total`
-    : `${analytics.pendingQueue} awaiting coordination · ${analytics.total} assigned to you`;
+  const pageTitle =
+    requestKindTab === 'homecare'
+      ? isPse
+        ? 'Home care requests'
+        : 'Home care requests'
+      : isPse
+        ? 'My assigned requests'
+        : 'Opinion requests';
+  const pageSubtitle =
+    requestKindTab === 'homecare'
+      ? isAdmin
+        ? `${analytics.total} home care request${analytics.total === 1 ? '' : 's'} · Clinic PSE coordinates services`
+        : `${analytics.total} home care request${analytics.total === 1 ? '' : 's'} assigned to your clinic queue`
+      : isAdmin
+        ? `${analytics.pendingQueue} pending assignment · ${analytics.assignedQueue} assigned · ${analytics.total} total`
+        : `${analytics.pendingQueue} awaiting coordination · ${analytics.total} assigned to you`;
   const pendingCardLabel = isAdmin ? 'Pending Assignment' : 'Awaiting Coordination';
 
   if (error && !loading && requests.length === 0) {
@@ -560,7 +647,14 @@ export default function ElixHealthRequestsPage() {
         onRefresh={() => void refresh()}
         refreshing={refreshing}
         canAddRequest={canAddRequest}
-        onAddRequest={() => setAddRequestModalOpen(true)}
+        onAddRequest={
+          requestKindTab === 'consultations' ? () => setAddRequestModalOpen(true) : undefined
+        }
+        onAddHomeCareRequest={
+          canAddRequest && staff.clinic_id && requestKindTab === 'homecare'
+            ? () => setHomeCareModalOpen(true)
+            : undefined
+        }
       />
 
       {actionMessage ? (
@@ -574,6 +668,12 @@ export default function ElixHealthRequestsPage() {
           {successMessage}
         </Alert>
       ) : null}
+
+      <WorkspaceTabs
+        tabs={requestKindTabs}
+        value={requestKindTab}
+        onChange={(value) => setRequestKindTab(value as 'consultations' | 'homecare')}
+      />
 
       {isAdmin && workspaceTabs.length ? (
         <WorkspaceTabs
@@ -674,6 +774,20 @@ export default function ElixHealthRequestsPage() {
           doctors={doctors}
           onCreated={() => {
             setSuccessMessage('Opinion request created and assigned to you.');
+            void refresh();
+          }}
+        />
+      ) : null}
+
+      {canAddRequest && staff.clinic_id ? (
+        <ClinicPseHomeCareRequestModal
+          opened={homeCareModalOpen}
+          onClose={() => setHomeCareModalOpen(false)}
+          staff={staff}
+          patients={patients}
+          onCreated={() => {
+            setSuccessMessage('Home care request created and assigned to you.');
+            setRequestKindTab('homecare');
             void refresh();
           }}
         />

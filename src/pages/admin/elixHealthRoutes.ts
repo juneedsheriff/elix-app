@@ -13,15 +13,17 @@ export const ELIX_HEALTH_PATHS = {
   workspace: '/elixhealth/workspace',
   workspaceCases: '/elixhealth/workspace/cases',
   workspaceConsultation: '/elixhealth/workspace/consultation',
+  workspaceHomeCare: '/elixhealth/workspace/homecare',
   workspaceAvailability: '/elixhealth/workspace/availability'
 } as const;
 
-export type ElixHealthDoctorNavId = 'dashboard' | 'cases' | 'availability';
+export type ElixHealthDoctorNavId = 'dashboard' | 'cases' | 'homecare' | 'availability';
 
 const DOCTOR_SCREEN_TO_PATH: Record<string, string> = {
   'doctor-dashboard': ELIX_HEALTH_PATHS.workspace,
   'case-review': ELIX_HEALTH_PATHS.workspaceCases,
   'doctor-consultation': ELIX_HEALTH_PATHS.workspaceConsultation,
+  'doctor-homecare': ELIX_HEALTH_PATHS.workspaceHomeCare,
   availability: ELIX_HEALTH_PATHS.workspaceAvailability
 };
 
@@ -31,6 +33,7 @@ export function doctorWorkspacePath(screenId: string): string {
 
 export function doctorNavIdFromPathname(pathname: string): ElixHealthDoctorNavId {
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'cases';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceHomeCare)) return 'homecare';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'availability';
   return 'dashboard';
 }
@@ -38,6 +41,7 @@ export function doctorNavIdFromPathname(pathname: string): ElixHealthDoctorNavId
 export function doctorPageTitleFromPathname(pathname: string): string {
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceConsultation)) return 'Consultation';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'Cases';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceHomeCare)) return 'Home Care';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Scheduler';
   return 'Dashboard';
 }
@@ -83,6 +87,6 @@ export function pageTitleFromPathname(pathname: string, search: string): string 
   if (pathname === '/elixhealth/patients') return 'Patients';
   if (pathname === '/elixhealth/staff') return 'Staff';
   if (pathname === '/elixhealth/profile') return 'My profile';
-  if (pathname === '/elixhealth/requests') return 'Opinion requests';
+  if (pathname === '/elixhealth/requests') return 'Requests';
   return 'Dashboard';
 }

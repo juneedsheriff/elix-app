@@ -29,7 +29,8 @@ export function getDefaultRequestFilters(isAdmin: boolean): RequestQuickFilters 
   return {
     queue: isAdmin ? 'pending' : 'all',
     status: 'all',
-    workspace: isAdmin ? 'global' : 'all',
+    // Admins see every workspace merged; clinic tabs still filter when selected.
+    workspace: 'all',
     specialty: null,
     assignee: null
   };

@@ -90,7 +90,7 @@ function RequestsAnalyticsCards({
 
   return (
     <SimpleGrid
-      cols={{ base: 1, xs: 2, lg: showAssigned ? 5 : 4 }}
+      cols={{ base: 2, sm: 2, lg: showAssigned ? 5 : 4 }}
       className='doctors-mgmt-stats'
     >
       {cards.map(({ key, label, icon: Icon, gradient, value }) => (

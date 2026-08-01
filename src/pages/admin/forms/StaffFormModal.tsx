@@ -223,7 +223,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                 <select value={role} onChange={(e) => setRole(e.target.value as AdminRole)} disabled={busy}>
                   <option value='patient_service_executive'>Patient Service Executive</option>
                   <option value='patient_service_executive_clinic'>Patient Service Executive (clinic)</option>
-                  <option value='administrator'>Administrator</option>
+                  <option value='administrator'>ElixClinix</option>
                 </select>
               </label>
             ) : null}

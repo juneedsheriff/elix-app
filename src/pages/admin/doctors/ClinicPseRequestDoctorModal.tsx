@@ -137,7 +137,7 @@ export default function ClinicPseRequestDoctorModal({
     >
       <Stack gap='md'>
         <Text size='sm' c='dimmed'>
-          Search the ElixClinix doctor directory. Your request goes to the administrator for
+          Search the ElixClinix doctor directory. Your request goes to ElixClinix for
           approval. Once approved, the doctor appears in your clinic list.
         </Text>
 
@@ -220,7 +220,7 @@ export default function ClinicPseRequestDoctorModal({
 
         {selectedDoctor ? (
           <Textarea
-            label='Note for administrator (optional)'
+            label='Note for ElixClinix (optional)'
             placeholder='Why this doctor should be added to your clinic workspace'
             value={message}
             onChange={(event) => setMessage(event.currentTarget.value)}

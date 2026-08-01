@@ -60,6 +60,8 @@ export type ConsultationSummary = {
   past_medical_history: string | null;
   labs_diagnostics: string | null;
   assessment_plan: string | null;
+  /** YYYY-MM-DD when set. */
+  followup_date: string | null;
   prescription: string | null;
   pdf_storage_path: string | null;
   created_at: string;
@@ -88,6 +90,10 @@ export type OpinionRequest = {
   assigned_at: string | null;
   assigned_to_name: string | null;
   coordination_notes: string | null;
+  /** Clinic PSE home care remarks (patient-visible). */
+  home_care_remarks?: string | null;
+  /** Clinic PSE home care follow-up date YYYY-MM-DD (patient-visible). */
+  home_care_followup_date?: string | null;
   consultation_stage: ConsultationStage | null;
   selected_doctor_id: string | null;
   patient_availability: unknown | null;

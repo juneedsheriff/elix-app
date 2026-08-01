@@ -76,6 +76,8 @@
     "db:apply-doctor-soft-delete-select-rls": "node scripts/apply-doctor-soft-delete-select-rls.mjs",
     "db:apply-patient-claim-disabled": "node scripts/apply-patient-claim-disabled.mjs",
     "db:apply-recommendations-rls": "node scripts/apply-recommendations-rls.mjs",
+    "db:apply-home-care-followup": "node scripts/apply-home-care-followup.mjs",
+    "db:apply-consultation-summary-followup": "node scripts/apply-consultation-summary-followup.mjs",
     "db:apply-request-messages": "node scripts/apply-migration.mjs 069_request_messages.sql",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "db:seed-pse": "node scripts/seed-pse.mjs"

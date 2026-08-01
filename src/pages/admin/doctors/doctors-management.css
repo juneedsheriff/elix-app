@@ -343,7 +343,7 @@
 .doctors-mgmt-table-shell--fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 250;
+  z-index: 200;
   height: 100dvh;
   width: 100vw;
   margin: 0;
@@ -356,6 +356,19 @@
 
 body.doctors-mgmt-table-fullscreen-open {
   overflow: hidden;
+}
+
+/* Drawers / modals / menus must sit above the fullscreen table */
+body.doctors-mgmt-table-fullscreen-open .mantine-Drawer-root,
+body.doctors-mgmt-table-fullscreen-open .mantine-Modal-root {
+  z-index: 400 !important;
+}
+
+body.doctors-mgmt-table-fullscreen-open .mantine-Popover-dropdown,
+body.doctors-mgmt-table-fullscreen-open .mantine-Menu-dropdown,
+body.doctors-mgmt-table-fullscreen-open .mantine-Combobox-dropdown,
+body.doctors-mgmt-table-fullscreen-open .mantine-Tooltip-tooltip {
+  z-index: 460 !important;
 }
 
 .doctors-mgmt-table-shell--fullscreen .doctors-mgmt-mrt-paper {
@@ -386,16 +399,37 @@ body.doctors-mgmt-table-fullscreen-open {
 }
 
 .doctors-mgmt-table-toolbar__inner {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(0, 2fr) auto;
-  gap: 0.85rem;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
 }
 
-@media (max-width: 1100px) {
-  .doctors-mgmt-table-toolbar__inner {
-    grid-template-columns: 1fr;
-  }
+.doctors-mgmt-table-toolbar__inner > .doctors-mgmt-search {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.doctors-mgmt-table-toolbar__controls {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.doctors-mgmt-quick-filters {
+  flex: 0 0 auto;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start;
+  gap: 0.5rem !important;
+}
+
+.doctors-mgmt-table-toolbar__tools {
+  flex: 0 0 auto;
+  margin-left: 0;
 }
 
 .doctors-mgmt-search input {
@@ -412,14 +446,76 @@ body.doctors-mgmt-table-fullscreen-open {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-cyan) 18%, transparent);
 }
 
-.doctors-mgmt-quick-filters {
-  justify-content: flex-start;
+.doctors-mgmt-quick-select {
+  min-width: 7.5rem;
+  width: 8.5rem;
+  flex: 0 0 auto;
+  max-width: 10rem;
 }
 
-.doctors-mgmt-quick-select {
-  min-width: 140px;
-  flex: 1;
-  max-width: 180px;
+@media (max-width: 799px) {
+  .doctors-mgmt-table-toolbar {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .doctors-mgmt-table-toolbar__inner {
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .doctors-mgmt-table-toolbar__inner > .doctors-mgmt-search {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .doctors-mgmt-table-toolbar__controls {
+    flex: 1 1 100%;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+
+  .doctors-mgmt-quick-filters {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .doctors-mgmt-quick-select {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 0;
+    max-width: none;
+  }
+
+  .doctors-mgmt-search input {
+    font-size: 0.85rem;
+  }
+}
+
+@media (min-width: 800px) and (max-width: 1024px) {
+  .doctors-mgmt-table-toolbar {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .doctors-mgmt-table-toolbar__inner {
+    gap: 0.45rem;
+  }
+
+  .doctors-mgmt-table-toolbar__inner > .doctors-mgmt-search {
+    flex: 1 1 8rem;
+    min-width: 7.5rem;
+  }
+
+  .doctors-mgmt-quick-select {
+    min-width: 6.5rem;
+    width: 7.25rem;
+    max-width: 8rem;
+  }
+
+  .doctors-mgmt-search input {
+    font-size: 0.85rem;
+  }
 }
 
 .doctors-mgmt-table-toolbar__tools .mantine-ActionIcon-root,
@@ -776,8 +872,18 @@ body.doctors-mgmt-table-fullscreen-open {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.65rem;
+  gap: 0.75rem 1rem;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.request-detail-drawer__hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-shrink: 0;
 }
 
 .request-detail-drawer__audit-btn {
@@ -806,7 +912,7 @@ body.doctors-mgmt-table-fullscreen-open {
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 14rem;
 }
 
 .request-detail-drawer__avatar {
@@ -834,6 +940,7 @@ body.doctors-mgmt-table-fullscreen-open {
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
+  width: 100%;
 }
 
 .request-detail-drawer__patient-name {
@@ -851,7 +958,9 @@ body.doctors-mgmt-table-fullscreen-open {
   list-style: none;
   display: flex;
   flex-direction: row;
-  gap: 1.2rem;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.2rem;
+  min-width: 0;
 }
 
 .request-detail-drawer__fact {
@@ -859,6 +968,7 @@ body.doctors-mgmt-table-fullscreen-open {
   align-items: flex-start;
   gap: 0.4rem;
   min-width: 0;
+  max-width: 100%;
 }
 
 .request-detail-drawer__fact-icon {
@@ -881,6 +991,7 @@ body.doctors-mgmt-table-fullscreen-open {
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
+  min-width: 0;
 }
 
 .request-detail-drawer__fact-label {
@@ -1035,18 +1146,71 @@ body.doctors-mgmt-table-fullscreen-open {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+  .request-detail-drawer__hero {
+    padding: 0.75rem 0.9rem 0.85rem;
+  }
+
   .request-detail-drawer__hero-inner {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.7rem;
   }
 
-  .request-detail-drawer__status {
-    align-self: flex-start;
+  .request-detail-drawer__patient {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .request-detail-drawer__facts {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .request-detail-drawer__fact {
+    align-items: center;
+  }
+
+  .request-detail-drawer__fact-icon {
+    margin-top: 0;
+  }
+
+  .request-detail-drawer__fact-text {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.1rem 0.35rem;
+  }
+
+  .request-detail-drawer__fact-label {
+    display: inline;
+    margin-right: 0;
+  }
+
+  .request-detail-drawer__hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .request-detail-drawer__audit-btn {
+    white-space: normal;
+    text-align: left;
   }
 
   .request-detail-drawer__content {
     padding-inline: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .request-detail-drawer__hero-actions {
+    gap: 0.4rem;
+  }
+
+  .request-detail-drawer__audit-btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.72rem;
   }
 }
 
@@ -1124,3 +1288,56 @@ body.doctors-mgmt-table-fullscreen-open {
   opacity: 0.65;
   cursor: not-allowed;
 }
+
+/* Consultation / home-care create modals + request drawer on tablet & mobile */
+@media (max-width: 1024px) {
+  .doctors-mgmt-page.elixhealth-datatable-page {
+    gap: 0.85rem;
+  }
+
+  .doctors-mgmt-stats {
+    flex-shrink: 0;
+  }
+
+  .doctors-mgmt-stat {
+    padding: 0.75rem !important;
+  }
+
+  .doctors-mgmt-stat__value {
+    font-size: 1.15rem;
+  }
+
+  .doctors-mgmt-header__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .requests-create-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  .requests-create-modal .mantine-Modal-body,
+  .requests-create-modal .mantine-Modal-header {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .request-detail-drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .request-detail-drawer__content {
+    padding: 1rem;
+  }
+
+  .doctors-mgmt-drawer__body.request-detail-drawer__body {
+    max-height: calc(100dvh - 3.75rem);
+  }
+}
+

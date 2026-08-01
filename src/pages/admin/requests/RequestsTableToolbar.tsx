@@ -75,44 +75,48 @@ function RequestsTableToolbar({
         size='md'
       />
 
-      <Group gap='sm' className='doctors-mgmt-quick-filters' wrap='wrap'>
-        <Select
-          className='doctors-mgmt-quick-select'
-          placeholder='Queue'
-          data={queueData}
-          value={filters.queue}
-          onChange={(value) =>
-            onFilterChange({ ...filters, queue: (value as RequestQueueFilter) ?? filters.queue })
-          }
-          radius='md'
-        />
-        <Select
-          className='doctors-mgmt-quick-select'
-          placeholder='Specialty'
-          clearable
-          searchable
-          data={specialtyOptions}
-          value={filters.specialty}
-          onChange={(value) => onFilterChange({ ...filters, specialty: value })}
-          radius='md'
-        />
-      </Group>
-
-      <Group gap='xs' className='doctors-mgmt-table-toolbar__tools' wrap='nowrap'>
-        <MRT_ShowHideColumnsButton table={table} />
-        <Tooltip label={fullScreen ? 'Exit full screen' : 'Full screen'}>
-          <ActionIcon
-            variant='subtle'
-            color='gray'
-            size='lg'
+      <div className='doctors-mgmt-table-toolbar__controls'>
+        <Group gap='sm' className='doctors-mgmt-quick-filters' wrap='nowrap'>
+          <Select
+            className='doctors-mgmt-quick-select'
+            placeholder='Queue'
+            data={queueData}
+            value={filters.queue}
+            onChange={(value) =>
+              onFilterChange({ ...filters, queue: (value as RequestQueueFilter) ?? filters.queue })
+            }
             radius='md'
-            aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
-            onClick={onToggleFullScreen}
-          >
-            {fullScreen ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
-          </ActionIcon>
-        </Tooltip>
-      </Group>
+            comboboxProps={{ withinPortal: true, zIndex: 460 }}
+          />
+          <Select
+            className='doctors-mgmt-quick-select'
+            placeholder='Specialty'
+            clearable
+            searchable
+            data={specialtyOptions}
+            value={filters.specialty}
+            onChange={(value) => onFilterChange({ ...filters, specialty: value })}
+            radius='md'
+            comboboxProps={{ withinPortal: true, zIndex: 460 }}
+          />
+        </Group>
+
+        <Group gap='xs' className='doctors-mgmt-table-toolbar__tools' wrap='nowrap'>
+          <MRT_ShowHideColumnsButton table={table} />
+          <Tooltip label={fullScreen ? 'Exit full screen' : 'Full screen'}>
+            <ActionIcon
+              variant='subtle'
+              color='gray'
+              size='lg'
+              radius='md'
+              aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
+              onClick={onToggleFullScreen}
+            >
+              {fullScreen ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+      </div>
     </div>
   );
 }

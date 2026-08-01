@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronRight, ClipboardList, LayoutDashboard, LogOut, Menu, Stethoscope, X } from 'lucide-react';
+import { Calendar, ChevronRight, ClipboardList, Home, LayoutDashboard, LogOut, Menu, Stethoscope, X } from 'lucide-react';
 import ElixLogo from '../../components/ui/ElixLogo';
 import type { Doctor } from '../../types/doctor';
 import {
@@ -20,6 +20,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: ELIX_HEALTH_PATHS.workspace, icon: LayoutDashboard },
   { id: 'cases', label: 'Cases', path: ELIX_HEALTH_PATHS.workspaceCases, icon: ClipboardList },
+  { id: 'homecare', label: 'Home Care', path: ELIX_HEALTH_PATHS.workspaceHomeCare, icon: Home },
   {
     id: 'availability',
     label: 'Scheduler',

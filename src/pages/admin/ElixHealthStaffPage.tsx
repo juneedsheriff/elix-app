@@ -202,8 +202,8 @@ export default function ElixHealthStaffPage() {
       ) : null}
 
       <SectionCard
-        title='Administrators'
-        subtitle={`${administrators.length} administrator account${administrators.length === 1 ? '' : 's'}`}
+        title='ElixClinix accounts'
+        subtitle={`${administrators.length} ElixClinix account${administrators.length === 1 ? '' : 's'}`}
       >
         <StaffTable
           members={administrators}
@@ -236,7 +236,7 @@ export default function ElixHealthStaffPage() {
         subtitle={`${clinicExecutives.length} isolated clinic account${clinicExecutives.length === 1 ? '' : 's'}`}
       >
         <p className='muted elixhealth-staff-note'>
-          <UserCog size={16} className='inline-icon' aria-hidden /> Clinic executives manage isolated patients and doctors for their workspace. Administrators can view all clinic data on the Patients and Doctors pages.
+          <UserCog size={16} className='inline-icon' aria-hidden /> Clinic executives manage isolated patients and doctors for their workspace. ElixClinix can view all clinic data on the Patients and Doctors pages.
         </p>
         {clinicExecutives.length === 0 ? (
           <p className='muted elixhealth-staff-note'>

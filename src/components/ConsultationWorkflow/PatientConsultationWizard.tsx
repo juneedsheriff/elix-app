@@ -7,6 +7,7 @@ import {
   ClipboardList,
   CreditCard,
   FileText,
+  Home,
   Link2,
   Lock,
   ShieldCheck,
@@ -23,11 +24,11 @@ import {
   hasPatientPaymentDue,
   isAwaitingPseAvailabilityForSelfSelectedDoctor,
   isPatientConsultationNotesComplete,
+  isPatientHomeCareWizard,
   isPatientPaymentLinkPending,
   isPatientAppointmentPhase,
   isPatientPaymentConfirmed,
   isPaymentAccessible,
-  PATIENT_WIZARD_STEPS,
   readPatientWizardStoredStep,
   writePatientWizardStoredStep,
   type WizardProgressContext
@@ -53,6 +54,7 @@ import {
   subscribeOpinionRequestLiveUpdates,
   type SavedPatientCaseDetailsPatch
 } from '../../lib/opinionRequests';
+import { homeCareServicesFromRequest } from '../../lib/homeCareServices';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import PatientCaseDetailsEditor from '../OpinionRequests/PatientCaseDetailsEditor';
 import MedicalRecordsChoicePrompt from '../OpinionRequests/MedicalRecordsChoicePrompt';
@@ -97,6 +99,8 @@ const PATIENT_STEP_ICONS: LucideIcon[] = [
   Calendar,
   FileText
 ];
+
+const HOME_CARE_PATIENT_STEP_ICONS: LucideIcon[] = [Home, CreditCard];
 
 function formatAppointmentDisplay(iso: string): string {
   const date = new Date(iso);
@@ -458,7 +462,135 @@ export default function PatientConsultationWizard({
       </div>
     ) : null;
 
+  const renderHomeCarePaymentStep = () => (
+    <div className='doctor-response-block patient-view'>
+      {request.invoice_pdf_storage_path?.trim() ? (
+        <div className='patient-payment-step__invoice'>
+          <ConsultationInvoicePdfView request={request} variant='patient' />
+        </div>
+      ) : null}
+      {isPatientPaymentConfirmed(request) ? (
+        <>
+          {renderPaymentRetain()}
+          <p className='muted'>Payment confirmed. Your clinic team will continue coordinating your home care services.</p>
+        </>
+      ) : hasPatientPaymentDue(request) ? (
+        <div className='patient-payment-step'>
+          {request.payment_amount != null ? (
+            <p className='patient-payment-step__amount'>
+              <span className='patient-payment-step__amount-label'>Amount due</span>
+              <strong>
+                {formatConsultationFeeUsd(
+                  Number(request.payment_amount),
+                  normalizeConsultationCurrency(request.consultation_currency ?? request.payment_currency)
+                )}
+              </strong>
+            </p>
+          ) : null}
+          <p className='muted patient-payment-step__hint'>
+            Complete payment so your clinic can arrange the requested home care services.
+          </p>
+          <a
+            href={request.payment_link!}
+            target='_blank'
+            rel='noreferrer'
+            className='primary-btn patient-payment-step__pay-btn'
+          >
+            Pay now
+          </a>
+          <PatientPaymentProofUpload request={request} onSubmitted={onUpdated} onMessage={onMessage} />
+        </div>
+      ) : isPatientPaymentLinkPending(request) ? (
+        <div className='patient-payment-step'>
+          {request.payment_amount != null ? (
+            <p className='patient-payment-step__amount'>
+              <span className='patient-payment-step__amount-label'>Amount due</span>
+              <strong>
+                {request.payment_amount} {request.payment_currency ?? 'USD'}
+              </strong>
+            </p>
+          ) : null}
+          <p className='muted doctor-awaiting-response'>
+            Your payment link was shared by your clinic. If Pay now does not appear, refresh this page.
+          </p>
+          {renderPaymentRetain()}
+        </div>
+      ) : isPaymentAccessible(request) ? (
+        <div className='patient-payment-step'>
+          <p className='muted'>Payment details are available. Refresh if the pay button does not load.</p>
+          {renderPaymentRetain()}
+        </div>
+      ) : (
+        <p className='muted doctor-awaiting-response'>
+          Waiting for your clinic to send a payment link for these home care services.
+        </p>
+      )}
+    </div>
+  );
+
   const renderStepContent = (index: number) => {
+    if (isPatientHomeCareWizard(request)) {
+      if (index === 0) {
+        const services = homeCareServicesFromRequest(request);
+        return (
+          <div className='doctor-response-block patient-view patient-request-case-details-step'>
+            <p className='muted patient-request-case-details-step__intro'>
+              Submitted on {new Date(request.created_at).toLocaleString()}. Your clinic team will follow up on these
+              services.
+            </p>
+            {services.length ? (
+              <ul className='home-care-services-list' style={{ listStyle: 'none', padding: 0, margin: '0.75rem 0 0' }}>
+                {services.map((service) => (
+                  <li key={service} className='home-care-service-option home-care-service-option--selected'>
+                    <span className='home-care-service-option__check' aria-hidden>
+                      <Check size={14} strokeWidth={2.5} />
+                    </span>
+                    <span className='home-care-service-option__label'>{service}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className='muted'>{request.message}</p>
+            )}
+            {request.home_care_remarks?.trim() || request.home_care_followup_date ? (
+              <div
+                className='patient-docs-verification__box'
+                style={{ marginTop: '1rem' }}
+                aria-label='Clinic remarks and follow-up'
+              >
+                <p className='patient-docs-verification__text' style={{ fontWeight: 600, marginBottom: '0.35rem' }}>
+                  Clinic updates
+                </p>
+                {request.home_care_remarks?.trim() ? (
+                  <p className='patient-docs-verification__text' style={{ whiteSpace: 'pre-wrap' }}>
+                    {request.home_care_remarks}
+                  </p>
+                ) : null}
+                {request.home_care_followup_date ? (
+                  <p className='patient-docs-verification__text muted'>
+                    Follow-up date:{' '}
+                    {new Date(`${request.home_care_followup_date}T00:00:00`).toLocaleDateString()}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className='muted' style={{ marginTop: '0.75rem' }}>
+                Your clinic has not added remarks or a follow-up date yet.
+              </p>
+            )}
+            {!isPatientPaymentConfirmed(request) ? (
+              <div style={{ marginTop: '1rem' }}>
+                <button type='button' className='primary-btn' onClick={() => goToStep(1)}>
+                  Continue to payment →
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+      return renderHomeCarePaymentStep();
+    }
+
     switch (index) {
       case 0:
         return (
@@ -1009,16 +1141,25 @@ export default function PatientConsultationWizard({
     }
   };
 
+  const isHomeCare = isPatientHomeCareWizard(request);
+  const stepIcons = isHomeCare ? HOME_CARE_PATIENT_STEP_ICONS : PATIENT_STEP_ICONS;
+
   return (
     <div className='patient-consultation-wizard patient-consultation-wizard--accordion patient-consultation-wizard--modern'>
       <header className='patient-consultation-wizard__hero'>
         <div className='patient-consultation-wizard__hero-text'>
-          <h4 className='patient-consultation-wizard__heading'>Your consultation progress</h4>
-          <p className='patient-consultation-wizard__subheading'>Track your request in real-time.</p>
+          <h4 className='patient-consultation-wizard__heading'>
+            {isHomeCare ? 'Your home care progress' : 'Your consultation progress'}
+          </h4>
+          <p className='patient-consultation-wizard__subheading'>
+            {isHomeCare
+              ? 'Track your home care request and payment in real time.'
+              : 'Track your request in real-time.'}
+          </p>
         </div>
         <div className='patient-consultation-wizard__hero-art' aria-hidden>
           <span className='patient-consultation-wizard__hero-clipboard'>
-            <ClipboardList size={34} strokeWidth={1.5} />
+            {isHomeCare ? <Home size={34} strokeWidth={1.5} /> : <ClipboardList size={34} strokeWidth={1.5} />}
           </span>
           <span className='patient-consultation-wizard__hero-shield'>
             <ShieldCheck size={18} strokeWidth={2} />
@@ -1026,18 +1167,17 @@ export default function PatientConsultationWizard({
         </div>
       </header>
 
-      <nav className='patient-wizard-timeline' aria-label='Consultation progress'>
+      <nav className='patient-wizard-timeline' aria-label={isHomeCare ? 'Home care progress' : 'Consultation progress'}>
         <ol className='patient-wizard-timeline__track'>
-          {PATIENT_WIZARD_STEPS.map((stepDef, index) => {
-            const step = wizardSteps[index];
-            const isLast = index === PATIENT_WIZARD_STEPS.length - 1;
+          {wizardSteps.map((step, index) => {
+            const isLast = index === wizardSteps.length - 1;
             const isAccessible = canPatientNavigateToStep(index, progressCtx);
             const isExpanded = expandedStep === index;
             const isCurrent = index === suggestedStep;
-            const isNotesStep = index === PATIENT_WIZARD_STEPS.length - 1;
+            const isNotesStep = !isHomeCare && index === wizardSteps.length - 1;
             const notesComplete = isNotesStep && isPatientConsultationNotesComplete(progressCtx);
             const isComplete = step.state === 'complete' || notesComplete;
-            const StepIcon = PATIENT_STEP_ICONS[index] ?? FileText;
+            const StepIcon = stepIcons[index] ?? FileText;
             const stateClass = isComplete
               ? 'patient-wizard-timeline__step--complete'
               : isCurrent
@@ -1046,13 +1186,13 @@ export default function PatientConsultationWizard({
 
             return (
               <li
-                key={stepDef.id}
+                key={step.id}
                 className={`patient-wizard-timeline__step ${stateClass} ${
                   isExpanded ? 'patient-wizard-timeline__step--expanded' : ''
                 } ${!isAccessible ? 'patient-wizard-timeline__step--locked' : ''}`}
               >
                 <div className='patient-wizard-timeline__rail' aria-hidden>
-                  <span className='patient-wizard-timeline__marker'>{stepDef.id}</span>
+                  <span className='patient-wizard-timeline__marker'>{step.id}</span>
                   {!isLast ? <span className='patient-wizard-timeline__line' /> : null}
                 </div>
 
@@ -1075,7 +1215,7 @@ export default function PatientConsultationWizard({
                       </span>
                       <span className='patient-wizard-card__labels'>
                         <span className='patient-wizard-card__title-row'>
-                          <span className='patient-wizard-card__title'>{stepDef.title}</span>
+                          <span className='patient-wizard-card__title'>{step.title}</span>
                           {notesComplete ? (
                             <span className='patient-wizard-card__badge patient-wizard-card__badge--complete'>
                               Completed
@@ -1084,7 +1224,7 @@ export default function PatientConsultationWizard({
                             <span className='patient-wizard-card__badge'>In progress</span>
                           ) : null}
                         </span>
-                        <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
+                        <span className='patient-wizard-card__subtitle'>{step.subtitle}</span>
                       </span>
                       <ChevronDown size={18} className='patient-wizard-card__chevron' aria-hidden />
                     </button>
@@ -1097,8 +1237,8 @@ export default function PatientConsultationWizard({
                         <StepIcon size={20} strokeWidth={2} />
                       </span>
                       <span className='patient-wizard-card__labels'>
-                        <span className='patient-wizard-card__title'>{stepDef.title}</span>
-                        <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
+                        <span className='patient-wizard-card__title'>{step.title}</span>
+                        <span className='patient-wizard-card__subtitle'>{step.subtitle}</span>
                       </span>
                       <Lock size={16} className='patient-wizard-card__lock' aria-hidden />
                     </div>

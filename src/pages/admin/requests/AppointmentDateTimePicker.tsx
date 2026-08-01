@@ -1,9 +1,10 @@
-import { Group } from '@mantine/core';
+import { Group, TextInput } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
-import AnalogTimePicker from '../../../components/common/AnalogTimePicker';
-import { IconCalendar } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
+import { IconCalendar, IconClock } from '@tabler/icons-react';
 import dayjs from 'dayjs';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import './appointment-datetime-picker.css';
 
 type AppointmentDateTimePickerProps = {
   label?: string;
@@ -12,36 +13,21 @@ type AppointmentDateTimePickerProps = {
   disabled?: boolean;
 };
 
-const MINUTE_SLOTS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as const;
-
 function combineDateAndTime(date: Date, hour: number, minute: number): Date {
   return dayjs(date).hour(hour).minute(minute).second(0).millisecond(0).toDate();
 }
 
-function allowedMinutesForHour(
-  hour: number,
-  date: Date,
-  minTime: dayjs.Dayjs | undefined
-): number[] {
-  return MINUTE_SLOTS.filter((minute) => {
-    const slot = dayjs(date).hour(hour).minute(minute).second(0);
-    if (!minTime) return true;
-    return slot.isAfter(minTime);
-  });
-}
-
-function allowedHoursForDate(date: Date, minTime: dayjs.Dayjs | undefined): number[] {
-  return Array.from({ length: 24 }, (_, hour) => hour).filter(
-    (hour) => allowedMinutesForHour(hour, date, minTime).length > 0
-  );
-}
-
 function defaultSlotForDate(date: Date): { hour: number; minute: number } {
-  const minTime = dayjs(date).isSame(dayjs(), 'day') ? dayjs() : undefined;
-  const hours = allowedHoursForDate(date, minTime);
-  const hour = hours[0] ?? 9;
-  const minutes = allowedMinutesForHour(hour, date, minTime);
-  return { hour, minute: minutes[0] ?? 0 };
+  const parsed = dayjs(date);
+  if (!parsed.isSame(dayjs(), 'day')) {
+    return { hour: 9, minute: 0 };
+  }
+  const soon = dayjs().add(5, 'minute');
+  const roundedMinute = Math.ceil(soon.minute() / 5) * 5;
+  if (roundedMinute >= 60) {
+    return { hour: (soon.hour() + 1) % 24, minute: 0 };
+  }
+  return { hour: soon.hour(), minute: roundedMinute };
 }
 
 export default function AppointmentDateTimePicker({
@@ -50,20 +36,29 @@ export default function AppointmentDateTimePicker({
   onChange,
   disabled
 }: AppointmentDateTimePickerProps) {
+  const isCompact = useMediaQuery('(max-width: 1024px)');
+  const timeInputRef = useRef<HTMLInputElement>(null);
   const todayStart = useMemo(() => dayjs().startOf('day').toDate(), []);
   const dateValue = value ? dayjs(value).startOf('day').toDate() : null;
 
-  const minDateTime = useMemo(() => {
-    if (!dateValue || !dayjs(dateValue).isSame(dayjs(), 'day')) return undefined;
-    return dayjs();
-  }, [dateValue]);
-
-  const timeValue = useMemo(() => {
-    if (value == null) return null;
-    return { hour: dayjs(value).hour(), minute: dayjs(value).minute() };
-  }, [value]);
+  const timeString = value ? dayjs(value).format('HH:mm') : '';
+  const minTimeString =
+    dateValue && dayjs(dateValue).isSame(dayjs(), 'day') ? dayjs().format('HH:mm') : undefined;
+  const timeDisabled = Boolean(disabled || !dateValue);
 
   const excludeDate = (date: Date) => dayjs(date).isBefore(todayStart, 'day');
+
+  const openTimePicker = () => {
+    const input = timeInputRef.current;
+    if (!input || timeDisabled) return;
+    try {
+      if (typeof input.showPicker === 'function') {
+        input.showPicker();
+      }
+    } catch {
+      // showPicker can throw if not triggered by a user gesture; ignore.
+    }
+  };
 
   const handleDateChange = (date: Date | null) => {
     if (!date) {
@@ -71,16 +66,35 @@ export default function AppointmentDateTimePicker({
       return;
     }
     const slot = defaultSlotForDate(date);
-    onChange(combineDateAndTime(date, slot.hour, slot.minute));
+    let next = combineDateAndTime(date, slot.hour, slot.minute);
+    if (dayjs(date).isSame(dayjs(), 'day') && dayjs(next).isBefore(dayjs())) {
+      next = dayjs().add(5, 'minute').second(0).millisecond(0).toDate();
+    }
+    onChange(next);
   };
 
-  const handleTimeChange = (next: { hour: number; minute: number }) => {
-    if (!dateValue) return;
-    onChange(combineDateAndTime(dateValue, next.hour, next.minute));
+  const handleTimeChange = (raw: string) => {
+    if (!dateValue || !raw) return;
+    const [hourRaw, minuteRaw] = raw.split(':');
+    const hour = Number(hourRaw);
+    const minute = Number(minuteRaw);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return;
+
+    let next = combineDateAndTime(dateValue, hour, minute);
+    if (dayjs(dateValue).isSame(dayjs(), 'day') && dayjs(next).isBefore(dayjs())) {
+      next = dayjs().add(1, 'minute').second(0).millisecond(0).toDate();
+    }
+    onChange(next);
   };
 
   return (
-    <Group gap='sm' align='flex-end' wrap='wrap' grow>
+    <Group
+      gap='sm'
+      align='flex-end'
+      wrap='wrap'
+      grow={!isCompact}
+      className='appointment-datetime-picker'
+    >
       <DatePickerInput
         label={label}
         placeholder='Select date'
@@ -93,18 +107,36 @@ export default function AppointmentDateTimePicker({
         radius='md'
         size='md'
         valueFormat='MMM D, YYYY'
+        dropdownType={isCompact ? 'modal' : 'popover'}
         leftSection={<IconCalendar size={16} stroke={1.75} />}
         popoverProps={{ withinPortal: true, zIndex: 400 }}
-        style={{ flex: 1.4, minWidth: '12rem' }}
+        className='appointment-datetime-picker__date'
       />
-      <AnalogTimePicker
+      <TextInput
+        ref={timeInputRef}
+        type='time'
         label='Time'
-        value={timeValue}
-        onChange={handleTimeChange}
-        disabled={disabled || !dateValue}
-        minDateTime={minDateTime}
         placeholder='Select time'
-        zIndex={401}
+        value={timeString}
+        min={minTimeString}
+        step={300}
+        onChange={(event) => handleTimeChange(event.currentTarget.value)}
+        onClick={openTimePicker}
+        disabled={timeDisabled}
+        radius='md'
+        size='md'
+        leftSection={
+          <IconClock
+            size={16}
+            stroke={1.75}
+            style={{ cursor: timeDisabled ? undefined : 'pointer' }}
+            onClick={(event) => {
+              event.preventDefault();
+              openTimePicker();
+            }}
+          />
+        }
+        className='appointment-datetime-picker__time'
       />
     </Group>
   );

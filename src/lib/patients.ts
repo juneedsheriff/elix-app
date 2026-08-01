@@ -48,7 +48,7 @@ export function isPatientLoginBlocked(patient: Patient | null | undefined): bool
 }
 
 export const PATIENT_LOGIN_BLOCKED_MESSAGE =
-  'This patient account has been disabled. Contact your clinic or administrator if you need access.';
+  'This patient account has been disabled. Contact your clinic or ElixClinix if you need access.';
 
 export function patientLoginBlockedMessage(patient: Patient): string {
   if (patient.deleted_at?.trim()) return PATIENT_LOGIN_BLOCKED_MESSAGE;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Button, Group, Modal, Select, Stack, Text, Textarea } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import ConsultationDurationSelect from '../../../components/ConsultationWorkflow/ConsultationDurationSelect';
 import { createClinicPseOpinionRequest } from '../../../lib/opinionRequests';
 import {
@@ -28,6 +29,7 @@ export default function ClinicPseCreateRequestModal({
   doctors,
   onCreated
 }: ClinicPseCreateRequestModalProps) {
+  const isCompactViewport = useMediaQuery('(max-width: 1024px)');
   const [patientId, setPatientId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -141,9 +143,12 @@ export default function ClinicPseCreateRequestModal({
       opened={opened}
       onClose={onClose}
       title='Add opinion request'
-      radius='md'
-      size='lg'
+      radius={isCompactViewport ? 0 : 'md'}
+      size={isCompactViewport ? '100%' : 'lg'}
+      fullScreen={isCompactViewport}
       centered
+      zIndex={400}
+      classNames={{ content: 'doctors-mgmt-modal requests-create-modal' }}
     >
       <form onSubmit={(e) => void handleSubmit(e)}>
         <Stack gap='md'>
@@ -168,7 +173,7 @@ export default function ClinicPseCreateRequestModal({
             </Text>
           ) : null}
 
-          <label className='elixhealth-field elixhealth-field--full'>
+          <div className='elixhealth-field elixhealth-field--full'>
             <FieldLabel required>Patient</FieldLabel>
             <Select
               data={patientOptions}
@@ -179,10 +184,11 @@ export default function ClinicPseCreateRequestModal({
               nothingFoundMessage='No patients'
               disabled={busy || patients.length === 0}
               radius='md'
+              comboboxProps={{ withinPortal: true, zIndex: 460 }}
             />
-          </label>
+          </div>
 
-          <label className='elixhealth-field elixhealth-field--full'>
+          <div className='elixhealth-field elixhealth-field--full'>
             <FieldLabel required>Doctor</FieldLabel>
             <Select
               data={doctorOptions}
@@ -193,8 +199,9 @@ export default function ClinicPseCreateRequestModal({
               nothingFoundMessage='No doctors'
               disabled={busy || doctors.length === 0}
               radius='md'
+              comboboxProps={{ withinPortal: true, zIndex: 460 }}
             />
-          </label>
+          </div>
 
           {selectedDoctor && durationTiers.length > 0 ? (
             <ConsultationDurationSelect
@@ -208,7 +215,7 @@ export default function ClinicPseCreateRequestModal({
             />
           ) : null}
 
-          <label className='elixhealth-field elixhealth-field--full'>
+          <div className='elixhealth-field elixhealth-field--full'>
             <FieldLabel>Chief complaint / notes</FieldLabel>
             <Textarea
               value={message}
@@ -218,7 +225,7 @@ export default function ClinicPseCreateRequestModal({
               disabled={busy}
               radius='md'
             />
-          </label>
+          </div>
 
           <Group justify='flex-end' gap='sm'>
             <Button variant='default' radius='md' onClick={onClose} disabled={busy} type='button'>

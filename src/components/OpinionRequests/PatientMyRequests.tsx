@@ -3,21 +3,26 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronRight,
   ClipboardList,
+  Home,
   Loader2,
   Sparkles
 } from 'lucide-react';
+import { useSupabase } from '../../context/SupabaseProvider';
 import PatientRequestDetail from './PatientRequestDetail';
 import PatientRequestListCard from './PatientRequestListCard';
 import OpinionRequestActivityPage from './OpinionRequestActivityPage';
 import RecommendationOpinionForm from './RecommendationOpinionForm';
 import SecondOpinionChoiceModal from './SecondOpinionChoiceModal';
+import HomeCareServicesModal from './HomeCareServicesModal';
 import {
+  createHomeCareOpinionRequest,
   fetchPatientOpinionRequestById,
   fetchPatientOpinionRequests,
   isPatientRequestCompleted,
-  isRecommendationOpinionRequest,
+  patientRequestTitle,
   subscribePatientOpinionRequestUpdates
 } from '../../lib/opinionRequests';
+import type { HomeCareServiceSelection } from '../../lib/homeCareServices';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
 import { consumeReturnOpinionRequestId } from '../../lib/navigation/returnOpinionRequest';
 import { openMedicalRecordByPath } from '../../lib/records';
@@ -65,6 +70,7 @@ export default function PatientMyRequests({
   onNavigate
 }: PatientMyRequestsProps) {
   const navigate = useNavigate();
+  const { patientProfile } = useSupabase();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get('id')?.trim() || null;
   const showActivity = searchParams.get('activity') === '1';
@@ -78,10 +84,15 @@ export default function PatientMyRequests({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [liveTick, setLiveTick] = useState(0);
   const [choiceModalOpen, setChoiceModalOpen] = useState(false);
+  const [homeCareModalOpen, setHomeCareModalOpen] = useState(false);
+  const [homeCareBusy, setHomeCareBusy] = useState(false);
+  const [homeCareError, setHomeCareError] = useState<string | null>(null);
   const [showRecommendationForm, setShowRecommendationForm] = useState(false);
   const [requestTab, setRequestTab] = useState<'upcoming' | 'completed'>('upcoming');
   const [detailChatMode, setDetailChatMode] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+
+  const canRequestHomeCare = Boolean(patientProfile?.clinic_id);
 
   const { completedRequests, upcomingRequests, showRequestTabs, visibleRequests } = useMemo(() => {
       const completed = requests.filter(isPatientRequestCompleted);
@@ -279,6 +290,44 @@ export default function PatientMyRequests({
     [navigate, onNavigate]
   );
 
+  const handleHomeCareContinue = useCallback(
+    async (selection: HomeCareServiceSelection) => {
+      if (!patientAuthUserId) {
+        setHomeCareError('Sign in as a patient to request home care services.');
+        return;
+      }
+      if (!patientProfile?.clinic_id) {
+        setHomeCareError('Home care services are available for clinic patients. Contact your clinic team.');
+        return;
+      }
+
+      setHomeCareBusy(true);
+      setHomeCareError(null);
+
+      const { data, error: createError } = await createHomeCareOpinionRequest({
+        patientAuthUserId,
+        patientName: patientProfile.full_name,
+        selection,
+        clinicId: patientProfile.clinic_id,
+        actor: 'patient'
+      });
+
+      setHomeCareBusy(false);
+
+      if (createError || !data) {
+        setHomeCareError(createError?.message ?? 'Could not submit home care request.');
+        return;
+      }
+
+      setHomeCareModalOpen(false);
+      setSuccessMessage('Home care request submitted. Your clinic team will follow up.');
+      setRequestTab('upcoming');
+      await load({ silent: true });
+      setSearchParams({ id: data.id });
+    },
+    [patientAuthUserId, patientProfile, load, setSearchParams]
+  );
+
   if (showRecommendationForm) {
     return (
       <div className='screen-grid doctors-screen patient-my-requests'>
@@ -323,9 +372,7 @@ export default function PatientMyRequests({
     }
 
     if (showActivity) {
-      const activityLabel = isRecommendationOpinionRequest(selectedRequest) && !selectedRequest.doctor_name
-        ? 'Doctor recommendations'
-        : (selectedRequest.doctor_name ?? 'Consultation request');
+      const activityLabel = patientRequestTitle(selectedRequest);
 
       return (
         <OpinionRequestActivityPage
@@ -391,6 +438,19 @@ export default function PatientMyRequests({
         }}
       />
 
+      <HomeCareServicesModal
+        open={homeCareModalOpen}
+        onClose={() => {
+          if (!homeCareBusy) {
+            setHomeCareModalOpen(false);
+            setHomeCareError(null);
+          }
+        }}
+        busy={homeCareBusy}
+        error={homeCareError}
+        onContinue={handleHomeCareContinue}
+      />
+
       <div className='pmr-page'>
         <div className='pmr-header-panel'>
           <section className='pmr-hero-banner' aria-labelledby='pmr-hero-heading'>
@@ -414,11 +474,27 @@ export default function PatientMyRequests({
           </section>
 
           {canLoad ? (
-            <button type='button' className='pmr-cta-btn' onClick={() => setChoiceModalOpen(true)}>
-              <Sparkles size={18} strokeWidth={2} aria-hidden />
-              <span>Get a doctor consultation</span>
-              <ChevronRight size={18} className='pmr-cta-btn__chevron' aria-hidden />
-            </button>
+            <div className='pmr-cta-row'>
+              <button type='button' className='pmr-cta-btn' onClick={() => setChoiceModalOpen(true)}>
+                <Sparkles size={18} strokeWidth={2} aria-hidden />
+                <span>Get a doctor consultation</span>
+                <ChevronRight size={18} className='pmr-cta-btn__chevron' aria-hidden />
+              </button>
+              {canRequestHomeCare ? (
+                <button
+                  type='button'
+                  className='pmr-cta-btn pmr-cta-btn--secondary'
+                  onClick={() => {
+                    setHomeCareError(null);
+                    setHomeCareModalOpen(true);
+                  }}
+                >
+                  <Home size={18} strokeWidth={2} aria-hidden />
+                  <span>Get Homecare Services</span>
+                  <ChevronRight size={18} className='pmr-cta-btn__chevron' aria-hidden />
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
           {!configured ? (

@@ -20,6 +20,7 @@ import {
 } from '../../../lib/consultationCurrency';
 import {
   canPseSendPaymentLink,
+  isPseHomeCareWizard,
   isScheduleConfirmed
 } from '../../../lib/consultationWizard';
 import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
@@ -36,12 +37,17 @@ type PsePaymentStepPanelProps = {
   paymentReference: string;
   busy: boolean;
   readOnly?: boolean;
+  /** Editable cash/manual amount for home care (when no link amount). */
+  cashAmountInput?: string;
+  onCashAmountInputChange?: (value: string) => void;
   onPaymentLinkChange: (value: string) => void;
   onPaymentCurrencyChange: (value: ConsultationCurrency) => void;
   onPaymentReferenceChange: (value: string) => void;
   onSendInvoiceAndPaymentLink: () => void;
   onMarkPending: () => void;
   onConfirmPayment: () => void;
+  /** Confirm cash received at clinic (home care and walk-in payments). */
+  onConfirmCashPayment?: () => void;
   onReleaseToDoctor: () => void;
 };
 
@@ -74,26 +80,42 @@ export default function PsePaymentStepPanel({
   paymentReference,
   busy,
   readOnly = false,
+  cashAmountInput,
+  onCashAmountInputChange,
   onPaymentLinkChange,
   onPaymentCurrencyChange,
   onPaymentReferenceChange,
   onSendInvoiceAndPaymentLink,
   onMarkPending,
   onConfirmPayment,
+  onConfirmCashPayment,
   onReleaseToDoctor
 }: PsePaymentStepPanelProps) {
+  const isHomeCare = isPseHomeCareWizard(request);
   const canSend = canPseSendPaymentLink(request);
   const linkShared = Boolean(request.payment_link?.trim());
   const invoiceReady = Boolean(request.invoice_pdf_storage_path?.trim());
   const linkAmount = parseAmountFromPaymentLink(paymentLink);
+  const manualCashAmount = (() => {
+    if (!cashAmountInput?.trim()) return null;
+    const parsed = Number(cashAmountInput);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  })();
   const effectiveAmount =
     linkAmount ??
+    (request.payment_amount != null && Number.isFinite(Number(request.payment_amount))
+      ? Number(request.payment_amount)
+      : null) ??
     (request.invoice_total != null && Number.isFinite(Number(request.invoice_total))
       ? Number(request.invoice_total)
       : null) ??
-    paymentAmount;
+    paymentAmount ??
+    manualCashAmount;
   const canSubmitToPatient =
-    canSend && effectiveAmount != null && Boolean(paymentLink.trim());
+    canSend &&
+    Boolean(paymentLink.trim()) &&
+    (isHomeCare || effectiveAmount != null);
+  const canConfirmPayment = effectiveAmount != null && Number.isFinite(effectiveAmount) && effectiveAmount > 0;
   const formattedAmount =
     effectiveAmount != null
       ? formatConsultationFee(effectiveAmount, normalizeConsultationCurrency(paymentCurrency))
@@ -109,7 +131,11 @@ export default function PsePaymentStepPanel({
 
   return (
     <Stack gap='md' className='pse-payment-panel'>
-      {!canSend ? (
+      {isHomeCare ? (
+        <Alert color='teal' radius='md' variant='light' title='Step 2 — Home care payment'>
+          Send a payment link online, or confirm cash received at the clinic.
+        </Alert>
+      ) : !canSend ? (
         <Alert color='orange' radius='md' title='Schedule not confirmed'>
           Confirm availability with the patient on Recommend doctors and wait for them to confirm
           the schedule.
@@ -129,7 +155,18 @@ export default function PsePaymentStepPanel({
         </Alert>
       )}
 
-      {request.consultation_duration_minutes && formattedAmount ? (
+      {isHomeCare ? (
+        formattedAmount ? (
+          <Alert color='blue' radius='md' variant='light' title='Home care amount'>
+            {formattedAmount}. You can edit the payment link amount if needed.
+          </Alert>
+        ) : (
+          <Alert color='orange' radius='md' variant='light' title='Set payment amount'>
+            Add the amount in the payment link (for example{' '}
+            <code>https://elixclinix.com/pay.html?amount=500</code>).
+          </Alert>
+        )
+      ) : request.consultation_duration_minutes && formattedAmount ? (
         <Alert color='blue' radius='md' variant='light' title='Doctor consultation fee'>
           {formatDurationMinutesLabel(request.consultation_duration_minutes)} · {formattedAmount} (auto-filled
           from the selected doctor&apos;s quote).
@@ -172,14 +209,28 @@ export default function PsePaymentStepPanel({
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <Stack gap={4}>
-              <Text size='sm' fw={500}>
-                Amount
-              </Text>
-              <Text size='sm' fw={600}>
-                {formattedAmount ?? '—'}
-              </Text>
-            </Stack>
+            {isHomeCare && onCashAmountInputChange ? (
+              <TextInput
+                label='Amount'
+                description='Required for cash or when link has no amount'
+                type='number'
+                min={0}
+                step='0.01'
+                placeholder='e.g. 500'
+                value={cashAmountInput ?? ''}
+                readOnly={readOnly}
+                onChange={(e) => onCashAmountInputChange(e.currentTarget.value)}
+              />
+            ) : (
+              <Stack gap={4}>
+                <Text size='sm' fw={500}>
+                  Amount
+                </Text>
+                <Text size='sm' fw={600}>
+                  {formattedAmount ?? '—'}
+                </Text>
+              </Stack>
+            )}
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
             <Select
@@ -200,7 +251,11 @@ export default function PsePaymentStepPanel({
           <Grid.Col span={{ base: 12, sm: 8 }}>
             <TextInput
               label='Payment reference'
-              placeholder='Receipt / transaction ID (after patient pays)'
+              placeholder={
+                isHomeCare
+                  ? 'Receipt / transaction ID, or leave blank for cash'
+                  : 'Receipt / transaction ID (after patient pays)'
+              }
               value={paymentReference}
               readOnly={readOnly}
               onChange={(e) => onPaymentReferenceChange(e.currentTarget.value)}
@@ -218,20 +273,47 @@ export default function PsePaymentStepPanel({
               disabled={!canSubmitToPatient}
               onClick={onSendInvoiceAndPaymentLink}
             >
-              {linkShared ? 'Regenerate invoice & update link' : 'Generate invoice & send to patient'}
+              {isHomeCare
+                ? linkShared
+                  ? 'Update payment link'
+                  : 'Send payment link to patient'
+                : linkShared
+                  ? 'Regenerate invoice & update link'
+                  : 'Generate invoice & send to patient'}
             </Button>
+            {!isHomeCare ? (
+              <Button
+                variant='default'
+                radius='md'
+                loading={busy}
+                disabled={!canSend || effectiveAmount == null}
+                onClick={onMarkPending}
+              >
+                Mark pending (no link)
+              </Button>
+            ) : null}
             <Button
-              variant='default'
+              variant='light'
+              color='cyan'
               radius='md'
               loading={busy}
-              disabled={!canSend || effectiveAmount == null}
-              onClick={onMarkPending}
+              disabled={!canConfirmPayment || request.payment_status === 'paid'}
+              onClick={onConfirmPayment}
             >
-              Mark pending (no link)
-            </Button>
-            <Button variant='light' color='cyan' radius='md' loading={busy} onClick={onConfirmPayment}>
               Confirm payment received
             </Button>
+            {onConfirmCashPayment ? (
+              <Button
+                variant='light'
+                color='teal'
+                radius='md'
+                loading={busy}
+                disabled={!canConfirmPayment || request.payment_status === 'paid'}
+                onClick={onConfirmCashPayment}
+              >
+                Received cash
+              </Button>
+            ) : null}
           </Group>
         ) : null}
       </Paper>
@@ -284,7 +366,7 @@ export default function PsePaymentStepPanel({
 
       <PaymentProofReview request={request} />
 
-      {request.payment_status === 'paid' && !readOnly ? (
+      {request.payment_status === 'paid' && !readOnly && !isHomeCare ? (
         <Button variant='light' color='cyan' radius='md' loading={busy} onClick={onReleaseToDoctor}>
           Release to doctor
         </Button>

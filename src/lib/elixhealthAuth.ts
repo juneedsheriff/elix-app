@@ -84,7 +84,7 @@ export async function elixhealthSignIn(email: string, password: string) {
     await supabase.auth.signOut();
     return {
       error: {
-        message: 'Doctor login has been disabled. Contact your administrator.',
+        message: 'Doctor login has been disabled. Contact ElixClinix.',
         name: 'AuthError',
         status: 403
       } as AuthError,

@@ -53,6 +53,7 @@ export default function RequestsFilterDrawer({
       position='right'
       size='md'
       radius='md'
+      zIndex={400}
       classNames={{ content: 'doctors-mgmt-drawer' }}
     >
       <Stack gap='lg'>

@@ -21,6 +21,7 @@ export default function DoctorIncomingRequests({
       configured={configured}
       onNavigate={onNavigate}
       doctorReturnScreen='case-review'
+      requestKind='consultations'
       title='Incoming requests'
       subtitle='Doctor consultation requests from patients assigned to you'
       signInHint='Sign in as a doctor to view incoming requests.'

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconDownload, IconFilter, IconPlus, IconRefresh } from '@tabler/icons-react';
+import { IconDownload, IconFilter, IconHomeHeart, IconPlus, IconRefresh } from '@tabler/icons-react';
 
 type RequestsPageHeaderProps = {
   title: string;
@@ -11,6 +11,7 @@ type RequestsPageHeaderProps = {
   refreshing?: boolean;
   canAddRequest?: boolean;
   onAddRequest?: () => void;
+  onAddHomeCareRequest?: () => void;
 };
 
 function RequestsPageHeader({
@@ -21,7 +22,8 @@ function RequestsPageHeader({
   onRefresh,
   refreshing,
   canAddRequest,
-  onAddRequest
+  onAddRequest,
+  onAddHomeCareRequest
 }: RequestsPageHeaderProps) {
   return (
     <header className='doctors-mgmt-header'>
@@ -65,6 +67,18 @@ function RequestsPageHeader({
         >
           Refresh
         </Button>
+
+        {canAddRequest && onAddHomeCareRequest ? (
+          <Button
+            variant='light'
+            color='teal'
+            radius='md'
+            leftSection={<IconHomeHeart size={18} />}
+            onClick={onAddHomeCareRequest}
+          >
+            Get Homecare Services
+          </Button>
+        ) : null}
 
         {canAddRequest && onAddRequest ? (
           <Button

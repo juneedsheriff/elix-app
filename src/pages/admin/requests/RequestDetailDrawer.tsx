@@ -8,6 +8,7 @@ import {
   Text,
   ThemeIcon
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 
 import {
 
@@ -29,7 +30,7 @@ import {
 
 } from '@tabler/icons-react';
 
-import { hasPseCoordinationStarted, isPendingAdminAssignment, staffRequestStatusLabel } from '../../../lib/opinionRequests';
+import { hasPseCoordinationStarted, staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import OpinionRequestActivityPage from '../../../components/OpinionRequests/OpinionRequestActivityPage';
 import OpinionRequestAuditLink from '../../../components/OpinionRequests/OpinionRequestAuditLink';
 import RequestChatPanel from '../../../components/OpinionRequests/RequestChatPanel';
@@ -136,6 +137,7 @@ export default function RequestDetailDrawer({
 
   const [showActivity, setShowActivity] = useState(false);
   const [showRequestChatPanel, setShowRequestChatPanel] = useState(false);
+  const isCompactViewport = useMediaQuery('(max-width: 1024px)');
 
   useEffect(() => {
     setShowActivity(false);
@@ -155,7 +157,6 @@ export default function RequestDetailDrawer({
 
 
   const isClosed = request.status === 'closed';
-  const isClinicRequest = Boolean(request.clinic_id);
   const pseCoordinationStarted =
     hasPseCoordinationStarted(request) || (isAdmin && coordinationUnlocked);
   const adminViewer = isAdmin && !staffIsPse;
@@ -166,9 +167,15 @@ export default function RequestDetailDrawer({
         (staff.auth_user_id && request.assigned_to === staff.auth_user_id))
   );
 
-  const canAssign = isAdmin && isPendingAdminAssignment(request);
+  const canAssign =
+    isAdmin &&
+    !isClosed &&
+    !request.clinic_id &&
+    request.status === 'submitted' &&
+    !request.assigned_to;
 
-  const showAssignSection = canAssign && !isClosed && !isClinicRequest;
+  // Admin assigns only global (non-clinic) requests. Isolated clinic requests are claimed by clinic PSE.
+  const showAssignSection = canAssign;
 
   // Clinic PSE can open unassigned clinic-queue rows (RLS). Do not gate on clinic_id in the
   // client model — it can be missing from older selects even when the row is clinic-scoped.
@@ -188,8 +195,13 @@ export default function RequestDetailDrawer({
 
     null;
 
+  const assignableExecutives = (() => {
+    // Global requests only — clinic requests never show this section for admin.
+    return executives.filter((executive) => executive.role === 'patient_service_executive');
+  })();
+
   const executiveSelectData = (() => {
-    const options = executives.map((executive) => ({
+    const options = assignableExecutives.map((executive) => ({
       value: executive.id,
       label: executive.full_name
     }));
@@ -222,13 +234,17 @@ export default function RequestDetailDrawer({
         (Boolean(request.assigned_to) || hasPseCoordinationStarted(request))));
 
   const adminWorkflowView =
-    adminViewer && !isClosed && (isClinicRequest || pseCoordinationStarted);
+    adminViewer && !isClosed && (Boolean(request.assigned_to) || Boolean(request.clinic_id));
 
   const needsAssignmentForAdmin =
-    adminViewer && !isClinicRequest && !pseCoordinationStarted && !isClosed;
+    adminViewer &&
+    !isClosed &&
+    !request.clinic_id &&
+    request.status === 'submitted' &&
+    !request.assigned_to;
 
   const adminViewingAssigned =
-    adminViewer && !isClinicRequest && pseCoordinationStarted && !isClosed;
+    adminViewer && !isClosed && Boolean(request.assigned_to);
 
   const showWorkflowWizard = canCoordinate || adminWorkflowView || canViewClosedWorkflow;
   const showRequestChat = staffIsPse && (showWorkflowWizard || hasPseCoordinationStarted(request));
@@ -258,11 +274,13 @@ export default function RequestDetailDrawer({
 
       position='right'
 
-      size='60%'
+      size={isCompactViewport ? '100%' : '60%'}
 
-      radius='md'
+      radius={isCompactViewport ? 0 : 'md'}
 
       padding={0}
+
+      zIndex={400}
 
       classNames={{
 
@@ -336,23 +354,23 @@ export default function RequestDetailDrawer({
 
             </div>
 
-            <Badge
-              variant='light'
-              color={statusColor}
-              radius='xl'
-              size='sm'
-              className={`request-detail-drawer__status doctors-mgmt-status request-detail-drawer__status--${statusColor}`}
-            >
+            <div className='request-detail-drawer__hero-actions'>
+              <Badge
+                variant='light'
+                color={statusColor}
+                radius='xl'
+                size='sm'
+                className={`request-detail-drawer__status doctors-mgmt-status request-detail-drawer__status--${statusColor}`}
+              >
+                {staffRequestStatusLabel(request)}
+              </Badge>
 
-              {staffRequestStatusLabel(request)}
-
-            </Badge>
-
-            <OpinionRequestAuditLink
-              buttonClassName='request-detail-drawer__audit-btn'
-              buttonLabel='Activity history'
-              onOpen={() => setShowActivity(true)}
-            />
+              <OpinionRequestAuditLink
+                buttonClassName='request-detail-drawer__audit-btn'
+                buttonLabel='Activity history'
+                onOpen={() => setShowActivity(true)}
+              />
+            </div>
 
           </div>
 
@@ -374,7 +392,7 @@ export default function RequestDetailDrawer({
 
               <Text size='sm'>
                 Assigned to {assignedExecutiveName ?? 'a Patient Service Executive'}. Coordination
-                steps are read-only for administrators.
+                steps are read-only for ElixClinix.
               </Text>
 
             </div>
@@ -397,7 +415,7 @@ export default function RequestDetailDrawer({
               requestId={request.id}
               requestLabel={request.patient_name ?? 'Patient request'}
               backLabel='Back to coordination'
-              subtitle='Actions by patient, PSE, doctor, and admin on this request.'
+              subtitle='Actions by patient, PSE, doctor, and ElixClinix on this request.'
               onBack={() => setShowActivity(false)}
             />
           ) : (
@@ -616,7 +634,13 @@ export default function RequestDetailDrawer({
               </div>
 
               <Select
-                placeholder='Select executive…'
+                placeholder={
+                  assignableExecutives.length === 0
+                    ? request.clinic_id
+                      ? 'No clinic PSE available…'
+                      : 'No PSE available…'
+                    : 'Select executive…'
+                }
                 data={executiveSelectData}
                 value={assignSelectValue}
                 onChange={(value) => onAssigneeChange(value ?? '')}
@@ -625,9 +649,17 @@ export default function RequestDetailDrawer({
                 allowDeselect={false}
                 radius='md'
                 size='md'
-                disabled={Boolean(request.assigned_to) || busy}
+                disabled={Boolean(request.assigned_to) || busy || assignableExecutives.length === 0}
+                comboboxProps={{ withinPortal: true, zIndex: 460 }}
                 classNames={{ input: 'request-detail-drawer__select-input' }}
               />
+
+              {canAssign && assignableExecutives.length === 0 ? (
+                <Text size='sm' c='orange'>
+                  Add an active Global Patient Service Executive on the Staff page, then assign.
+                  Clinic PSE accounts are not listed for global requests.
+                </Text>
+              ) : null}
 
               {canAssign ? (
 
@@ -641,7 +673,7 @@ export default function RequestDetailDrawer({
 
                   className='doctors-mgmt-header__primary request-detail-drawer__assign-btn'
 
-                  disabled={busy || !assignSelectValue || executives.length === 0}
+                  disabled={busy || !assignSelectValue || assignableExecutives.length === 0}
 
                   loading={busy}
 

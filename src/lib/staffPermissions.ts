@@ -19,7 +19,7 @@ export function isAnyPatientServiceExecutive(admin: Pick<Admin, 'role'>): boolea
 export function adminRoleLabel(role: AdminRole): string {
   if (role === 'patient_service_executive') return 'Patient Service Executive';
   if (role === 'patient_service_executive_clinic') return 'Patient Service Executive (clinic)';
-  return 'Administrator';
+  return 'ElixClinix';
 }
 
 export type ElixHealthNavId = 'overview' | 'doctors' | 'patients' | 'requests' | 'staff' | 'profile';

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Anchor, Button, Stack, Text, TextInput } from '@mantine/core';
+import { Anchor, Button, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { DatePickerInput } from '@mantine/dates';
+import { useMediaQuery } from '@mantine/hooks';
+import dayjs from 'dayjs';
+import { IconCalendar } from '@tabler/icons-react';
 import ConsultationSummaryPdfView from '../../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
 import ConsultationWizardAccordion from '../../../components/ConsultationWorkflow/ConsultationWizardAccordion';
 import {
@@ -11,12 +15,14 @@ import {
   canPseSendPaymentLink,
   hasConsultationSummary,
   isConsultationNotesComplete,
+  isPseHomeCareWizard,
   readPseWizardStoredStep,
   resolvePsePaymentQuote,
   resolveWizardStepOnUpdate,
   writePseWizardStoredStep,
   type WizardProgressContext
 } from '../../../lib/consultationWizard';
+import { homeCareServicesFromRequest } from '../../../lib/homeCareServices';
 import {
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
@@ -29,6 +35,8 @@ import {
   pseReleaseToDoctor,
   pseScheduleAppointment,
   pseSendInvoiceAndPaymentLink,
+  pseSendHomeCarePaymentLink,
+  pseCompleteHomeCareRequest,
   pseMarkPaymentPendingNoLink,
   canPseManageRequestRecords,
   pseDeleteRequestRecord,
@@ -130,6 +138,7 @@ export default function RequestWorkflowWizard({
   onError,
   onSuccess
 }: RequestWorkflowWizardProps) {
+  const isCompactViewport = useMediaQuery('(max-width: 1024px)');
   const initialProgressCtx: WizardProgressContext = useMemo(
     () => ({
       request,
@@ -155,7 +164,11 @@ export default function RequestWorkflowWizard({
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLink, setPaymentLink] = useState('');
   const [paymentCurrency, setPaymentCurrency] = useState<ConsultationCurrency>(() =>
-    normalizeConsultationCurrency(request.payment_currency ?? request.consultation_currency)
+    normalizeConsultationCurrency(
+      request.payment_currency ??
+        request.consultation_currency ??
+        (isPseHomeCareWizard(request) ? 'INR' : 'USD')
+    )
   );
   const paymentCurrencyTouchedRef = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -163,6 +176,26 @@ export default function RequestWorkflowWizard({
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showUploadRecords, setShowUploadRecords] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
+  const [homeCareRemarks, setHomeCareRemarks] = useState(request.home_care_remarks ?? '');
+  const [homeCareFollowupDate, setHomeCareFollowupDate] = useState(
+    request.home_care_followup_date?.slice(0, 10) ?? ''
+  );
+  const [homeCareCashAmount, setHomeCareCashAmount] = useState(() =>
+    request.payment_amount != null && Number.isFinite(Number(request.payment_amount))
+      ? String(request.payment_amount)
+      : ''
+  );
+
+  useEffect(() => {
+    setHomeCareRemarks(request.home_care_remarks ?? '');
+    setHomeCareFollowupDate(request.home_care_followup_date?.slice(0, 10) ?? '');
+  }, [request.id, request.home_care_remarks, request.home_care_followup_date]);
+
+  useEffect(() => {
+    if (request.payment_amount != null && Number.isFinite(Number(request.payment_amount))) {
+      setHomeCareCashAmount(String(request.payment_amount));
+    }
+  }, [request.id, request.payment_amount]);
 
   const loadMeta = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -197,6 +230,7 @@ export default function RequestWorkflowWizard({
     [request, recommendations.length, summary]
   );
 
+  const isHomeCare = isPseHomeCareWizard(request);
   const isClosedRequest = request.status === 'closed';
   const isReadOnlyView = !canCoordinate;
 
@@ -266,10 +300,13 @@ export default function RequestWorkflowWizard({
     paymentCurrencyTouchedRef.current = false;
     setPaymentCurrency(
       normalizeConsultationCurrency(
-        request.payment_currency ?? paymentQuote.currency ?? request.consultation_currency
+        request.payment_currency ??
+          paymentQuote.currency ??
+          request.consultation_currency ??
+          (isHomeCare ? 'INR' : 'USD')
       )
     );
-  }, [request.id]);
+  }, [request.id, isHomeCare]);
 
   useEffect(() => {
     if (request.payment_currency) {
@@ -280,8 +317,10 @@ export default function RequestWorkflowWizard({
 
   useEffect(() => {
     if (request.payment_currency || paymentCurrencyTouchedRef.current) return;
-    setPaymentCurrency(normalizeConsultationCurrency(paymentQuote.currency));
-  }, [paymentQuote.currency, request.payment_currency]);
+    setPaymentCurrency(
+      normalizeConsultationCurrency(paymentQuote.currency ?? (isHomeCare ? 'INR' : 'USD'))
+    );
+  }, [paymentQuote.currency, request.payment_currency, isHomeCare]);
 
   const handlePaymentLinkChange = (value: string) => {
     setPaymentLink(value);
@@ -445,12 +484,39 @@ export default function RequestWorkflowWizard({
     const linkAmount = parseAmountFromPaymentLink(paymentLink);
     const amount = linkAmount ?? quoteAmount;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
-      onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
+      onError(
+        isHomeCare
+          ? 'Add a valid amount to the payment link (for example …/pay.html?amount=500).'
+          : 'Consultation fee is missing. Confirm the patient selected a doctor and session length.'
+      );
       return;
     }
 
     const linkToStore = withPaymentLinkAmount(paymentLink, amount);
-    const currency = normalizeConsultationCurrency(paymentCurrency);
+    const currency = normalizeConsultationCurrency(
+      paymentCurrency ?? (isHomeCare ? 'INR' : undefined)
+    );
+
+    if (isHomeCare) {
+      setBusy(true);
+      const { data, error } = await pseSendHomeCarePaymentLink(request.id, {
+        paymentLink: linkToStore,
+        amount,
+        currency
+      });
+      setBusy(false);
+      if (error) {
+        onError(error.message);
+        return;
+      }
+      if (data) {
+        onRequestPatch?.(data as Partial<OpinionRequest> & { id: string });
+        setPaymentLink(data.payment_link?.trim() || linkToStore);
+      }
+      onSuccess('Payment link sent to the patient.');
+      onUpdated();
+      return;
+    }
 
     setBusy(true);
     const doctor = resolveInvoiceDoctor(request, doctors);
@@ -493,7 +559,9 @@ export default function RequestWorkflowWizard({
       onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
       return;
     }
-    const currency = normalizeConsultationCurrency(paymentCurrency);
+    const currency = normalizeConsultationCurrency(
+      paymentCurrency ?? (isHomeCare ? 'INR' : undefined)
+    );
     const doctor = resolveInvoiceDoctor(request, doctors);
     if (!doctor) {
       onError('Could not load the selected doctor profile. Refresh and try again.');
@@ -519,23 +587,73 @@ export default function RequestWorkflowWizard({
     }
   };
 
-  const handleConfirmPayment = async () => {
+  const handleConfirmPayment = async (method: 'online' | 'cash' = 'online') => {
+    const linkAmount = (() => {
+      const trimmed = paymentLink.trim();
+      if (!trimmed) return null;
+      try {
+        const url = new URL(trimmed);
+        const raw = url.searchParams.get('amount');
+        if (raw != null && raw.trim()) {
+          const parsed = Number(raw);
+          if (Number.isFinite(parsed) && parsed > 0) return parsed;
+        }
+      } catch {
+        /* ignore */
+      }
+      return null;
+    })();
+
+    const manualAmount = (() => {
+      const parsed = Number(homeCareCashAmount);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    })();
+
+    const chargeAmount =
+      (request.payment_amount != null && Number.isFinite(Number(request.payment_amount))
+        ? Number(request.payment_amount)
+        : null) ??
+      (request.invoice_total != null && Number.isFinite(Number(request.invoice_total))
+        ? Number(request.invoice_total)
+        : null) ??
+      linkAmount ??
+      (isHomeCare ? manualAmount : null) ??
+      paymentQuote.amount ??
+      payableAmountForLink;
+
+    if (chargeAmount == null || !Number.isFinite(chargeAmount) || chargeAmount <= 0) {
+      onError(
+        isHomeCare
+          ? 'Enter the amount received (or include amount= in the payment link) before confirming payment.'
+          : 'Consultation fee is missing. Confirm the patient selected a doctor and session length.'
+      );
+      return;
+    }
+
+    const reference =
+      method === 'cash'
+        ? paymentReference.trim() || 'Cash received'
+        : paymentReference.trim() || null;
+
     setBusy(true);
-    const { amount } = paymentQuote;
-    const chargeAmount = request.invoice_total ?? amount;
     const { error } = await pseConfirmPayment(request.id, {
       amount: chargeAmount,
-      currency: normalizeConsultationCurrency(paymentCurrency),
-      reference: paymentReference
+      currency: normalizeConsultationCurrency(
+        paymentCurrency ??
+          request.payment_currency ??
+          request.consultation_currency ??
+          (isHomeCare ? 'INR' : 'USD')
+      ),
+      reference
     });
     setBusy(false);
     if (error) {
       onError(error.message);
       return;
     }
-    onSuccess('Payment confirmed.');
+    onSuccess(method === 'cash' ? 'Cash payment confirmed.' : 'Payment confirmed.');
     onUpdated();
-    setExpandedStepTracked(5);
+    setExpandedStepTracked(isHomeCare ? 2 : 5);
   };
 
   const handleReleaseToDoctor = async () => {
@@ -554,9 +672,35 @@ export default function RequestWorkflowWizard({
     onUpdated();
   };
 
+  const homeCareAlreadyCompleted =
+    request.consultation_stage === 'completed' || request.status === 'closed';
+
+  const completeHomeCareRequest = async () => {
+    setBusy(true);
+    const { data, error } = await pseCompleteHomeCareRequest(request.id, {
+      remarks: homeCareRemarks,
+      followupDate: homeCareFollowupDate || null
+    });
+    setBusy(false);
+    if (error) {
+      onError(error.message);
+      return;
+    }
+    onRequestPatch?.({
+      id: request.id,
+      status: data?.status ?? 'closed',
+      consultation_stage: data?.consultation_stage ?? 'completed',
+      home_care_remarks: data?.home_care_remarks ?? null,
+      home_care_followup_date: data?.home_care_followup_date ?? null
+    });
+    onSuccess('Home care request completed.');
+    onUpdated();
+  };
+
   const renderStepContent = (index: number) => {
-    switch (index) {
-      case 0:
+    if (isHomeCare) {
+      if (index === 0) {
+        const services = homeCareServicesFromRequest(request);
         return (
           <Stack gap='sm' className='request-workflow-step'>
             <Text fw={600} size='sm'>
@@ -564,12 +708,191 @@ export default function RequestWorkflowWizard({
             </Text>
             <Text size='sm'>
               <Text span fw={600}>
-                {request.doctor_name ? 'Doctor requested: ' : 'Specialty requested: '}
+                Service type:{' '}
               </Text>
-              {request.doctor_name ?? request.requested_specialty ?? '—'}
-              {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
+              Home Care
             </Text>
-            {request.consultation_duration_minutes && request.consultation_fee_usd != null ? (
+            {services.length > 0 ? (
+              <Stack gap={4}>
+                <Text size='sm' fw={600}>
+                  Requested services
+                </Text>
+                {services.map((service) => (
+                  <Text key={service} size='sm'>
+                    • {service}
+                  </Text>
+                ))}
+              </Stack>
+            ) : null}
+            <Text size='sm' c='dimmed'>
+              Submitted {formatRequestDate(request.created_at)}
+            </Text>
+            <Text size='sm' fw={600} mt='xs'>
+              Patient message
+            </Text>
+            <Text size='sm' style={{ whiteSpace: 'pre-wrap' }}>
+              {request.message}
+            </Text>
+            {request.assigned_to_name ? (
+              <Text size='sm'>
+                <Text span fw={600}>
+                  Assigned to:{' '}
+                </Text>
+                {request.assigned_to_name}
+              </Text>
+            ) : null}
+            {canCoordinate ? (
+              <Button variant='light' color='cyan' radius='md' onClick={() => goToStep(1)}>
+                Continue to payment →
+              </Button>
+            ) : null}
+          </Stack>
+        );
+      }
+
+      if (index === 1) {
+        // Payment step
+        return (
+          <PsePaymentStepPanel
+            request={request}
+            paymentLink={paymentLink}
+            paymentAmount={
+              request.payment_amount != null && Number.isFinite(Number(request.payment_amount))
+                ? Number(request.payment_amount)
+                : payableAmountForLink
+            }
+            paymentCurrency={paymentCurrency}
+            paymentReference={paymentReference}
+            paymentLinkPlaceholder={autoPaymentLink || ELIX_EXTERNAL_PAYMENT_BASE_URL}
+            busy={busy}
+            readOnly={!canCoordinate}
+            cashAmountInput={homeCareCashAmount}
+            onCashAmountInputChange={setHomeCareCashAmount}
+            onPaymentLinkChange={handlePaymentLinkChange}
+            onPaymentCurrencyChange={handlePaymentCurrencyChange}
+            onPaymentReferenceChange={setPaymentReference}
+            onSendInvoiceAndPaymentLink={() => void handleSendInvoiceAndPaymentLink()}
+            onMarkPending={() => void handlePaymentPending()}
+            onConfirmPayment={() => void handleConfirmPayment('online')}
+            onConfirmCashPayment={() => void handleConfirmPayment('cash')}
+            onReleaseToDoctor={() => void handleReleaseToDoctor()}
+          />
+        );
+      }
+
+      // Remarks & Complete Request (remarks + follow-up are optional)
+      return (
+        <Stack gap='sm' className='request-workflow-step'>
+          <Text fw={600} size='sm'>
+            Step 3 — Remarks & Complete Request
+          </Text>
+          <Text size='sm' c='dimmed'>
+            Add optional remarks for the patient. You can complete the request with or without
+            remarks. A follow-up date is not required.
+          </Text>
+          {canCoordinate && !homeCareAlreadyCompleted ? (
+            <>
+              <Textarea
+                label='Remarks (Optional)'
+                placeholder='Add remarks for the patient...'
+                minRows={3}
+                radius='md'
+                value={homeCareRemarks}
+                onChange={(event) => setHomeCareRemarks(event.currentTarget.value)}
+                disabled={busy}
+              />
+              <DatePickerInput
+                label='Follow-up Date (Optional)'
+                placeholder='dd-mm-yyyy'
+                clearable
+                radius='md'
+                valueFormat='DD-MM-YYYY'
+                value={homeCareFollowupDate ? dayjs(homeCareFollowupDate).toDate() : null}
+                onChange={(date) =>
+                  setHomeCareFollowupDate(date ? dayjs(date).format('YYYY-MM-DD') : '')
+                }
+                disabled={busy}
+                dropdownType={isCompactViewport ? 'modal' : 'popover'}
+                leftSection={<IconCalendar size={16} stroke={1.75} />}
+                popoverProps={{ withinPortal: true, zIndex: 400 }}
+              />
+              <Button
+                color='cyan'
+                radius='md'
+                loading={busy}
+                onClick={() => void completeHomeCareRequest()}
+              >
+                Complete Request
+              </Button>
+            </>
+          ) : (
+            <Stack gap={4}>
+              {homeCareAlreadyCompleted ? (
+                <Text size='sm' c='teal' fw={600}>
+                  Request completed
+                </Text>
+              ) : null}
+              <Text size='sm'>
+                <Text span fw={600}>
+                  Remarks:{' '}
+                </Text>
+                {request.home_care_remarks?.trim() || '—'}
+              </Text>
+              <Text size='sm'>
+                <Text span fw={600}>
+                  Follow-up date:{' '}
+                </Text>
+                {request.home_care_followup_date
+                  ? dayjs(request.home_care_followup_date).format('DD-MM-YYYY')
+                  : '—'}
+              </Text>
+            </Stack>
+          )}
+        </Stack>
+      );
+    }
+
+    const contentIndex = index;
+
+    switch (contentIndex) {
+      case 0: {
+        const services = homeCareServicesFromRequest(request);
+        return (
+          <Stack gap='sm' className='request-workflow-step'>
+            <Text fw={600} size='sm'>
+              Step 1 — Request from patient
+            </Text>
+            {isHomeCare ? (
+              <>
+                <Text size='sm'>
+                  <Text span fw={600}>
+                    Service type:{' '}
+                  </Text>
+                  Home Care
+                </Text>
+                {services.length > 0 ? (
+                  <Stack gap={4}>
+                    <Text size='sm' fw={600}>
+                      Requested services
+                    </Text>
+                    {services.map((service) => (
+                      <Text key={service} size='sm'>
+                        • {service}
+                      </Text>
+                    ))}
+                  </Stack>
+                ) : null}
+              </>
+            ) : (
+              <Text size='sm'>
+                <Text span fw={600}>
+                  {request.doctor_name ? 'Doctor requested: ' : 'Specialty requested: '}
+                </Text>
+                {request.doctor_name ?? request.requested_specialty ?? '—'}
+                {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
+              </Text>
+            )}
+            {!isHomeCare && request.consultation_duration_minutes && request.consultation_fee_usd != null ? (
               <Text size='sm'>
                 <Text span fw={600}>
                   Consultation quote:{' '}
@@ -587,7 +910,9 @@ export default function RequestWorkflowWizard({
             <Text size='sm' fw={600} mt='xs'>
               Patient message
             </Text>
-            <Text size='sm'>{request.message}</Text>
+            <Text size='sm' style={{ whiteSpace: 'pre-wrap' }}>
+              {request.message}
+            </Text>
             {request.assigned_to_name ? (
               <Text size='sm'>
                 <Text span fw={600}>
@@ -603,6 +928,7 @@ export default function RequestWorkflowWizard({
             ) : null}
           </Stack>
         );
+      }
       case 1:
         return (
           <PsePatientCaseDetailsPanel
@@ -781,7 +1107,8 @@ export default function RequestWorkflowWizard({
             onPaymentReferenceChange={setPaymentReference}
             onSendInvoiceAndPaymentLink={() => void handleSendInvoiceAndPaymentLink()}
             onMarkPending={() => void handlePaymentPending()}
-            onConfirmPayment={() => void handleConfirmPayment()}
+            onConfirmPayment={() => void handleConfirmPayment('online')}
+            onConfirmCashPayment={() => void handleConfirmPayment('cash')}
             onReleaseToDoctor={() => void handleReleaseToDoctor()}
           />
         );
@@ -875,7 +1202,11 @@ export default function RequestWorkflowWizard({
       <ConsultationWizardAccordion
         className='request-workflow-wizard patient-consultation-wizard--accordion'
         heading='Coordination workflow'
-        subheading='Manage each step of this patient request.'
+        subheading={
+          isHomeCare
+            ? 'Home care: request → payment → optional remarks & follow-up.'
+            : 'Manage each step of this patient request.'
+        }
         steps={wizardSteps}
         expandedIndex={expandedStep}
         suggestedIndex={suggestedStep}

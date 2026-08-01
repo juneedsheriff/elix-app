@@ -571,7 +571,7 @@ export default function ElixHealthDoctorsPage() {
           staff={staff}
           existingDoctorIds={existingDoctorIds}
           onSubmitted={() => {
-            setSuccessMessage('Doctor request submitted. An administrator will review it shortly.');
+            setSuccessMessage('Doctor request submitted. ElixClinix will review it shortly.');
             void load();
           }}
         />

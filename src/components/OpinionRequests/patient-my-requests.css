@@ -1820,3 +1820,107 @@
   padding-bottom: 0;
 }
 
+/* Home Care Services dialog */
+.home-care-services-modal {
+  max-height: min(92dvh, 820px);
+}
+
+.home-care-services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.home-care-service-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 16%, var(--border));
+  border-radius: 12px;
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.home-care-service-option:hover {
+  border-color: color-mix(in srgb, var(--brand-cyan) 40%, var(--border));
+}
+
+.home-care-service-option--selected {
+  border-color: color-mix(in srgb, var(--brand-cyan) 55%, var(--border));
+  background: color-mix(in srgb, var(--brand-cyan) 10%, var(--surface));
+  box-shadow: 0 4px 14px rgba(9, 171, 192, 0.08);
+}
+
+.home-care-service-option__check {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 6px;
+  border: 1.5px solid color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+  background: var(--surface);
+  color: #fff;
+}
+
+.home-care-service-option--selected .home-care-service-option__check {
+  background: var(--brand-cyan);
+  border-color: var(--brand-cyan);
+}
+
+.home-care-service-option__label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.home-care-other-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.home-care-other-field textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.home-care-services-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem 1.15rem;
+  border-top: 1px solid var(--border);
+}
+
+.pmr-cta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.pmr-cta-btn--secondary {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--brand-green) 88%, #0f766e),
+    var(--brand-cyan)
+  );
+}
+
+

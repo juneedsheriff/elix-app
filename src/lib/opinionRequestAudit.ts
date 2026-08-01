@@ -37,7 +37,9 @@ export type OpinionRequestAuditAction =
   | 'payment_confirmed'
   | 'released_to_doctor'
   | 'doctor_opinion_submitted'
-  | 'consultation_summary_saved';
+  | 'consultation_summary_saved'
+  | 'home_care_followup_updated'
+  | 'home_care_request_completed';
 
 export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditAction, string> = {
   request_created: 'Patient submitted a second opinion request',
@@ -74,7 +76,9 @@ export const OPINION_REQUEST_AUDIT_ACTION_LABELS: Record<OpinionRequestAuditActi
   payment_confirmed: 'PSE confirmed payment received',
   released_to_doctor: 'PSE released case to doctor',
   doctor_opinion_submitted: 'Doctor submitted opinion',
-  consultation_summary_saved: 'Doctor saved consultation summary'
+  consultation_summary_saved: 'Doctor saved consultation summary',
+  home_care_followup_updated: 'Clinic updated home care remarks and follow-up date',
+  home_care_request_completed: 'Clinic completed the home care request'
 };
 
 export type OpinionRequestAuditAudience = 'patient' | 'staff';
@@ -104,7 +108,7 @@ export function formatOpinionRequestAuditActorRole(
       case 'doctor':
         return 'Your doctor';
       case 'administrator':
-        return 'Administrator';
+        return 'ElixClinix';
       default:
         return 'System';
     }
@@ -116,7 +120,7 @@ export function formatOpinionRequestAuditActorRole(
     case 'pse':
       return 'PSE / Patient service';
     case 'administrator':
-      return 'Administrator';
+      return 'ElixClinix';
     case 'doctor':
       return 'Doctor';
     default:
@@ -203,6 +207,10 @@ function patientAuditSummary(
       return 'Your doctor submitted their opinion';
     case 'consultation_summary_saved':
       return 'Your doctor saved your consultation summary';
+    case 'home_care_followup_updated':
+      return 'Your clinic updated home care remarks and follow-up date';
+    case 'home_care_request_completed':
+      return 'Your clinic completed the home care request';
     default:
       return null;
   }
@@ -287,6 +295,10 @@ function staffAuditSummary(
       return 'Doctor submitted opinion';
     case 'consultation_summary_saved':
       return 'Doctor saved consultation summary';
+    case 'home_care_followup_updated':
+      return 'Clinic updated home care remarks and follow-up date';
+    case 'home_care_request_completed':
+      return 'Clinic completed the home care request';
     default:
       return null;
   }

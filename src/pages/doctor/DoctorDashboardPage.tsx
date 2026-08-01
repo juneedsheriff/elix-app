@@ -3,6 +3,7 @@ import { ClipboardList, Loader2 } from 'lucide-react';
 import MetricCard from '../../components/ui/MetricCard';
 import SectionCard from '../../components/ui/SectionCard';
 import { formatDoctorWelcomeName } from '../../lib/doctors';
+import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import { fetchDoctorOpinionRequests, isAwaitingDoctorReply } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
@@ -49,7 +50,7 @@ export default function DoctorDashboardPage({ doctorProfile, dbConnected, onNavi
       setError(fetchError.message);
       setRequests([]);
     } else {
-      setRequests(data ?? []);
+      setRequests((data ?? []).filter((request) => !isHomeCareOpinionRequest(request)));
     }
     setLoading(false);
   }, [dbConnected]);

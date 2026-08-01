@@ -11,6 +11,7 @@ import {
 import { IconEye, IconTrash } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import { formatPatientAvailability } from '../../../lib/doctorSchedule';
+import { homeCareServicesFromRequest } from '../../../lib/homeCareServices';
 import { consultationStageLabel, staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import {
@@ -21,6 +22,7 @@ import {
 
 type UseRequestsTableColumnsOptions = {
   isAdmin: boolean;
+  requestKind?: 'consultations' | 'homecare';
   onView: (request: OpinionRequest) => void;
   onDelete?: (request: OpinionRequest) => void;
 };
@@ -30,7 +32,12 @@ function displayCell(value: string | null | undefined) {
   return v ? v : '—';
 }
 
-export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseRequestsTableColumnsOptions) {
+export function useRequestsTableColumns({
+  isAdmin,
+  requestKind = 'consultations',
+  onView,
+  onDelete
+}: UseRequestsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<OpinionRequest>[]>(
     () => {
       const columns: MRT_ColumnDef<OpinionRequest>[] = [
@@ -69,39 +76,65 @@ export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseReques
             );
           }
         },
-        {
-          accessorKey: 'doctor_name',
-          header: 'Doctor',
-          size: 200,
-          minSize: 170,
-          Cell: ({ row }) => {
-            const request = row.original;
-            const preferredTime = formatPatientAvailability(request.patient_availability);
-            const showPatientPick =
-              preferredTime &&
-              (request.consultation_stage === 'availability_submitted' ||
-                request.consultation_stage === 'schedule_proposed' ||
-                request.consultation_stage === 'schedule_confirmed' ||
-                request.consultation_stage === 'doctor_selected');
-            return (
-              <Stack gap={2}>
-                <Text size='sm' fw={500}>
-                  {displayCell(request.doctor_name)}
-                </Text>
-                {request.doctor_specialty ? (
-                  <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
-                    {request.doctor_specialty}
-                  </Text>
-                ) : null}
-                {showPatientPick ? (
-                  <Text size='xs' c='teal' fw={600} className='doctors-mgmt-muted'>
-                    Preferred: {preferredTime.split('\n')[0]}
-                  </Text>
-                ) : null}
-              </Stack>
-            );
-          }
-        },
+        requestKind === 'homecare'
+          ? {
+              id: 'homeCareServices',
+              header: 'Requested services',
+              size: 280,
+              minSize: 220,
+              Cell: ({ row }: { row: { original: OpinionRequest } }) => {
+                const services = homeCareServicesFromRequest(row.original);
+                if (!services.length) {
+                  return (
+                    <Text size='sm' c='dimmed'>
+                      Home Care
+                    </Text>
+                  );
+                }
+                return (
+                  <Group gap={6} wrap='wrap'>
+                    {services.map((service) => (
+                      <Badge key={service} size='sm' variant='light' color='teal' radius='sm'>
+                        {service}
+                      </Badge>
+                    ))}
+                  </Group>
+                );
+              }
+            }
+          : {
+              accessorKey: 'doctor_name',
+              header: 'Doctor',
+              size: 200,
+              minSize: 170,
+              Cell: ({ row }: { row: { original: OpinionRequest } }) => {
+                const request = row.original;
+                const preferredTime = formatPatientAvailability(request.patient_availability);
+                const showPatientPick =
+                  preferredTime &&
+                  (request.consultation_stage === 'availability_submitted' ||
+                    request.consultation_stage === 'schedule_proposed' ||
+                    request.consultation_stage === 'schedule_confirmed' ||
+                    request.consultation_stage === 'doctor_selected');
+                return (
+                  <Stack gap={2}>
+                    <Text size='sm' fw={500}>
+                      {displayCell(request.doctor_name)}
+                    </Text>
+                    {request.doctor_specialty ? (
+                      <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
+                        {request.doctor_specialty}
+                      </Text>
+                    ) : null}
+                    {showPatientPick ? (
+                      <Text size='xs' c='teal' fw={600} className='doctors-mgmt-muted'>
+                        Preferred: {preferredTime.split('\n')[0]}
+                      </Text>
+                    ) : null}
+                  </Stack>
+                );
+              }
+            },
         {
           accessorKey: 'created_at',
           header: 'Submitted',
@@ -245,6 +278,6 @@ export function useRequestsTableColumns({ isAdmin, onView, onDelete }: UseReques
 
       return columns;
     },
-    [isAdmin, onView, onDelete]
+    [isAdmin, requestKind, onView, onDelete]
   );
 }

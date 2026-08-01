@@ -1,9 +1,14 @@
-import { ArrowLeft, Clock, FileText, MessageCircle, Stethoscope } from 'lucide-react';
+import { ArrowLeft, Clock, FileText, Home, MessageCircle, Stethoscope } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
 import OpinionRequestAuditLink from './OpinionRequestAuditLink';
 import RequestChatPanel from './RequestChatPanel';
-import { isRecommendationOpinionRequest, patientRequestStatusLabel } from '../../lib/opinionRequests';
+import { homeCareServicesFromRequest, isHomeCareOpinionRequest } from '../../lib/homeCareServices';
+import {
+  isRecommendationOpinionRequest,
+  patientRequestStatusLabel,
+  patientRequestTitle
+} from '../../lib/opinionRequests';
 import type { SavedPatientCaseDetailsPatch } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
@@ -57,8 +62,10 @@ export default function PatientRequestDetail({
   }, [onChatModeChange, showChat]);
 
   const statusText = patientRequestStatusLabel(request);
+  const isHomeCare = isHomeCareOpinionRequest(request);
+  const homeCareServices = isHomeCare ? homeCareServicesFromRequest(request) : [];
   const awaitingRecommendation = isRecommendationOpinionRequest(request) && !request.doctor_name;
-  const headline = awaitingRecommendation ? 'Doctor recommendations' : (request.doctor_name ?? 'Doctor');
+  const headline = patientRequestTitle(request);
 
   return (
     <div className={`patient-request-detail${showChat ? ' patient-request-detail--chat' : ''}`}>
@@ -114,7 +121,51 @@ export default function PatientRequestDetail({
             </div>
 
             <section className='patient-request-detail-summary' aria-label='Request summary'>
-              {awaitingRecommendation ? (
+              {isHomeCare ? (
+                <div className='patient-request-detail-summary__notice'>
+                  <div className='patient-request-detail-summary__row'>
+                    <span className='patient-request-detail-summary__icon' aria-hidden>
+                      <Home size={18} />
+                    </span>
+                    <div className='patient-request-detail-summary__content'>
+                      <span className='patient-request-detail-summary__label'>Requested services</span>
+                      {homeCareServices.length ? (
+                        <ul className='patient-request-detail-summary__value' style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                          {homeCareServices.map((service) => (
+                            <li key={service}>{service}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className='patient-request-detail-summary__value'>Home care services</p>
+                      )}
+                    </div>
+                  </div>
+                  {request.home_care_remarks?.trim() || request.home_care_followup_date ? (
+                    <div className='patient-request-detail-summary__row' style={{ marginTop: '0.75rem' }}>
+                      <span className='patient-request-detail-summary__icon' aria-hidden>
+                        <FileText size={18} />
+                      </span>
+                      <div className='patient-request-detail-summary__content'>
+                        <span className='patient-request-detail-summary__label'>Clinic updates</span>
+                        {request.home_care_remarks?.trim() ? (
+                          <p className='patient-request-detail-summary__value' style={{ whiteSpace: 'pre-wrap' }}>
+                            {request.home_care_remarks}
+                          </p>
+                        ) : null}
+                        {request.home_care_followup_date ? (
+                          <p className='patient-request-detail-summary__value'>
+                            Follow-up:{' '}
+                            {new Date(`${request.home_care_followup_date}T00:00:00`).toLocaleDateString()}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  <p className='patient-request-detail-summary__hint'>
+                    Your clinic team will coordinate these services and share a payment link when ready.
+                  </p>
+                </div>
+              ) : awaitingRecommendation ? (
                 <div className='patient-request-detail-summary__notice'>
                   {request.requested_specialty ? (
                     <div className='patient-request-detail-summary__row'>

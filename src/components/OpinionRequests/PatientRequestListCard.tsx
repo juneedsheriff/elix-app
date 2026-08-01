@@ -4,10 +4,16 @@ import {
   ChevronRight,
   Clock,
   CreditCard,
+  Home,
   ShieldCheck
 } from 'lucide-react';
 import { formatPatientAvailability } from '../../lib/doctorSchedule';
-import { isRecommendationOpinionRequest, patientRequestStatusLabel } from '../../lib/opinionRequests';
+import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
+import {
+  isRecommendationOpinionRequest,
+  patientRequestStatusLabel,
+  patientRequestTitle
+} from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 function doctorInitials(name: string | null | undefined): string {
@@ -103,13 +109,15 @@ export default function PatientRequestListCard({
   const paymentAmount = formatPaymentAmount(request);
   const isPaid = request.payment_status === 'paid';
   const statusLabel = patientRequestStatusLabel(request);
+  const isHomeCare = isHomeCareOpinionRequest(request);
   const awaitingRecommendation = isRecommendationOpinionRequest(request) && !request.doctor_name;
-  const doctorName = awaitingRecommendation ? 'Doctor recommendations' : (request.doctor_name ?? 'Doctor');
-  const specialtyLine =
-    request.requested_specialty ??
-    request.doctor_specialty ??
-    (awaitingRecommendation ? 'Our care team will recommend specialists' : null);
-  const showAppointmentBadge = isAppointmentScheduled(request);
+  const doctorName = patientRequestTitle(request);
+  const specialtyLine = isHomeCare
+    ? 'Clinic home care coordination'
+    : request.requested_specialty ??
+      request.doctor_specialty ??
+      (awaitingRecommendation ? 'Our care team will recommend specialists' : null);
+  const showAppointmentBadge = !isHomeCare && isAppointmentScheduled(request);
   const showStatusPill =
     !showAppointmentBadge ||
     !['Appointment scheduled', 'Ready for consultation', 'Consultation complete'].includes(statusLabel);
@@ -126,7 +134,7 @@ export default function PatientRequestListCard({
         <div className='pmr-card__inner'>
         <div className='pmr-card__top'>
           <span className='pmr-card__avatar' aria-hidden>
-            {doctorInitials(request.doctor_name)}
+            {isHomeCare ? <Home size={18} strokeWidth={2} /> : doctorInitials(request.doctor_name)}
           </span>
           <div className='pmr-card__identity'>
             <h4 className='pmr-card__name'>{doctorName}</h4>
@@ -136,10 +144,12 @@ export default function PatientRequestListCard({
         </div>
 
         <div className='pmr-card__badges'>
-          {request.records_verified_at ? (
+          {isHomeCare && (request.home_care_followup_date || request.home_care_remarks?.trim()) ? (
             <span className='pmr-pill pmr-pill--verified'>
-              <ShieldCheck size={12} strokeWidth={2.25} aria-hidden />
-              Verified
+              <Clock size={12} strokeWidth={2.25} aria-hidden />
+              {request.home_care_followup_date
+                ? `Follow-up ${new Date(`${request.home_care_followup_date}T00:00:00`).toLocaleDateString()}`
+                : 'Clinic update'}
             </span>
           ) : null}
           {isPaid ? (

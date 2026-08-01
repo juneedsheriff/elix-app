@@ -210,7 +210,7 @@ export async function rejectClinicDoctorRequest(requestId: string, reviewNote?: 
 }
 
 export function clinicDoctorRequestStatusLabel(status: ClinicDoctorRequest['status']): string {
-  if (status === 'pending') return 'Pending admin review';
+  if (status === 'pending') return 'Pending ElixClinix review';
   if (status === 'approved') return 'Approved';
   return 'Rejected';
 }

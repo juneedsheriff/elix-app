@@ -18,6 +18,14 @@ import {
 import { doctorConsultationCurrency, getTierFeeUsd, parseConsultationTiers } from './consultationTiers';
 import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
 import {
+  buildHomeCareCaseDetails,
+  formatHomeCareServicesMessage,
+  HOME_CARE_REQUESTED_SPECIALTY,
+  isHomeCareOpinionRequest,
+  validateHomeCareSelection,
+  type HomeCareServiceSelection
+} from './homeCareServices';
+import {
   fetchDoctorByAuthUserId,
   fetchDoctorById,
   fetchPatientBrowseDoctorById,
@@ -73,7 +81,9 @@ const workflowFieldsPaymentProof = `
 
 const workflowFieldsExtended = `
   ${workflowFieldsScheduling},
-  ${workflowFieldsPaymentProof}
+  ${workflowFieldsPaymentProof},
+  home_care_remarks,
+  home_care_followup_date
 `;
 
 /** Migration 019 workflow columns (always required for consultation flow). */
@@ -126,6 +136,17 @@ function stripDoctorSelectionModeFromSelect(select: string) {
 
 function stripRequestedSpecialtyFromSelect(select: string) {
   return select.replace(/,?\s*requested_specialty\s*/g, '');
+}
+
+function stripHomeCareFollowupFromSelect(select: string) {
+  return select
+    .replace(/,?\s*home_care_remarks\s*/g, '')
+    .replace(/,?\s*home_care_followup_date\s*/g, '');
+}
+
+function isMissingHomeCareFollowupColumnError(error: { message?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return msg.includes('home_care_remarks') || msg.includes('home_care_followup_date');
 }
 
 function stripPaymentProofFromSelect(select: string) {
@@ -423,10 +444,11 @@ export function isPatientRequestCompleted(
 export function isPendingAdminAssignment(
   request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'consultation_stage'>
 ): boolean {
-  if (request.status !== 'submitted') return false;
+  if (request.status === 'closed' || request.status === 'in_review') return false;
   if (request.assigned_to) return false;
-  if (request.consultation_stage && request.consultation_stage !== 'new') return false;
-  return true;
+  // Keep assign available whenever the request is still with admin/PSE intake.
+  // Do not require consultation_stage === 'new' — some rows advance stage before assignment.
+  return request.status === 'submitted';
 }
 
 /** PSE coordination has started (assigned executive or workflow past "new"). */
@@ -487,11 +509,28 @@ export function patientRequestStatusLabel(
     | 'assigned_to'
     | 'consultation_stage'
     | 'payment_status'
+    | 'payment_link'
     | 'records_verified_at'
     | 'patient_proceeded_without_records_at'
     | 'doctor_id'
+    | 'requested_specialty'
+    | 'patient_case_details'
+    | 'message'
   >
 ): string {
+  if (isHomeCareOpinionRequest(request)) {
+    if (request.consultation_stage === 'completed' || request.status === 'closed') {
+      return 'Home care complete';
+    }
+    if (request.payment_status === 'paid') return 'Payment confirmed';
+    if (request.payment_link?.trim() || request.consultation_stage === 'payment_pending' || request.payment_status === 'pending') {
+      return 'Payment required';
+    }
+    if (request.status === 'submitted' && request.assigned_to) return 'Being coordinated by our team';
+    if (request.status === 'submitted') return 'Home care request received';
+    return 'Home care in progress';
+  }
+
   if (request.consultation_stage === 'completed' || request.doctor_response?.trim()) {
     return 'Consultation complete';
   }
@@ -506,11 +545,23 @@ export function patientRequestStatusLabel(
   if (request.records_verified_at && !request.doctor_id) return 'Awaiting doctor recommendations';
   if (request.records_verified_at) return 'Documents verified';
   if (request.patient_proceeded_without_records_at) return 'Proceeding without documents';
-  if (request.status === 'submitted' && !request.assigned_to) return 'Pending admin review';
+  if (request.status === 'submitted' && !request.assigned_to) return 'Pending ElixClinix review';
   if (request.status === 'submitted' && request.assigned_to) return 'Being coordinated by our team';
   if (request.status === 'in_review') return 'Consultation in progress';
   if (request.status === 'closed') return 'Closed';
   return 'Submitted';
+}
+
+/** Patient-facing title for a request card / detail header. */
+export function patientRequestTitle(
+  request: Pick<
+    OpinionRequest,
+    'doctor_name' | 'doctor_selection_mode' | 'doctor_id' | 'requested_specialty' | 'patient_case_details' | 'message'
+  >
+): string {
+  if (isHomeCareOpinionRequest(request)) return 'Home Care Services';
+  if (isRecommendationOpinionRequest(request) && !request.doctor_name) return 'Doctor recommendations';
+  return request.doctor_name ?? 'Doctor';
 }
 
 export function staffRequestStatusLabel(
@@ -687,6 +738,8 @@ type RequestListRow = {
   assigned_to: string | null;
   assigned_at: string | null;
   coordination_notes: string | null;
+  home_care_remarks?: string | null;
+  home_care_followup_date?: string | null;
   assignee: { full_name: string } | null;
   doctors: { id: string; full_name: string; specialty: string } | null;
   opinion_request_records: Array<{
@@ -1188,9 +1241,161 @@ export async function createRecommendationOpinionRequest(input: CreateRecommenda
   return { data: { id: request.id }, error: null };
 }
 
+export type CreateHomeCareOpinionRequestInput = {
+  patientAuthUserId: string;
+  patientName?: string | null;
+  selection: HomeCareServiceSelection;
+  /** When set (Clinic PSE), scopes the request to the clinic and assigns the staff member. */
+  clinicId?: string | null;
+  staffId?: string | null;
+  actor?: 'patient' | 'pse';
+};
+
+/** Patient or Clinic PSE creates a home-care coordination request (no doctor yet). */
+export async function createHomeCareOpinionRequest(input: CreateHomeCareOpinionRequestInput) {
+  const validationError = validateHomeCareSelection(input.selection);
+  if (validationError) {
+    return { data: null, error: { message: validationError } };
+  }
+
+  const patientName = await resolvePatientName(input.patientAuthUserId, input.patientName);
+  const message = formatHomeCareServicesMessage(input.selection);
+  const caseDetails = buildHomeCareCaseDetails(input.selection);
+  const assignedAt = input.staffId ? new Date().toISOString() : null;
+
+  const baseInsert = {
+    doctor_id: null,
+    doctor_name: null,
+    message,
+    patient_id: input.patientAuthUserId,
+    patient_name: patientName,
+    status: 'submitted' as const,
+    doctor_selection_mode: 'needs_recommendation' as const,
+    requested_specialty: HOME_CARE_REQUESTED_SPECIALTY,
+    patient_case_details: caseDetails,
+    ...(input.clinicId
+      ? {
+          clinic_id: input.clinicId,
+          assigned_to: input.staffId ?? null,
+          assigned_at: assignedAt
+        }
+      : {})
+  };
+
+  let requestError = null;
+  let request: { id: string } | null = null;
+
+  const withWorkflow = await supabase
+    .from('opinion_requests')
+    .insert({
+      ...baseInsert,
+      consultation_stage: 'new',
+      selected_doctor_id: null
+    })
+    .select('id')
+    .single();
+
+  if (!withWorkflow.error && withWorkflow.data) {
+    request = withWorkflow.data;
+  } else if (isNullableDoctorIdBlocked(withWorkflow.error) || isMissingDoctorSelectionModeError(withWorkflow.error)) {
+    return {
+      data: null,
+      error: {
+        message: `Home care requests need database migration 029 (nullable doctor_id). ${recommendationMigrationHint()}`
+      }
+    };
+  } else if (isMissingWorkflowColumnsError(withWorkflow.error)) {
+    return {
+      data: null,
+      error: {
+        message: `Home care requests need the consultation workflow columns (migration 019). ${recommendationMigrationHint()}`
+      }
+    };
+  } else if (isMissingPatientCaseDetailsColumnError(withWorkflow.error)) {
+    const withoutCaseDetails = await supabase
+      .from('opinion_requests')
+      .insert({
+        doctor_id: null,
+        doctor_name: null,
+        message,
+        patient_id: input.patientAuthUserId,
+        patient_name: patientName,
+        status: 'submitted',
+        doctor_selection_mode: 'needs_recommendation',
+        requested_specialty: HOME_CARE_REQUESTED_SPECIALTY,
+        consultation_stage: 'new',
+        selected_doctor_id: null,
+        ...(input.clinicId
+          ? {
+              clinic_id: input.clinicId,
+              assigned_to: input.staffId ?? null,
+              assigned_at: assignedAt
+            }
+          : {})
+      })
+      .select('id')
+      .single();
+    requestError = withoutCaseDetails.error;
+    request = withoutCaseDetails.data;
+  } else if (isMissingRequestedSpecialtyError(withWorkflow.error)) {
+    const withoutSpecialty = await supabase
+      .from('opinion_requests')
+      .insert({
+        doctor_id: null,
+        doctor_name: null,
+        message,
+        patient_id: input.patientAuthUserId,
+        patient_name: patientName,
+        status: 'submitted',
+        doctor_selection_mode: 'needs_recommendation',
+        patient_case_details: caseDetails,
+        consultation_stage: 'new',
+        selected_doctor_id: null,
+        ...(input.clinicId
+          ? {
+              clinic_id: input.clinicId,
+              assigned_to: input.staffId ?? null,
+              assigned_at: assignedAt
+            }
+          : {})
+      })
+      .select('id')
+      .single();
+    requestError = withoutSpecialty.error;
+    request = withoutSpecialty.data;
+  } else {
+    requestError = withWorkflow.error;
+  }
+
+  if (requestError || !request) {
+    return {
+      data: null,
+      error: {
+        message: `${requestError?.message ?? 'Could not create home care request.'} ${recommendationMigrationHint()}`
+      }
+    };
+  }
+
+  const actor = input.actor ?? (input.staffId ? 'pse' : 'patient');
+  await logRequestAudit(request.id, 'recommendation_request_created', actor, {
+    metadata: {
+      requested_specialty: HOME_CARE_REQUESTED_SPECIALTY,
+      home_care_services: input.selection.serviceIds,
+      clinic_id: input.clinicId ?? null,
+      request_kind: 'home_care'
+    }
+  });
+  void notifyRequestLifecycleEmail({
+    event: 'patient_request_submitted',
+    requestId: request.id
+  });
+  return { data: { id: request.id }, error: null };
+}
+
 export function isRecommendationOpinionRequest(
-  request: Pick<OpinionRequest, 'doctor_selection_mode' | 'doctor_id'>
+  request: Pick<OpinionRequest, 'doctor_selection_mode' | 'doctor_id' | 'requested_specialty' | 'patient_case_details' | 'message'>
 ): boolean {
+  if (isHomeCareOpinionRequest(request)) return false;
   return request.doctor_selection_mode === 'needs_recommendation' || (!request.doctor_id && !request.doctor_selection_mode);
 }
 
@@ -1228,6 +1433,8 @@ function mapRequestRow(
     assigned_at: row.assigned_at ?? null,
     assigned_to_name: row.assignee?.full_name ?? null,
     coordination_notes: row.coordination_notes ?? null,
+    home_care_remarks: row.home_care_remarks ?? null,
+    home_care_followup_date: row.home_care_followup_date ?? null,
     consultation_stage: (row.consultation_stage as ConsultationStage | undefined) ?? null,
     selected_doctor_id: row.selected_doctor_id ?? null,
     patient_availability: row.patient_availability ?? null,
@@ -1363,6 +1570,8 @@ type WorkflowFieldRow = Pick<
   | 'patient_proceeded_without_records_at'
   | 'pse_proceeded_without_records_at'
   | 'patient_case_details'
+  | 'home_care_remarks'
+  | 'home_care_followup_date'
   | 'invoice_pdf_storage_path'
   | 'invoice_generated_at'
   | 'invoice_number'
@@ -1429,7 +1638,13 @@ function mergeWorkflowFields(request: OpinionRequest, row: WorkflowFieldRow): Op
     patient_case_details:
       row.patient_case_details !== undefined && row.patient_case_details !== null
         ? row.patient_case_details
-        : request.patient_case_details
+        : request.patient_case_details,
+    home_care_remarks:
+      row.home_care_remarks !== undefined ? row.home_care_remarks : request.home_care_remarks,
+    home_care_followup_date:
+      row.home_care_followup_date !== undefined
+        ? row.home_care_followup_date
+        : request.home_care_followup_date
   };
 }
 
@@ -1454,7 +1669,18 @@ async function enrichRequestsWithWorkflowFields(requests: OpinionRequest[]): Pro
       data = result.data as WorkflowFieldRow[];
       break;
     }
-    if (result.error && isMissingWorkflowColumnsError(result.error)) {
+    if (
+      result.error &&
+      (isMissingWorkflowColumnsError(result.error) || isMissingHomeCareFollowupColumnError(result.error))
+    ) {
+      const withoutHomeCare = stripHomeCareFollowupFromSelect(workflowSelect);
+      if (withoutHomeCare !== workflowSelect) {
+        const retryHomeCare = await supabase.from('opinion_requests').select(withoutHomeCare).in('id', ids);
+        if (!retryHomeCare.error && retryHomeCare.data?.length) {
+          data = retryHomeCare.data as WorkflowFieldRow[];
+          break;
+        }
+      }
       const withoutInvoice = stripInvoiceFromSelect(workflowSelect);
       if (withoutInvoice !== workflowSelect) {
         const retryInvoice = await supabase.from('opinion_requests').select(withoutInvoice).in('id', ids);
@@ -1686,6 +1912,7 @@ async function enrichRequestsWithPatientClinic(
     })
   );
 
+  // Merge patient clinic onto requests missing clinic_id so admin can group by clinic.
   return requests.map((request) => {
     if (request.clinic_id || !request.patient_id) return request;
     const resolved = clinicByPatientAuthId.get(request.patient_id);
@@ -3537,6 +3764,154 @@ export async function pseGenerateConsultationInvoice(
   return { data, error: null };
 }
 
+/** Clinic PSE saves home care remarks + follow-up date (patient-visible). */
+export async function pseUpdateHomeCareFollowup(
+  requestId: string,
+  input: { remarks: string; followupDate: string | null }
+) {
+  const remarks = input.remarks.trim();
+  const followupDate = input.followupDate?.trim() || null;
+
+  if (followupDate && !/^\d{4}-\d{2}-\d{2}$/.test(followupDate)) {
+    return { data: null, error: { message: 'Follow-up date must be a valid date.' } };
+  }
+
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      home_care_remarks: remarks || null,
+      home_care_followup_date: followupDate
+    })
+    .eq('id', requestId)
+    .select('id, home_care_remarks, home_care_followup_date')
+    .maybeSingle();
+
+  if (error) {
+    const hint = isMissingHomeCareFollowupColumnError(error)
+      ? ' Run npm run db:apply-home-care-followup (migration 074).'
+      : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+
+  await logRequestAudit(requestId, 'home_care_followup_updated', 'pse', {
+    metadata: {
+      has_remarks: Boolean(remarks),
+      followup_date: followupDate
+    }
+  });
+
+  notifyOpinionRequestLiveChange(requestId, 'request_refresh', {
+    home_care_remarks: data?.home_care_remarks ?? null,
+    home_care_followup_date: data?.home_care_followup_date ?? null
+  });
+
+  return { data, error: null };
+}
+
+/** Clinic PSE completes a home care request (remarks + follow-up are optional). */
+export async function pseCompleteHomeCareRequest(
+  requestId: string,
+  input?: { remarks?: string; followupDate?: string | null }
+) {
+  const remarks = input?.remarks?.trim() || null;
+  const followupDate = input?.followupDate?.trim() || null;
+
+  if (followupDate && !/^\d{4}-\d{2}-\d{2}$/.test(followupDate)) {
+    return { data: null, error: { message: 'Follow-up date must be a valid date.' } };
+  }
+
+  const payload: Record<string, unknown> = {
+    consultation_stage: 'completed',
+    status: 'closed',
+    home_care_remarks: remarks,
+    home_care_followup_date: followupDate
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', requestId)
+    .select(
+      'id, status, consultation_stage, home_care_remarks, home_care_followup_date'
+    )
+    .maybeSingle();
+
+  if (error && isMissingHomeCareFollowupColumnError(error)) {
+    ({ data, error } = await supabase
+      .from('opinion_requests')
+      .update({
+        consultation_stage: 'completed',
+        status: 'closed'
+      })
+      .eq('id', requestId)
+      .select('id, status, consultation_stage')
+      .maybeSingle());
+  }
+
+  if (error) {
+    const hint = isMissingHomeCareFollowupColumnError(error)
+      ? ' Run npm run db:apply-home-care-followup (migration 074).'
+      : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+
+  await logRequestAudit(requestId, 'home_care_request_completed', 'pse', {
+    metadata: {
+      has_remarks: Boolean(remarks),
+      followup_date: followupDate
+    }
+  });
+
+  notifyOpinionRequestLiveChange(requestId, 'request_refresh', {
+    status: 'closed',
+    consultation_stage: 'completed',
+    home_care_remarks: remarks,
+    home_care_followup_date: followupDate
+  });
+
+  return { data, error: null };
+}
+
+/** Home care payment link (no doctor invoice required). */
+export async function pseSendHomeCarePaymentLink(
+  requestId: string,
+  input: { paymentLink: string; amount: number; currency: string }
+) {
+  const link = input.paymentLink.trim();
+  if (!link) {
+    return { data: null, error: { message: 'Enter a payment link for the patient.' } };
+  }
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return { data: null, error: { message: 'Enter a valid payment amount.' } };
+  }
+
+  const currency = normalizeConsultationCurrency(input.currency || 'INR');
+  const { data, error } = await supabase
+    .from('opinion_requests')
+    .update({
+      payment_link: link,
+      payment_status: 'pending',
+      consultation_stage: 'payment_pending',
+      payment_amount: input.amount,
+      payment_currency: currency
+    })
+    .eq('id', requestId)
+    .select(
+      'id, payment_link, payment_status, payment_amount, payment_currency, consultation_stage'
+    )
+    .maybeSingle();
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+
+  await logRequestAudit(requestId, 'payment_link_sent', 'pse', {
+    metadata: { amount: input.amount, currency, home_care: true }
+  });
+
+  return { data, error: null };
+}
+
 /** Generate invoice PDF and send payment link in one request update (better realtime for patients). */
 export async function pseSendInvoiceAndPaymentLink(
   request: OpinionRequest,
@@ -3802,6 +4177,7 @@ export async function fetchPatientConsultationSummaries(patientAuthUserId: strin
         past_medical_history,
         labs_diagnostics,
         assessment_plan,
+        followup_date,
         prescription,
         pdf_storage_path,
         created_at,
@@ -3838,6 +4214,7 @@ const CONSULTATION_SUMMARY_SELECT = `
   past_medical_history,
   labs_diagnostics,
   assessment_plan,
+  followup_date,
   prescription,
   pdf_storage_path,
   created_at,
@@ -3997,6 +4374,7 @@ export async function saveDoctorConsultation(
     past_medical_history: input.past_medical_history,
     labs_diagnostics: input.labs_diagnostics,
     assessment_plan: input.assessment_plan,
+    followup_date: input.followup_date,
     prescription: input.prescription,
     pdf_storage_path: uploadTarget.storagePath,
     updated_at: now
@@ -4010,7 +4388,9 @@ export async function saveDoctorConsultation(
 
   if (error) {
     const hint =
-      error.message?.includes('past_medical_history')
+      error.message?.includes('followup_date')
+        ? ' Run npm run db:apply-consultation-summary-followup (migration 075).'
+        : error.message?.includes('past_medical_history')
         ? ' Run supabase/migrations/066_consultation_summary_past_medical_history.sql in the Supabase SQL Editor.'
         : error.message?.includes('pdf_storage_path') || error.code === '42703'
           ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
@@ -4270,6 +4650,7 @@ export async function saveDoctorConsultationUpload(
     past_medical_history: null,
     labs_diagnostics: null,
     assessment_plan: null,
+    followup_date: null,
     prescription: null,
     pdf_storage_path: uploadTarget.storagePath,
     updated_at: now
@@ -4283,7 +4664,9 @@ export async function saveDoctorConsultationUpload(
 
   if (error) {
     const hint =
-      error.message?.includes('past_medical_history')
+      error.message?.includes('followup_date')
+        ? ' Run npm run db:apply-consultation-summary-followup (migration 075).'
+        : error.message?.includes('past_medical_history')
         ? ' Run supabase/migrations/066_consultation_summary_past_medical_history.sql in the Supabase SQL Editor.'
         : error.message?.includes('pdf_storage_path') || error.code === '42703'
           ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
@@ -4314,28 +4697,67 @@ export async function doctorSubmitConsultationSummary(
 /** Administrator assigns a submitted request to a Patient Service Executive. */
 export async function assignOpinionRequest(requestId: string, assigneeAdminId: string) {
   const assignedAt = new Date().toISOString();
-  const payload = {
+
+  // Resolve assignee so clinic PSEs can receive global requests (attach their clinic_id).
+  const { data: assigneeRow } = await supabase
+    .from('admins')
+    .select('id, role, clinic_id')
+    .eq('id', assigneeAdminId)
+    .maybeSingle();
+
+  const assigneeClinicId =
+    assigneeRow?.role === 'patient_service_executive_clinic'
+      ? (assigneeRow.clinic_id as string | null) ?? null
+      : null;
+
+  const { data: existingRequest } = await supabase
+    .from('opinion_requests')
+    .select('id, clinic_id')
+    .eq('id', requestId)
+    .maybeSingle();
+
+  const payload: Record<string, unknown> = {
     assigned_to: assigneeAdminId,
     assigned_at: assignedAt,
     consultation_stage: 'assigned' as const
   };
 
+  // Global request assigned to a clinic PSE must move into that clinic for RLS visibility.
+  if (!existingRequest?.clinic_id && assigneeClinicId) {
+    payload.clinic_id = assigneeClinicId;
+  }
+
   let { data, error } = await supabase
     .from('opinion_requests')
     .update(payload)
     .eq('id', requestId)
-    .select('id, assigned_to, assigned_at, consultation_stage')
+    .select('id, assigned_to, assigned_at, consultation_stage, clinic_id')
     .single();
 
+  // If attaching clinic_id fails (legacy schema / constraint), still assign the PSE.
+  if (error && payload.clinic_id) {
+    const { clinic_id: _ignored, ...withoutClinic } = payload;
+    ({ data, error } = await supabase
+      .from('opinion_requests')
+      .update(withoutClinic)
+      .eq('id', requestId)
+      .select('id, assigned_to, assigned_at, consultation_stage, clinic_id')
+      .single());
+  }
+
   if (error && isMissingWorkflowColumnsError(error)) {
+    const legacyPayload: Record<string, unknown> = {
+      assigned_to: assigneeAdminId,
+      assigned_at: assignedAt
+    };
+    if (!existingRequest?.clinic_id && assigneeClinicId) {
+      legacyPayload.clinic_id = assigneeClinicId;
+    }
     const legacy = await supabase
       .from('opinion_requests')
-      .update({
-        assigned_to: assigneeAdminId,
-        assigned_at: assignedAt
-      })
+      .update(legacyPayload)
       .eq('id', requestId)
-      .select('id, assigned_to, assigned_at')
+      .select('id, assigned_to, assigned_at, clinic_id')
       .single();
     data = legacy.data;
     error = legacy.error;
@@ -4350,7 +4772,10 @@ export async function assignOpinionRequest(requestId: string, assigneeAdminId: s
   }
 
   await logRequestAudit(requestId, 'request_assigned', 'administrator', {
-    metadata: { assigned_to: assigneeAdminId }
+    metadata: {
+      assigned_to: assigneeAdminId,
+      clinic_id: (data as { clinic_id?: string | null } | null)?.clinic_id ?? null
+    }
   });
   void notifyRequestLifecycleEmail({
     event: 'request_assigned_to_pse',
@@ -4408,7 +4833,9 @@ const PAYMENT_WORKFLOW_REALTIME_FIELDS = new Set([
   'meeting_link',
   'doctor_id',
   'selected_doctor_id',
-  'schedule_confirmed_at'
+  'schedule_confirmed_at',
+  'home_care_remarks',
+  'home_care_followup_date'
 ]);
 
 const CASE_DETAILS_REALTIME_FIELDS = new Set([

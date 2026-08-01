@@ -77,9 +77,9 @@ export default function ConsultationWizardAccordion({
 
       {activeStep ? (
         <p className='consultation-wizard__mobile-summary' aria-live='polite'>
-          <strong>
-            Step {activeStep.id} of {steps.length}
-          </strong>
+            <strong>
+              Step {activeStep.id} of {steps.length}
+            </strong>
           {activeStep.title}
         </p>
       ) : null}
@@ -94,7 +94,10 @@ export default function ConsultationWizardAccordion({
             const isCurrent = index === suggestedIndex;
             const isLastStep = index === steps.length - 1;
             const isComplete = step.state === 'complete';
-            const StepIcon = COORDINATION_STEP_ICONS[index] ?? FileText;
+            const StepIcon =
+              steps.length === 2 && steps[0]?.id === 1 && steps[1]?.id === 2
+                ? COORDINATION_STEP_ICONS[index === 0 ? 0 : 4]
+                : (COORDINATION_STEP_ICONS[stepDef.id - 1] ?? FileText);
             const stateClass = isComplete
               ? 'patient-wizard-timeline__step--complete'
               : isCurrent

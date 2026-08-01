@@ -253,6 +253,7 @@ export default function DoctorConsultationPage({
       past_medical_history: values.past_medical_history.trim() || null,
       labs_diagnostics: values.labs_diagnostics.trim() || null,
       assessment_plan: values.assessment_plan.trim(),
+      followup_date: values.followup_date.trim() || null,
       prescription: values.prescription.trim() || null
     };
 
@@ -479,6 +480,38 @@ export default function DoctorConsultationPage({
                     const fieldHasContent =
                       Boolean(values[key].trim()) ||
                       (isRecording && Boolean(voiceSessionText.trim() || voiceInterimText.trim()));
+
+                    if (key === 'followup_date') {
+                      return (
+                        <label key={key} className='doctor-respond-label'>
+                          <span className='doctor-respond-label__head'>
+                            <span>{label}</span>
+                            <span className='doctor-respond-label__actions'>
+                              <button
+                                type='button'
+                                className='doctor-consultation-clear-btn'
+                                onClick={() => handleClearField(key)}
+                                disabled={submitting || micGateActive || !fieldHasContent}
+                                aria-label={`Clear ${label}`}
+                                title={`Clear ${label}`}
+                              >
+                                <Eraser size={14} aria-hidden />
+                                <span>Clear</span>
+                              </button>
+                            </span>
+                          </span>
+                          <input
+                            type='date'
+                            className='doctor-respond-date'
+                            value={values.followup_date}
+                            onChange={(event) =>
+                              setValues((prev) => ({ ...prev, followup_date: event.target.value }))
+                            }
+                            disabled={submitting || micGateActive}
+                          />
+                        </label>
+                      );
+                    }
 
                     return (
                       <label key={key} className='doctor-respond-label'>

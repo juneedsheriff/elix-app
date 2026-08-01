@@ -13,6 +13,7 @@ import {
   patientRequestStatusLabel,
   subscribeDoctorOpinionRequestUpdates
 } from '../../lib/opinionRequests';
+import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 const DOCTOR_CASES_POLL_MS = 25_000;
@@ -55,6 +56,8 @@ type OpinionRequestsPanelProps = {
   signInHint: string;
   onNavigate?: (screenId: string) => void;
   doctorReturnScreen?: string;
+  /** When set, only show consultation or home-care requests. */
+  requestKind?: 'consultations' | 'homecare';
 };
 
 export default function OpinionRequestsPanel({
@@ -68,7 +71,8 @@ export default function OpinionRequestsPanel({
   emptyHint,
   signInHint,
   onNavigate,
-  doctorReturnScreen = 'case-review'
+  doctorReturnScreen = 'case-review',
+  requestKind = 'consultations'
 }: OpinionRequestsPanelProps) {
   const location = useLocation();
   const isElixHealthWorkspace =
@@ -84,13 +88,20 @@ export default function OpinionRequestsPanel({
 
   const canLoad = view === 'patient' ? Boolean(patientAuthUserId) : Boolean(doctorId || doctorEmail);
 
+  const kindFilteredRequests = useMemo(() => {
+    if (requestKind === 'homecare') {
+      return requests.filter(isHomeCareOpinionRequest);
+    }
+    return requests.filter((request) => !isHomeCareOpinionRequest(request));
+  }, [requestKind, requests]);
+
   const visibleRequests = useMemo(() => {
-    if (view !== 'doctor' || !doctorSearch.trim()) return requests;
-    return requests.filter((request) => matchesDoctorSearch(request, doctorSearch));
-  }, [doctorSearch, requests, view]);
+    if (view !== 'doctor' || !doctorSearch.trim()) return kindFilteredRequests;
+    return kindFilteredRequests.filter((request) => matchesDoctorSearch(request, doctorSearch));
+  }, [doctorSearch, kindFilteredRequests, view]);
 
   const doctorConsultationQueue =
-    view === 'doctor' ? requests.filter(canDoctorGiveConsultation) : [];
+    view === 'doctor' ? kindFilteredRequests.filter(canDoctorGiveConsultation) : [];
   const doctorPendingCount = doctorConsultationQueue.filter(isAwaitingDoctorReply).length;
 
   const load = useCallback(
