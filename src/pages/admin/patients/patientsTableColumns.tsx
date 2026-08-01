@@ -12,6 +12,8 @@ import {
   Tooltip
 } from '@mantine/core';
 import {
+  IconBuildingCommunity,
+  IconBuildingOff,
   IconDots,
   IconEye,
   IconMail,
@@ -32,6 +34,8 @@ import {
 type UsePatientsTableColumnsOptions = {
   canEdit: boolean;
   isAdmin: boolean;
+  onAssignToClinic?: (patient: Patient) => void;
+  onRemoveFromClinic?: (patient: Patient) => void;
   onDeleteAllRequests?: (patient: Patient) => void;
   onDeletePatient?: (patient: Patient) => void;
 };
@@ -49,6 +53,8 @@ function formatDate(iso: string | null | undefined) {
 export function usePatientsTableColumns({
   canEdit,
   isAdmin,
+  onAssignToClinic,
+  onRemoveFromClinic,
   onDeleteAllRequests,
   onDeletePatient
 }: UsePatientsTableColumnsOptions) {
@@ -305,6 +311,22 @@ export function usePatientsTableColumns({
                       Call patient
                     </Menu.Item>
                   ) : null}
+                  {onAssignToClinic ? (
+                    <Menu.Item
+                      leftSection={<IconBuildingCommunity size={16} />}
+                      onClick={() => onAssignToClinic(patient)}
+                    >
+                      {patient.clinic_id ? 'Change clinic' : 'Assign to clinic'}
+                    </Menu.Item>
+                  ) : null}
+                  {onRemoveFromClinic && patient.clinic_id ? (
+                    <Menu.Item
+                      leftSection={<IconBuildingOff size={16} />}
+                      onClick={() => onRemoveFromClinic(patient)}
+                    >
+                      Remove from clinic
+                    </Menu.Item>
+                  ) : null}
                   {onDeleteAllRequests ? (
                     <Menu.Item
                       color='red'
@@ -331,6 +353,6 @@ export function usePatientsTableColumns({
         }
       }
     ],
-    [canEdit, isAdmin, onDeleteAllRequests, onDeletePatient]
+    [canEdit, isAdmin, onAssignToClinic, onRemoveFromClinic, onDeleteAllRequests, onDeletePatient]
   );
 }

@@ -457,6 +457,178 @@ export async function updatePatientForAdmin(id: string, input: AdminPatientUpdat
   return { data: data as Patient, error: null };
 }
 
+/**
+ * Assign a platform (global) patient to a clinic PSE workspace.
+ * Moves the patient out of the global pool and transfers their opinion requests
+ * so the clinic PSE can manage cases going forward.
+ */
+export async function assignPatientToClinicForAdmin(patientId: string, clinicId: string) {
+  const trimmedClinicId = clinicId.trim();
+  if (!trimmedClinicId) {
+    return { data: null, transferredRequests: 0, error: { message: 'Select a clinic workspace.' } };
+  }
+
+  const { data: clinic, error: clinicError } = await supabase
+    .from('pse_clinics')
+    .select('id, name')
+    .eq('id', trimmedClinicId)
+    .maybeSingle();
+
+  if (clinicError) {
+    return { data: null, transferredRequests: 0, error: { message: clinicError.message } };
+  }
+  if (!clinic) {
+    return { data: null, transferredRequests: 0, error: { message: 'Clinic workspace not found.' } };
+  }
+
+  const now = new Date().toISOString();
+  const { error: updateError, count } = await supabase
+    .from('patients')
+    .update({ clinic_id: trimmedClinicId, updated_at: now }, { count: 'exact' })
+    .eq('id', patientId);
+
+  if (updateError) {
+    return { data: null, transferredRequests: 0, error: { message: updateError.message } };
+  }
+  if (count === 0) {
+    return {
+      data: null,
+      transferredRequests: 0,
+      error: {
+        message:
+          'Could not assign patient. Ensure you are signed in as administrator and clinic patient visibility is applied (npm run db:apply-admin-clinic-patients).'
+      }
+    };
+  }
+
+  const { data: patientRow, error: fetchError } = await supabase
+    .from('patients')
+    .select(patientAdminColumnsWithClinic)
+    .eq('id', patientId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { data: null, transferredRequests: 0, error: { message: fetchError.message } };
+  }
+  if (!patientRow) {
+    return {
+      data: null,
+      transferredRequests: 0,
+      error: { message: 'Patient was assigned but could not be reloaded.' }
+    };
+  }
+
+  const patient = mapPatientAdminRow(patientRow as PatientAdminRow);
+  let transferredRequests = 0;
+
+  if (patient.auth_user_id) {
+    const { data: requestRows, error: requestError } = await supabase
+      .from('opinion_requests')
+      .update({
+        clinic_id: trimmedClinicId,
+        assigned_to: null
+      })
+      .eq('patient_id', patient.auth_user_id)
+      .select('id');
+
+    if (requestError) {
+      return {
+        data: patient,
+        transferredRequests: 0,
+        error: {
+          message: `Patient assigned to ${clinic.name}, but transferring requests failed: ${requestError.message}`
+        }
+      };
+    }
+    transferredRequests = requestRows?.length ?? 0;
+  }
+
+  return {
+    data: {
+      ...patient,
+      clinic_id: trimmedClinicId,
+      pse_clinic_name: patient.pse_clinic_name?.trim() || clinic.name
+    },
+    transferredRequests,
+    error: null
+  };
+}
+
+/**
+ * Remove a patient from a clinic PSE workspace back to the Global (platform) pool.
+ * Moves their opinion requests back to platform scope.
+ */
+export async function removePatientFromClinicForAdmin(patientId: string) {
+  const now = new Date().toISOString();
+  const { error: updateError, count } = await supabase
+    .from('patients')
+    .update({ clinic_id: null, updated_at: now }, { count: 'exact' })
+    .eq('id', patientId)
+    .not('clinic_id', 'is', null);
+
+  if (updateError) {
+    return { data: null, transferredRequests: 0, error: { message: updateError.message } };
+  }
+  if (count === 0) {
+    return {
+      data: null,
+      transferredRequests: 0,
+      error: {
+        message:
+          'Could not remove clinic assignment. The patient may already be global, or you need administrator access (npm run db:apply-admin-clinic-patients).'
+      }
+    };
+  }
+
+  const { data: patientRow, error: fetchError } = await supabase
+    .from('patients')
+    .select(patientAdminColumnsWithClinic)
+    .eq('id', patientId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { data: null, transferredRequests: 0, error: { message: fetchError.message } };
+  }
+  if (!patientRow) {
+    return {
+      data: null,
+      transferredRequests: 0,
+      error: { message: 'Clinic assignment was removed but the patient could not be reloaded.' }
+    };
+  }
+
+  const patient = mapPatientAdminRow(patientRow as PatientAdminRow);
+  let transferredRequests = 0;
+
+  if (patient.auth_user_id) {
+    const { data: requestRows, error: requestError } = await supabase
+      .from('opinion_requests')
+      .update({
+        clinic_id: null,
+        assigned_to: null
+      })
+      .eq('patient_id', patient.auth_user_id)
+      .select('id');
+
+    if (requestError) {
+      return {
+        data: { ...patient, clinic_id: null, pse_clinic_name: null },
+        transferredRequests: 0,
+        error: {
+          message: `Patient returned to Global, but transferring requests failed: ${requestError.message}`
+        }
+      };
+    }
+    transferredRequests = requestRows?.length ?? 0;
+  }
+
+  return {
+    data: { ...patient, clinic_id: null, pse_clinic_name: null },
+    transferredRequests,
+    error: null
+  };
+}
+
 export async function adminSignIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim(),

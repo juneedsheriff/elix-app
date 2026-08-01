@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Group, Modal, Stack, Text } from '@mantine/core';
-import { fetchAllPatientsForAdmin, deletePatientForAdmin } from '../../lib/admins';
+import { fetchAllPatientsForAdmin, deletePatientForAdmin, removePatientFromClinicForAdmin } from '../../lib/admins';
 import {
   countOpinionRequestsForPatient,
   deleteAllOpinionRequestsForPatientForAdmin
@@ -13,6 +13,7 @@ import {
   isAdministrator
 } from '../../lib/staffPermissions';
 import type { Patient } from '../../types/patient';
+import AssignPatientToClinicModal from './patients/AssignPatientToClinicModal';
 import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
 import PatientsDataTable from './patients/PatientsDataTable';
 import PatientsFilterDrawer from './patients/PatientsFilterDrawer';
@@ -81,6 +82,9 @@ export default function ElixHealthPatientsPage() {
   const [deletePatient, setDeletePatient] = useState<Patient | null>(null);
   const [deletePatientRequestsCount, setDeletePatientRequestsCount] = useState<number | null>(null);
   const [deletePatientBusy, setDeletePatientBusy] = useState(false);
+  const [assignPatient, setAssignPatient] = useState<Patient | null>(null);
+  const [removeClinicPatient, setRemoveClinicPatient] = useState<Patient | null>(null);
+  const [removeClinicBusy, setRemoveClinicBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -281,9 +285,39 @@ export default function ElixHealthPatientsPage() {
     setSuccessMessage(`${patient.full_name} was permanently deleted.`);
   }, [deletePatient]);
 
+  const confirmRemoveFromClinic = useCallback(async () => {
+    const patient = removeClinicPatient;
+    if (!patient) return;
+
+    setRemoveClinicBusy(true);
+    setActionMessage(null);
+    const { data, transferredRequests, error: removeError } = await removePatientFromClinicForAdmin(
+      patient.id
+    );
+    setRemoveClinicBusy(false);
+
+    if (removeError || !data) {
+      setActionMessage(removeError?.message ?? 'Could not remove clinic assignment.');
+      return;
+    }
+
+    setRemoveClinicPatient(null);
+    setPatients((current) =>
+      current.map((row) => (row.id === data.id ? { ...row, ...data } : row))
+    );
+    setWorkspaceTab('global');
+    const requestNote =
+      transferredRequests > 0
+        ? ` Moved ${transferredRequests} opinion request${transferredRequests === 1 ? '' : 's'} back to Global.`
+        : '';
+    setSuccessMessage(`${data.full_name} was returned to Global Patients.${requestNote}`);
+  }, [removeClinicPatient]);
+
   const columns = usePatientsTableColumns({
     canEdit,
     isAdmin,
+    onAssignToClinic: isAdmin ? (patient) => setAssignPatient(patient) : undefined,
+    onRemoveFromClinic: isAdmin ? (patient) => setRemoveClinicPatient(patient) : undefined,
     onDeleteAllRequests: canDeletePatientRequests
       ? (patient) => void openDeleteAllRequests(patient)
       : undefined,
@@ -521,6 +555,67 @@ export default function ElixHealthPatientsPage() {
             </Text>
           </Stack>
         )}
+      </Modal>
+
+      <AssignPatientToClinicModal
+        patient={assignPatient}
+        opened={Boolean(assignPatient)}
+        onClose={() => setAssignPatient(null)}
+        onAssigned={(updated, clinicName, transferredRequests) => {
+          setPatients((current) =>
+            current.map((row) => (row.id === updated.id ? { ...row, ...updated } : row))
+          );
+          setWorkspaceTab(`clinic:${updated.clinic_id}`);
+          const requestNote =
+            transferredRequests > 0
+              ? ` Moved ${transferredRequests} opinion request${transferredRequests === 1 ? '' : 's'} to the clinic queue.`
+              : '';
+          setSuccessMessage(
+            `${updated.full_name} was assigned to ${clinicName}.${requestNote}`
+          );
+          setActionMessage(null);
+        }}
+      />
+
+      <Modal
+        opened={Boolean(removeClinicPatient)}
+        onClose={() => {
+          if (!removeClinicBusy) setRemoveClinicPatient(null);
+        }}
+        title='Remove from clinic?'
+        radius='lg'
+        centered
+        classNames={{ content: 'doctors-mgmt-modal' }}
+      >
+        <Stack gap='md'>
+          <Text size='sm'>
+            {removeClinicPatient ? (
+              <>
+                Return <strong>{removeClinicPatient.full_name}</strong> to Global Patients? The
+                clinic PSE will no longer manage this patient. Their opinion requests move back to
+                the platform queue.
+              </>
+            ) : null}
+          </Text>
+          <Group justify='flex-end' gap='sm'>
+            <Button
+              variant='default'
+              radius='md'
+              disabled={removeClinicBusy}
+              onClick={() => setRemoveClinicPatient(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              color='orange'
+              radius='md'
+              loading={removeClinicBusy}
+              onClick={() => void confirmRemoveFromClinic()}
+            >
+              Remove from clinic
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
     </div>
   );

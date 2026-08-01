@@ -4,14 +4,16 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
 import { fetchPatientById } from '../../lib/patients';
 import type { Patient } from '../../types/patient';
-import { canEditProfiles } from '../../lib/staffPermissions';
+import { canEditProfiles, isAdministrator } from '../../lib/staffPermissions';
 import AdminPatientEditForm from './forms/AdminPatientEditForm';
+import AdminPatientPseClinicSection from './forms/AdminPatientPseClinicSection';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 
 export default function ElixHealthPatientEditPage() {
   const { staff } = useElixHealthStaff();
   const readOnly = !canEditProfiles(staff);
+  const isAdmin = isAdministrator(staff);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const patientId = searchParams.get('id');
@@ -78,16 +80,28 @@ export default function ElixHealthPatientEditPage() {
       ) : null}
 
       {!loading && !error && patient ? (
-        <SectionCard title={readOnly ? 'View patient profile' : 'Edit patient profile'} subtitle={`${patient.full_name} · ${patient.elix_id}`}>
-          <AdminPatientEditForm
-            patient={patient}
-            readOnly={readOnly}
-            onSaved={() => {
-              navigate(ELIX_HEALTH_PATHS.patients, { replace: true });
-            }}
-            onAuthChanged={() => void load()}
-          />
-        </SectionCard>
+        <>
+          <SectionCard
+            title={readOnly ? 'View patient profile' : 'Edit patient profile'}
+            subtitle={`${patient.full_name} · ${patient.elix_id}`}
+          >
+            <AdminPatientEditForm
+              patient={patient}
+              readOnly={readOnly}
+              onSaved={() => {
+                navigate(ELIX_HEALTH_PATHS.patients, { replace: true });
+              }}
+              onAuthChanged={() => void load()}
+            />
+          </SectionCard>
+
+          {isAdmin ? (
+            <AdminPatientPseClinicSection
+              patient={patient}
+              onAssigned={(updated) => setPatient((current) => ({ ...current, ...updated }))}
+            />
+          ) : null}
+        </>
       ) : null}
     </div>
   );
