@@ -20,6 +20,7 @@ import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
 import {
   buildHomeCareCaseDetails,
   formatHomeCareServicesMessage,
+  homeCareServicesFromRequest,
   HOME_CARE_REQUESTED_SPECIALTY,
   isHomeCareOpinionRequest,
   validateHomeCareSelection,
@@ -3635,14 +3636,29 @@ export async function patientSubmitPaymentProof(requestId: string, file: File) {
   return { data, error: null };
 }
 
-/** PSE generates a consultation invoice PDF for the patient before sending payment. */
+/** PSE generates a consultation / home-care invoice PDF for the patient before sending payment. */
 async function uploadConsultationInvoicePdf(
   request: OpinionRequest,
-  input: { amount: number; currency: string; doctor: Doctor }
+  input: {
+    amount: number;
+    currency: string;
+    doctor?: Doctor | null;
+    kind?: 'consultation' | 'home_care';
+    lineItemDescription?: string | null;
+    feeLabel?: string | null;
+  }
 ) {
   const amount = Math.round(Number(input.amount));
   if (!Number.isFinite(amount) || amount <= 0) {
-    return { data: null, error: { message: 'Consultation fee is missing for this request.' } };
+    return {
+      data: null,
+      error: {
+        message:
+          input.kind === 'home_care'
+            ? 'Enter a valid home care payment amount.'
+            : 'Consultation fee is missing for this request.'
+      }
+    };
   }
 
   if (!isR2StorageConfigured()) {
@@ -3659,6 +3675,18 @@ async function uploadConsultationInvoicePdf(
   const totals = computeConsultationInvoiceTotals(amount, currency);
   const issuedAt = new Date();
   const invoiceNumber = buildConsultationInvoiceNumber(request.id, issuedAt);
+  const kind =
+    input.kind ?? (isHomeCareOpinionRequest(request) ? 'home_care' : 'consultation');
+
+  const services =
+    kind === 'home_care' ? homeCareServicesFromRequest(request) : [];
+  const lineItemDescription =
+    input.lineItemDescription?.trim() ||
+    (kind === 'home_care'
+      ? services.length
+        ? `Home care services — ${services.join(', ')}`
+        : 'Home care services'
+      : null);
 
   const blob = await generateConsultationInvoicePdfBlob({
     invoiceNumber,
@@ -3667,17 +3695,24 @@ async function uploadConsultationInvoicePdf(
     patientGender: request.patient_gender,
     patientEmail: request.patient_email,
     requestId: request.id,
-    doctor: input.doctor,
+    doctor: input.doctor ?? null,
     durationMinutes: request.consultation_duration_minutes,
     currency,
     totals,
     clinicId: request.clinic_id,
-    clinicName: request.clinic_name
+    clinicName: request.clinic_name,
+    kind,
+    lineItemDescription,
+    feeLabel: input.feeLabel ?? (kind === 'home_care' ? 'Home care fee' : 'Consultation fee')
   });
 
-  const file = new File([blob], `consultation-invoice-${request.id}.pdf`, {
-    type: 'application/pdf'
-  });
+  const file = new File(
+    [blob],
+    `${kind === 'home_care' ? 'home-care' : 'consultation'}-invoice-${request.id}.pdf`,
+    {
+      type: 'application/pdf'
+    }
+  );
 
   const { data: uploadTarget, error: presignError } = await createConsultationInvoiceUploadUrl(
     request.id,
@@ -3872,9 +3907,9 @@ export async function pseCompleteHomeCareRequest(
   return { data, error: null };
 }
 
-/** Home care payment link (no doctor invoice required). */
+/** Home care: generate invoice PDF and send payment link to the patient. */
 export async function pseSendHomeCarePaymentLink(
-  requestId: string,
+  request: OpinionRequest,
   input: { paymentLink: string; amount: number; currency: string }
 ) {
   const link = input.paymentLink.trim();
@@ -3885,28 +3920,132 @@ export async function pseSendHomeCarePaymentLink(
     return { data: null, error: { message: 'Enter a valid payment amount.' } };
   }
 
-  const currency = normalizeConsultationCurrency(input.currency || 'INR');
-  const { data, error } = await supabase
-    .from('opinion_requests')
-    .update({
-      payment_link: link,
-      payment_status: 'pending',
-      consultation_stage: 'payment_pending',
-      payment_amount: input.amount,
-      payment_currency: currency
-    })
-    .eq('id', requestId)
-    .select(
-      'id, payment_link, payment_status, payment_amount, payment_currency, consultation_stage'
-    )
-    .maybeSingle();
-
-  if (error) {
-    return { data: null, error: { message: error.message } };
+  const uploaded = await uploadConsultationInvoicePdf(request, {
+    amount: input.amount,
+    currency: input.currency || 'INR',
+    kind: 'home_care'
+  });
+  if (uploaded.error || !uploaded.data) {
+    return { data: null, error: uploaded.error };
   }
 
-  await logRequestAudit(requestId, 'payment_link_sent', 'pse', {
-    metadata: { amount: input.amount, currency, home_care: true }
+  const payload = {
+    ...consultationInvoiceDbPayload(uploaded.data),
+    payment_link: link,
+    payment_status: 'pending' as const,
+    consultation_stage: 'payment_pending' as const,
+    payment_amount: uploaded.data.totals.total,
+    payment_currency: uploaded.data.currency
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', request.id)
+    .select(invoiceSelectFields)
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation invoice is not enabled in the database. Run npm run db:apply-consultation-invoice or apply supabase/migrations/037_consultation_invoice.sql.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error: { message: error.message } };
+
+  await logRequestAudit(request.id, 'invoice_and_payment_sent', 'pse', {
+    metadata: {
+      payment_amount: uploaded.data.totals.total,
+      payment_currency: uploaded.data.currency,
+      home_care: true
+    }
+  });
+
+  return { data, error: null };
+}
+
+/** Home care: generate invoice (if needed) and confirm cash/online payment. */
+export async function pseConfirmHomeCarePayment(
+  request: OpinionRequest,
+  input: {
+    amount: number;
+    currency: string;
+    reference?: string | null;
+    method?: 'online' | 'cash';
+  }
+) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return { data: null, error: { message: 'Enter a valid payment amount.' } };
+  }
+
+  let invoicePayload: ReturnType<typeof consultationInvoiceDbPayload> | null = null;
+  let paymentAmount = input.amount;
+  let paymentCurrency = normalizeConsultationCurrency(input.currency || 'INR');
+
+  if (!request.invoice_pdf_storage_path?.trim()) {
+    const uploaded = await uploadConsultationInvoicePdf(request, {
+      amount: input.amount,
+      currency: paymentCurrency,
+      kind: 'home_care'
+    });
+    if (uploaded.error || !uploaded.data) {
+      return { data: null, error: uploaded.error };
+    }
+    invoicePayload = consultationInvoiceDbPayload(uploaded.data);
+    paymentAmount = uploaded.data.totals.total;
+    paymentCurrency = uploaded.data.currency;
+  } else if (
+    request.invoice_total != null &&
+    Number.isFinite(Number(request.invoice_total)) &&
+    Number(request.invoice_total) > 0
+  ) {
+    paymentAmount = Number(request.invoice_total);
+  }
+
+  const payload = {
+    ...(invoicePayload ?? {}),
+    payment_status: 'paid' as const,
+    payment_amount: paymentAmount,
+    payment_currency: paymentCurrency,
+    payment_reference: input.reference?.trim() || null,
+    payment_confirmed_at: new Date().toISOString(),
+    consultation_stage: 'paid' as const
+  };
+
+  let { data, error } = await supabase
+    .from('opinion_requests')
+    .update(payload)
+    .eq('id', request.id)
+    .select(
+      `${invoiceSelectFields}, payment_reference, payment_confirmed_at`
+    )
+    .single();
+
+  if (error && isMissingWorkflowColumnsError(error)) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Consultation invoice is not enabled in the database. Run npm run db:apply-consultation-invoice or apply supabase/migrations/037_consultation_invoice.sql.'
+      }
+    };
+  }
+
+  if (error) return { data: null, error: { message: error.message } };
+
+  await logRequestAudit(request.id, 'payment_confirmed', 'pse', {
+    metadata: {
+      payment_amount: paymentAmount,
+      payment_currency: paymentCurrency,
+      payment_reference: input.reference?.trim() || null,
+      method: input.method ?? 'online',
+      home_care: true,
+      invoice_generated: Boolean(invoicePayload)
+    }
   });
 
   return { data, error: null };

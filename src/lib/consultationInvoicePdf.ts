@@ -26,13 +26,18 @@ export type ConsultationInvoicePdfInput = {
   patientGender?: string | null;
   patientEmail: string | null;
   requestId: string;
-  doctor: Doctor;
-  durationMinutes: number | null;
+  doctor?: Doctor | null;
+  durationMinutes?: number | null;
   currency: ConsultationCurrency;
   totals: ConsultationInvoiceTotals;
   /** When set, request belongs to a PSE clinic workspace (not global PSE). */
   clinicId?: string | null;
   clinicName?: string | null;
+  /** Override line-item text (home care services, etc.). */
+  lineItemDescription?: string | null;
+  /** Totals row label — defaults to "Consultation fee". */
+  feeLabel?: string | null;
+  kind?: 'consultation' | 'home_care';
 };
 
 function hasHonorificPrefix(name: string): boolean {
@@ -140,7 +145,8 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   y += 16;
 
   const leftColWidth = contentWidth * 0.52;
-  const doctorDisplayName = withDoctorHonorific(input.doctor.full_name) ?? input.doctor.full_name;
+  const isHomeCare = input.kind === 'home_care';
+  const doctorDisplayName = withDoctorHonorific(input.doctor?.full_name) ?? input.doctor?.full_name ?? null;
   const patientDisplayName = withPatientHonorific(input.patientName, input.patientGender);
 
   writePdfIssuerContactBlock(addLine, {
@@ -170,21 +176,35 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   if (input.patientEmail) addLine(input.patientEmail, 10);
   y += 8;
 
-  addLine('Consultation provider', 11, true);
-  addLine(
-    `${doctorDisplayName}${input.doctor.specialty ? ` · ${input.doctor.specialty}` : ''}`,
-    11
-  );
-  if (input.doctor.qualification?.trim()) addLine(input.doctor.qualification.trim(), 10);
-  if (input.doctor.medical_license_no?.trim()) {
-    addLine(`License: ${input.doctor.medical_license_no.trim()}`, 10);
+  if (isHomeCare) {
+    addLine('Service', 11, true);
+    addLine('Home care services', 11);
+    if (input.clinicName?.trim()) addLine(input.clinicName.trim(), 10);
+    y += 10;
+  } else if (input.doctor) {
+    addLine('Consultation provider', 11, true);
+    addLine(
+      `${doctorDisplayName ?? 'Doctor'}${input.doctor.specialty ? ` · ${input.doctor.specialty}` : ''}`,
+      11
+    );
+    if (input.doctor.qualification?.trim()) addLine(input.doctor.qualification.trim(), 10);
+    if (input.doctor.medical_license_no?.trim()) {
+      addLine(`License: ${input.doctor.medical_license_no.trim()}`, 10);
+    }
+    y += 10;
   }
-  y += 10;
 
-  const durationLabel = input.durationMinutes
-    ? formatDurationMinutesLabel(input.durationMinutes)
-    : 'Consultation';
-  const description = `${durationLabel} online consultation — ${doctorDisplayName}`;
+  const description =
+    input.lineItemDescription?.trim() ||
+    (isHomeCare
+      ? 'Home care services'
+      : (() => {
+          const durationLabel = input.durationMinutes
+            ? formatDurationMinutesLabel(input.durationMinutes)
+            : 'Consultation';
+          return `${durationLabel} online consultation${doctorDisplayName ? ` — ${doctorDisplayName}` : ''}`;
+        })());
+  const feeLabel = input.feeLabel?.trim() || (isHomeCare ? 'Home care fee' : 'Consultation fee');
 
   ensureSpace(120);
   doc.setFillColor(245, 248, 252);
@@ -221,7 +241,7 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   };
 
   addSummaryRow(
-    'Consultation fee',
+    feeLabel,
     formatConsultationFeeForPdf(input.totals.subtotal, input.currency)
   );
   if (input.totals.taxLabel && input.totals.taxAmount > 0) {
@@ -241,7 +261,9 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
 
   y += 24;
   addLine(
-    'This invoice is issued by ElixClinix for the consultation service described above. Payment should be made using the link shared by our patient service team.',
+    isHomeCare
+      ? 'This invoice is issued by ElixClinix for the home care service described above. Payment should be made using the link shared by our clinic team, or confirmed as cash at the clinic.'
+      : 'This invoice is issued by ElixClinix for the consultation service described above. Payment should be made using the link shared by our patient service team.',
     9
   );
 

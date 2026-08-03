@@ -36,6 +36,7 @@ import {
   pseScheduleAppointment,
   pseSendInvoiceAndPaymentLink,
   pseSendHomeCarePaymentLink,
+  pseConfirmHomeCarePayment,
   pseCompleteHomeCareRequest,
   pseMarkPaymentPendingNoLink,
   canPseManageRequestRecords,
@@ -482,11 +483,15 @@ export default function RequestWorkflowWizard({
     }
     const { amount: quoteAmount } = paymentQuote;
     const linkAmount = parseAmountFromPaymentLink(paymentLink);
-    const amount = linkAmount ?? quoteAmount;
+    const manualAmount = (() => {
+      const parsed = Number(homeCareCashAmount);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    })();
+    const amount = linkAmount ?? (isHomeCare ? manualAmount : null) ?? quoteAmount;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
       onError(
         isHomeCare
-          ? 'Add a valid amount to the payment link (for example …/pay.html?amount=500).'
+          ? 'Enter an amount (Amount field or …/pay.html?amount=500 in the link) before generating the invoice.'
           : 'Consultation fee is missing. Confirm the patient selected a doctor and session length.'
       );
       return;
@@ -499,7 +504,7 @@ export default function RequestWorkflowWizard({
 
     if (isHomeCare) {
       setBusy(true);
-      const { data, error } = await pseSendHomeCarePaymentLink(request.id, {
+      const { data, error } = await pseSendHomeCarePaymentLink(request, {
         paymentLink: linkToStore,
         amount,
         currency
@@ -512,8 +517,15 @@ export default function RequestWorkflowWizard({
       if (data) {
         onRequestPatch?.(data as Partial<OpinionRequest> & { id: string });
         setPaymentLink(data.payment_link?.trim() || linkToStore);
+        if (data.payment_amount != null) {
+          setHomeCareCashAmount(String(data.payment_amount));
+        }
       }
-      onSuccess('Payment link sent to the patient.');
+      onSuccess(
+        request.invoice_pdf_storage_path?.trim()
+          ? 'Invoice regenerated and payment link sent to the patient.'
+          : 'Invoice generated and payment link sent to the patient.'
+      );
       onUpdated();
       return;
     }
@@ -636,13 +648,47 @@ export default function RequestWorkflowWizard({
         : paymentReference.trim() || null;
 
     setBusy(true);
+
+    if (isHomeCare) {
+      const { data, error } = await pseConfirmHomeCarePayment(request, {
+        amount: chargeAmount,
+        currency: normalizeConsultationCurrency(
+          paymentCurrency ??
+            request.payment_currency ??
+            request.consultation_currency ??
+            'INR'
+        ),
+        reference,
+        method
+      });
+      setBusy(false);
+      if (error) {
+        onError(error.message);
+        return;
+      }
+      if (data) {
+        onRequestPatch?.(data as Partial<OpinionRequest> & { id: string });
+        if (data.payment_amount != null) {
+          setHomeCareCashAmount(String(data.payment_amount));
+        }
+      }
+      onSuccess(
+        method === 'cash'
+          ? 'Invoice generated and cash payment confirmed for the patient.'
+          : 'Invoice generated and payment confirmed for the patient.'
+      );
+      onUpdated();
+      setExpandedStepTracked(2);
+      return;
+    }
+
     const { error } = await pseConfirmPayment(request.id, {
       amount: chargeAmount,
       currency: normalizeConsultationCurrency(
         paymentCurrency ??
           request.payment_currency ??
           request.consultation_currency ??
-          (isHomeCare ? 'INR' : 'USD')
+          'USD'
       ),
       reference
     });
@@ -653,7 +699,7 @@ export default function RequestWorkflowWizard({
     }
     onSuccess(method === 'cash' ? 'Cash payment confirmed.' : 'Payment confirmed.');
     onUpdated();
-    setExpandedStepTracked(isHomeCare ? 2 : 5);
+    setExpandedStepTracked(5);
   };
 
   const handleReleaseToDoctor = async () => {

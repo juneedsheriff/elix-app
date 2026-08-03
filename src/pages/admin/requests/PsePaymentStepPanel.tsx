@@ -113,8 +113,9 @@ export default function PsePaymentStepPanel({
     manualCashAmount;
   const canSubmitToPatient =
     canSend &&
-    Boolean(paymentLink.trim()) &&
-    (isHomeCare || effectiveAmount != null);
+    (isHomeCare
+      ? Boolean(paymentLink.trim()) && effectiveAmount != null
+      : Boolean(paymentLink.trim()) && effectiveAmount != null);
   const canConfirmPayment = effectiveAmount != null && Number.isFinite(effectiveAmount) && effectiveAmount > 0;
   const formattedAmount =
     effectiveAmount != null
@@ -133,7 +134,8 @@ export default function PsePaymentStepPanel({
     <Stack gap='md' className='pse-payment-panel'>
       {isHomeCare ? (
         <Alert color='teal' radius='md' variant='light' title='Step 2 — Home care payment'>
-          Send a payment link online, or confirm cash received at the clinic.
+          Generate an invoice and send a payment link online, or confirm cash received at the clinic
+          (invoice is generated for the patient either way).
         </Alert>
       ) : !canSend ? (
         <Alert color='orange' radius='md' title='Schedule not confirmed'>
@@ -162,8 +164,8 @@ export default function PsePaymentStepPanel({
           </Alert>
         ) : (
           <Alert color='orange' radius='md' variant='light' title='Set payment amount'>
-            Add the amount in the payment link (for example{' '}
-            <code>https://elixclinix.com/pay.html?amount=500</code>).
+            Enter an amount below, or add it to the payment link (for example{' '}
+            <code>https://elixclinix.com/pay.html?amount=500</code>), then generate the invoice.
           </Alert>
         )
       ) : request.consultation_duration_minutes && formattedAmount ? (
@@ -243,6 +245,7 @@ export default function PsePaymentStepPanel({
               value={normalizeConsultationCurrency(paymentCurrency)}
               disabled={readOnly}
               allowDeselect={false}
+              comboboxProps={{ withinPortal: true, zIndex: 460 }}
               onChange={(value) => {
                 if (value) onPaymentCurrencyChange(normalizeConsultationCurrency(value));
               }}
@@ -274,9 +277,9 @@ export default function PsePaymentStepPanel({
               onClick={onSendInvoiceAndPaymentLink}
             >
               {isHomeCare
-                ? linkShared
-                  ? 'Update payment link'
-                  : 'Send payment link to patient'
+                ? linkShared || invoiceReady
+                  ? 'Regenerate invoice & update link'
+                  : 'Generate invoice & send to patient'
                 : linkShared
                   ? 'Regenerate invoice & update link'
                   : 'Generate invoice & send to patient'}
@@ -300,7 +303,9 @@ export default function PsePaymentStepPanel({
               disabled={!canConfirmPayment || request.payment_status === 'paid'}
               onClick={onConfirmPayment}
             >
-              Confirm payment received
+              {isHomeCare && !invoiceReady
+                ? 'Confirm payment & send invoice'
+                : 'Confirm payment received'}
             </Button>
             {onConfirmCashPayment ? (
               <Button
@@ -311,7 +316,9 @@ export default function PsePaymentStepPanel({
                 disabled={!canConfirmPayment || request.payment_status === 'paid'}
                 onClick={onConfirmCashPayment}
               >
-                Received cash
+                {isHomeCare && !invoiceReady
+                  ? 'Received cash & send invoice'
+                  : 'Received cash'}
               </Button>
             ) : null}
           </Group>
@@ -323,7 +330,7 @@ export default function PsePaymentStepPanel({
           <Group justify='space-between' align='center' mb='md' wrap='wrap' gap='sm'>
             <Stack gap={2}>
               <Text fw={700} size='sm'>
-                Consultation invoice
+                {isHomeCare ? 'Home care invoice' : 'Consultation invoice'}
               </Text>
               <Text size='xs' c='dimmed'>
                 Shared with the patient on their Payment step.

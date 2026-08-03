@@ -290,6 +290,7 @@ export default function RecommendDoctorsSection({
             searchable
             clearable
             disabled={busy || !doctors.length}
+            comboboxProps={{ withinPortal: true, zIndex: 460 }}
             mb='sm'
           />
 
@@ -339,6 +340,7 @@ export default function RecommendDoctorsSection({
                 searchable
                 clearable
                 disabled={busy || !doctors.length}
+                comboboxProps={{ withinPortal: true, zIndex: 460 }}
               />
               <Group>
                 <Button
