@@ -192,3 +192,51 @@ export async function updateDoctorConsultationPricing(
 
   return fetchDoctorByAuthUserId(user.id);
 }
+
+export type OwnDoctorProfileUpdateInput = {
+  full_name: string;
+  gender: string | null;
+  mobile_no: string;
+  qualification: string | null;
+  specialization: string | null;
+  about_doctor: string | null;
+  work_experience: string | null;
+  awards_recognitions: string | null;
+  membership: string | null;
+  languages: string;
+  image_url: string;
+};
+
+export async function updateOwnDoctorProfile(input: OwnDoctorProfileUpdateInput) {
+  const fullName = input.full_name.trim();
+  if (!fullName) {
+    return { data: null, error: { message: 'Full name is required.' } };
+  }
+
+  const { error } = await supabase.rpc('update_own_doctor_profile', {
+    p_full_name: fullName,
+    p_gender: input.gender?.trim() || null,
+    p_mobile_no: input.mobile_no.trim() || null,
+    p_qualification: input.qualification?.trim() || null,
+    p_specialization: input.specialization?.trim() || null,
+    p_about_doctor: input.about_doctor?.trim() || null,
+    p_work_experience: input.work_experience?.trim() || null,
+    p_awards_recognitions: input.awards_recognitions?.trim() || null,
+    p_membership: input.membership?.trim() || null,
+    p_languages: input.languages.trim() || null,
+    p_image_url: input.image_url.trim() || null
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { data: null, error: { message: 'Not signed in.' } };
+  }
+
+  return fetchDoctorByAuthUserId(user.id);
+}

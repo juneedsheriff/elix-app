@@ -1,3 +1,23 @@
+/** Optional government ID types for patient identity fields. */
+export const PATIENT_GOVT_ID_TYPES = [
+  'Aadhar',
+  'Driving License',
+  'PAN',
+  'Ayushman Card ID',
+  "Voter's ID"
+] as const;
+
+export type PatientGovtIdType = (typeof PATIENT_GOVT_ID_TYPES)[number];
+
+/** Metadata for a file attached to the patient profile (govt ID or prescription). */
+export type PatientAttachedDocument = {
+  id: string;
+  storage_path: string;
+  file_name: string;
+  mime_type?: string | null;
+  uploaded_at: string;
+};
+
 export type Patient = {
   id: string;
   elix_id: string;
@@ -11,6 +31,11 @@ export type Patient = {
   country: string | null;
   city: string | null;
   address: string | null;
+  pin_code: string | null;
+  govt_id_type: string | null;
+  govt_id_number: string | null;
+  govt_id_documents: PatientAttachedDocument[];
+  latest_prescription_documents: PatientAttachedDocument[];
   height_cm: number | null;
   weight_kg: number | null;
   allergies: string | null;
@@ -52,6 +77,11 @@ export type PatientProfileUpdateInput = {
   country?: string | null;
   city?: string | null;
   address?: string | null;
+  pin_code?: string | null;
+  govt_id_type?: string | null;
+  govt_id_number?: string | null;
+  govt_id_documents?: PatientAttachedDocument[];
+  latest_prescription_documents?: PatientAttachedDocument[];
   height_cm?: number | null;
   weight_kg?: number | null;
   allergies?: string | null;

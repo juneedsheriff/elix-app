@@ -1,7 +1,8 @@
 import type { AuthError } from '@supabase/supabase-js';
 import type { Admin } from '../types/admin';
 import type { AdminDoctorUpdateInput, Doctor } from '../types/doctor';
-import type { Patient } from '../types/patient';
+import type { Patient, PatientAttachedDocument } from '../types/patient';
+import { parsePatientAttachedDocuments } from './patientDocuments';
 import { deletePatientPermanently } from './adminAuth';
 import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
@@ -53,7 +54,7 @@ async function queryAdminList(
 }
 
 const patientAdminColumns =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, clinic_id, created_at, updated_at';
+  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, pin_code, govt_id_type, govt_id_number, govt_id_documents, latest_prescription_documents, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, clinic_id, created_at, updated_at';
 
 const patientAdminColumnsWithClinic = `${patientAdminColumns}, pse_clinics(name)`;
 
@@ -65,6 +66,14 @@ function mapPatientAdminRow(row: PatientAdminRow): Patient {
   const { pse_clinics: _clinic, ...rest } = row;
   return {
     ...rest,
+    address: rest.address ?? null,
+    pin_code: rest.pin_code ?? null,
+    govt_id_type: rest.govt_id_type ?? null,
+    govt_id_number: rest.govt_id_number ?? null,
+    govt_id_documents: parsePatientAttachedDocuments(rest.govt_id_documents),
+    latest_prescription_documents: parsePatientAttachedDocuments(
+      rest.latest_prescription_documents
+    ),
     pse_clinic_name: clinicName
   };
 }
@@ -119,6 +128,12 @@ export type AdminPatientUpdateInput = {
   blood_group: string | null;
   country: string | null;
   city: string | null;
+  address: string | null;
+  pin_code: string | null;
+  govt_id_type: string | null;
+  govt_id_number: string | null;
+  govt_id_documents: PatientAttachedDocument[];
+  latest_prescription_documents: PatientAttachedDocument[];
   allergies: string | null;
   current_medications: string | null;
   insurance_provider: string | null;
@@ -200,6 +215,12 @@ export async function createPatientForAdmin(
     blood_group: input.blood_group?.trim() || null,
     country: input.country?.trim() || null,
     city: input.city?.trim() || null,
+    address: input.address?.trim() || null,
+    pin_code: input.pin_code?.trim() || null,
+    govt_id_type: input.govt_id_type?.trim() || null,
+    govt_id_number: input.govt_id_number?.trim() || null,
+    govt_id_documents: input.govt_id_documents ?? [],
+    latest_prescription_documents: input.latest_prescription_documents ?? [],
     allergies: input.allergies?.trim() || null,
     current_medications: input.current_medications?.trim() || null,
     insurance_provider: input.insurance_provider?.trim() || null,
@@ -226,7 +247,19 @@ export async function createPatientForAdmin(
     return { data: null, error: { message: 'Patient was created but could not be reloaded.' } };
   }
 
-  return { data: data as Patient, error: null };
+  return { data: mapPatientAdminRow(data as PatientAdminRow), error: null };
+}
+
+export async function fetchPatientForAdminById(id: string) {
+  const { data, error } = await supabase
+    .from('patients')
+    .select(patientAdminColumns)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) return { data: null, error };
+  if (!data) return { data: null, error: { message: 'Patient not found.' } };
+  return { data: mapPatientAdminRow(data as PatientAdminRow), error: null };
 }
 
 function normalizeAdmin(row: AdminRow): Admin {
@@ -441,6 +474,12 @@ export async function updatePatientForAdmin(id: string, input: AdminPatientUpdat
         blood_group: input.blood_group?.trim() || null,
         country: input.country?.trim() || null,
         city: input.city?.trim() || null,
+        address: input.address?.trim() || null,
+        pin_code: input.pin_code?.trim() || null,
+        govt_id_type: input.govt_id_type?.trim() || null,
+        govt_id_number: input.govt_id_number?.trim() || null,
+        govt_id_documents: input.govt_id_documents ?? [],
+        latest_prescription_documents: input.latest_prescription_documents ?? [],
         allergies: input.allergies?.trim() || null,
         current_medications: input.current_medications?.trim() || null,
         insurance_provider: input.insurance_provider?.trim() || null,
@@ -474,7 +513,7 @@ export async function updatePatientForAdmin(id: string, input: AdminPatientUpdat
   if (!data) {
     return { data: null, error: { message: 'Patient was updated but could not be reloaded.' } };
   }
-  return { data: data as Patient, error: null };
+  return { data: mapPatientAdminRow(data as PatientAdminRow), error: null };
 }
 
 /**

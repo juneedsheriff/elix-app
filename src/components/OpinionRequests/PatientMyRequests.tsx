@@ -477,7 +477,7 @@ export default function PatientMyRequests({
             <div className='pmr-cta-row'>
               <button type='button' className='pmr-cta-btn' onClick={() => setChoiceModalOpen(true)}>
                 <Sparkles size={18} strokeWidth={2} aria-hidden />
-                <span>Get a doctor consultation</span>
+                <span>Get Doctor Consultation</span>
                 <ChevronRight size={18} className='pmr-cta-btn__chevron' aria-hidden />
               </button>
               {canRequestHomeCare ? (
@@ -490,7 +490,7 @@ export default function PatientMyRequests({
                   }}
                 >
                   <Home size={18} strokeWidth={2} aria-hidden />
-                  <span>Get Homecare Services</span>
+                  <span>Home Care Services</span>
                   <ChevronRight size={18} className='pmr-cta-btn__chevron' aria-hidden />
                 </button>
               ) : null}

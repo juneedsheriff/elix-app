@@ -13,6 +13,7 @@ import {
 import { openMedicalRecordByPath } from '../../lib/records';
 import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
+  canAccessHomeCareRequests,
   canCreateRequests,
   canDeleteRequests,
   isAdministrator,
@@ -71,6 +72,7 @@ export default function ElixHealthRequestsPage() {
   const isPse = isAnyPatientServiceExecutive(staff);
   const isClinicPse = isClinicPatientServiceExecutive(staff);
   const canAddRequest = canCreateRequests(staff);
+  const showHomeCareTab = canAccessHomeCareRequests(staff);
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -85,7 +87,8 @@ export default function ElixHealthRequestsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
   const [homeCareModalOpen, setHomeCareModalOpen] = useState(false);
-  const initialKind = searchParams.get('tab') === 'homecare' ? 'homecare' : 'consultations';
+  const initialKind =
+    showHomeCareTab && searchParams.get('tab') === 'homecare' ? 'homecare' : 'consultations';
   const [requestKindTab, setRequestKindTab] = useState<'consultations' | 'homecare'>(initialKind);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -168,61 +171,64 @@ export default function ElixHealthRequestsPage() {
     setLoading(false);
   }, [load]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<OpinionRequest[] | null> => {
     setRefreshing(true);
     const requestsRes = await fetchOpinionRequestsForStaff();
     if (requestsRes.error) {
       setError(requestsRes.error.message);
-    } else {
-      const next = requestsRes.data ?? [];
-      notifyPatientSelectionIfNew(next);
-      setRequests(next);
-      setSelectedRequest((current) => {
-        if (!current) return null;
-        const updated = next.find((request) => request.id === current.id);
-        if (!updated) return null;
-        const merged = {
-          ...current,
-          ...updated,
-          assigned_to: updated.assigned_to ?? current.assigned_to,
-          assigned_to_name: updated.assigned_to_name ?? current.assigned_to_name,
-          assigned_at: updated.assigned_at ?? current.assigned_at,
-          consultation_stage:
-            hasPseCoordinationStarted(current) && !hasPseCoordinationStarted(updated)
-              ? current.consultation_stage ?? updated.consultation_stage
-              : updated.consultation_stage ?? current.consultation_stage,
-          message: updated.message ?? current.message,
-          requested_specialty: updated.requested_specialty ?? current.requested_specialty,
-          patient_case_details: updated.patient_case_details ?? current.patient_case_details,
-          case_details_reviewed_at:
-            updated.case_details_reviewed_at ?? current.case_details_reviewed_at,
-          schedule_confirmed_at: updated.schedule_confirmed_at ?? current.schedule_confirmed_at,
-          payment_link: updated.payment_link ?? current.payment_link,
-          payment_status: updated.payment_status ?? current.payment_status,
-          payment_amount:
-            updated.payment_amount != null ? updated.payment_amount : current.payment_amount,
-          payment_currency: updated.payment_currency ?? current.payment_currency,
-          payment_proof_submitted_at:
-            updated.payment_proof_submitted_at ?? current.payment_proof_submitted_at,
-          payment_proof_storage_path:
-            updated.payment_proof_storage_path ?? current.payment_proof_storage_path,
-          invoice_pdf_storage_path:
-            updated.invoice_pdf_storage_path ?? current.invoice_pdf_storage_path,
-          invoice_generated_at: updated.invoice_generated_at ?? current.invoice_generated_at,
-          invoice_number: updated.invoice_number ?? current.invoice_number,
-          invoice_subtotal: updated.invoice_subtotal ?? current.invoice_subtotal,
-          invoice_tax_rate: updated.invoice_tax_rate ?? current.invoice_tax_rate,
-          invoice_tax_amount: updated.invoice_tax_amount ?? current.invoice_tax_amount,
-          invoice_total: updated.invoice_total ?? current.invoice_total,
-          records: updated.records.length ? updated.records : current.records
-        };
-        if (merged.assigned_to) {
-          setAssigneeId(merged.assigned_to);
-        }
-        return merged;
-      });
+      setRefreshing(false);
+      return null;
     }
+
+    const next = requestsRes.data ?? [];
+    notifyPatientSelectionIfNew(next);
+    setRequests(next);
+    setSelectedRequest((current) => {
+      if (!current) return null;
+      const updated = next.find((request) => request.id === current.id);
+      if (!updated) return null;
+      const merged = {
+        ...current,
+        ...updated,
+        assigned_to: updated.assigned_to ?? current.assigned_to,
+        assigned_to_name: updated.assigned_to_name ?? current.assigned_to_name,
+        assigned_at: updated.assigned_at ?? current.assigned_at,
+        consultation_stage:
+          hasPseCoordinationStarted(current) && !hasPseCoordinationStarted(updated)
+            ? current.consultation_stage ?? updated.consultation_stage
+            : updated.consultation_stage ?? current.consultation_stage,
+        message: updated.message ?? current.message,
+        requested_specialty: updated.requested_specialty ?? current.requested_specialty,
+        patient_case_details: updated.patient_case_details ?? current.patient_case_details,
+        case_details_reviewed_at:
+          updated.case_details_reviewed_at ?? current.case_details_reviewed_at,
+        schedule_confirmed_at: updated.schedule_confirmed_at ?? current.schedule_confirmed_at,
+        payment_link: updated.payment_link ?? current.payment_link,
+        payment_status: updated.payment_status ?? current.payment_status,
+        payment_amount:
+          updated.payment_amount != null ? updated.payment_amount : current.payment_amount,
+        payment_currency: updated.payment_currency ?? current.payment_currency,
+        payment_proof_submitted_at:
+          updated.payment_proof_submitted_at ?? current.payment_proof_submitted_at,
+        payment_proof_storage_path:
+          updated.payment_proof_storage_path ?? current.payment_proof_storage_path,
+        invoice_pdf_storage_path:
+          updated.invoice_pdf_storage_path ?? current.invoice_pdf_storage_path,
+        invoice_generated_at: updated.invoice_generated_at ?? current.invoice_generated_at,
+        invoice_number: updated.invoice_number ?? current.invoice_number,
+        invoice_subtotal: updated.invoice_subtotal ?? current.invoice_subtotal,
+        invoice_tax_rate: updated.invoice_tax_rate ?? current.invoice_tax_rate,
+        invoice_tax_amount: updated.invoice_tax_amount ?? current.invoice_tax_amount,
+        invoice_total: updated.invoice_total ?? current.invoice_total,
+        records: updated.records.length ? updated.records : current.records
+      };
+      if (merged.assigned_to) {
+        setAssigneeId(merged.assigned_to);
+      }
+      return merged;
+    });
     setRefreshing(false);
+    return next;
   }, [notifyPatientSelectionIfNew]);
 
   const patchSelectedRequest = useCallback((patch: Partial<OpinionRequest> & { id: string }) => {
@@ -242,7 +248,7 @@ export default function ElixHealthRequestsPage() {
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (requestKindTab === 'homecare') {
+    if (showHomeCareTab && requestKindTab === 'homecare') {
       next.set('tab', 'homecare');
     } else {
       next.delete('tab');
@@ -250,7 +256,13 @@ export default function ElixHealthRequestsPage() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [requestKindTab, searchParams, setSearchParams]);
+  }, [requestKindTab, searchParams, setSearchParams, showHomeCareTab]);
+
+  useEffect(() => {
+    if (!showHomeCareTab && requestKindTab === 'homecare') {
+      setRequestKindTab('consultations');
+    }
+  }, [showHomeCareTab, requestKindTab]);
 
   useEffect(() => {
     if (!isAdmin && !isPse) return;
@@ -260,11 +272,11 @@ export default function ElixHealthRequestsPage() {
   }, [refresh, isAdmin, isPse, staff.id]);
 
   const kindScopedRequests = useMemo(() => {
-    if (requestKindTab === 'homecare') {
+    if (showHomeCareTab && requestKindTab === 'homecare') {
       return requests.filter(isHomeCareOpinionRequest);
     }
     return requests.filter((request) => !isHomeCareOpinionRequest(request));
-  }, [requestKindTab, requests]);
+  }, [requestKindTab, requests, showHomeCareTab]);
 
   const consultationCount = useMemo(
     () => requests.filter((request) => !isHomeCareOpinionRequest(request)).length,
@@ -275,13 +287,17 @@ export default function ElixHealthRequestsPage() {
     [requests]
   );
 
-  const requestKindTabs = useMemo(
-    () => [
-      { value: 'consultations', label: `Consultations (${consultationCount})` },
+  const requestKindTabs = useMemo(() => {
+    const consultations = {
+      value: 'consultations',
+      label: `Consultations (${consultationCount})`
+    };
+    if (!showHomeCareTab) return [consultations];
+    return [
+      consultations,
       { value: 'homecare', label: `Home Care (${homeCareCount})` }
-    ],
-    [consultationCount, homeCareCount]
-  );
+    ];
+  }, [consultationCount, homeCareCount, showHomeCareTab]);
 
   const workspaceScopedRequests = useMemo(
     () =>
@@ -497,6 +513,37 @@ export default function ElixHealthRequestsPage() {
     [isClinicPse, staff.id]
   );
 
+  /** Open detail drawer when landed with ?id=… (e.g. after create from Patients). */
+  useEffect(() => {
+    const requestId = searchParams.get('id');
+    if (!requestId || loading) return;
+    const found = requests.find((request) => request.id === requestId);
+    if (!found) return;
+
+    if (showHomeCareTab && isHomeCareOpinionRequest(found)) {
+      setRequestKindTab('homecare');
+    } else {
+      setRequestKindTab('consultations');
+    }
+    openRequest(found);
+
+    const justCreated = searchParams.get('created') === '1';
+    if (justCreated) {
+      setSuccessMessage(
+        isHomeCareOpinionRequest(found)
+          ? 'Home care request created and assigned to you.'
+          : 'Consultation request created and assigned to you.'
+      );
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('id');
+    next.delete('created');
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [loading, requests, searchParams, openRequest, setSearchParams, showHomeCareTab]);
+
   const handleDeleteRequest = useCallback(
     async (request: OpinionRequest) => {
       const label = request.patient_name ?? 'this patient';
@@ -607,11 +654,9 @@ export default function ElixHealthRequestsPage() {
 
   const pageTitle =
     requestKindTab === 'homecare'
-      ? isPse
-        ? 'Home care requests'
-        : 'Home care requests'
+      ? 'Home care requests'
       : isPse
-        ? 'My assigned requests'
+        ? 'Patient Requests'
         : 'Opinion requests';
   const pageSubtitle =
     requestKindTab === 'homecare'
@@ -669,11 +714,13 @@ export default function ElixHealthRequestsPage() {
         </Alert>
       ) : null}
 
-      <WorkspaceTabs
-        tabs={requestKindTabs}
-        value={requestKindTab}
-        onChange={(value) => setRequestKindTab(value as 'consultations' | 'homecare')}
-      />
+      {requestKindTabs.length > 1 ? (
+        <WorkspaceTabs
+          tabs={requestKindTabs}
+          value={requestKindTab}
+          onChange={(value) => setRequestKindTab(value as 'consultations' | 'homecare')}
+        />
+      ) : null}
 
       {isAdmin && workspaceTabs.length ? (
         <WorkspaceTabs
@@ -772,9 +819,23 @@ export default function ElixHealthRequestsPage() {
           staff={staff}
           patients={patients}
           doctors={doctors}
-          onCreated={() => {
-            setSuccessMessage('Opinion request created and assigned to you.');
-            void refresh();
+          onPatientCreated={(patient) => {
+            setPatients((prev) => {
+              if (prev.some((item) => item.id === patient.id)) return prev;
+              return [patient, ...prev].sort((a, b) =>
+                (a.full_name ?? '').localeCompare(b.full_name ?? '')
+              );
+            });
+          }}
+          onCreated={(requestId) => {
+            void (async () => {
+              const next = await refresh();
+              const created = next?.find((request) => request.id === requestId);
+              if (created) {
+                openRequest(created);
+              }
+              setSuccessMessage('Consultation request created and assigned to you.');
+            })();
           }}
         />
       ) : null}
@@ -785,10 +846,26 @@ export default function ElixHealthRequestsPage() {
           onClose={() => setHomeCareModalOpen(false)}
           staff={staff}
           patients={patients}
-          onCreated={() => {
-            setSuccessMessage('Home care request created and assigned to you.');
+          onPatientCreated={(patient) => {
+            setPatients((prev) => {
+              if (prev.some((item) => item.id === patient.id)) {
+                return prev.map((item) => (item.id === patient.id ? { ...item, ...patient } : item));
+              }
+              return [patient, ...prev].sort((a, b) =>
+                (a.full_name ?? '').localeCompare(b.full_name ?? '')
+              );
+            });
+          }}
+          onCreated={(requestId) => {
             setRequestKindTab('homecare');
-            void refresh();
+            void (async () => {
+              const next = await refresh();
+              const created = next?.find((request) => request.id === requestId);
+              if (created) {
+                openRequest(created);
+              }
+              setSuccessMessage('Home care request created and assigned to you.');
+            })();
           }}
         />
       ) : null}

@@ -1,10 +1,21 @@
 import type { User } from '@supabase/supabase-js';
-import type { Patient, PatientOnboardingInput, PatientProfileUpdateInput } from '../types/patient';
+import type {
+  Patient,
+  PatientAttachedDocument,
+  PatientOnboardingInput,
+  PatientProfileUpdateInput
+} from '../types/patient';
 import { isPatientProfileComplete } from './patientProfileCompleteness';
+import { parsePatientAttachedDocuments } from './patientDocuments';
+import { createR2UploadUrl, isR2StorageConfigured, uploadFileToR2 } from './r2Storage';
+import { medicalFileValidationError } from './records';
 import { supabase } from './supabase';
 
+const patientProfileDocColumns =
+  'pin_code, govt_id_type, govt_id_number, govt_id_documents, latest_prescription_documents';
+
 const patientColumnsExtended =
-  'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, clinic_id, login_disabled, deleted_at, created_at, updated_at';
+  `id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, address, height_cm, weight_kg, allergies, family_history, social_history, surgical_history, medical_history, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, profile_completed_at, clinic_id, login_disabled, deleted_at, ${patientProfileDocColumns}, created_at, updated_at`;
 
 const patientColumnsWithElix =
   'id, elix_id, auth_user_id, full_name, email, phone, date_of_birth, gender, blood_group, country, city, allergies, current_medications, insurance_provider, emergency_contact_name, emergency_contact_phone, preferred_language, avatar_url, login_disabled, deleted_at, created_at, updated_at';
@@ -29,6 +40,13 @@ function normalizePatientRow(patient: Patient | null): Patient | null {
   return {
     ...patient,
     address: patient.address ?? null,
+    pin_code: patient.pin_code ?? null,
+    govt_id_type: patient.govt_id_type ?? null,
+    govt_id_number: patient.govt_id_number ?? null,
+    govt_id_documents: parsePatientAttachedDocuments(patient.govt_id_documents),
+    latest_prescription_documents: parsePatientAttachedDocuments(
+      patient.latest_prescription_documents
+    ),
     height_cm: patient.height_cm ?? null,
     weight_kg: patient.weight_kg ?? null,
     family_history: patient.family_history ?? null,
@@ -67,7 +85,7 @@ async function selectPatient(
   }
 
   const missingColumn =
-    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|clinic_id|login_disabled|deleted_at|column/.test(
+    /address|profile_completed_at|height_cm|weight_kg|family_history|social_history|surgical_history|medical_history|elix_id|clinic_id|login_disabled|deleted_at|pin_code|govt_id|latest_prescription|column/.test(
       extended.error.message
     );
   if (!missingColumn) {
@@ -360,6 +378,15 @@ export async function updatePatientProfileForUser(
     country: trimOrNull(input.country),
     city: trimOrNull(input.city),
     address: trimOrNull(input.address),
+    pin_code: trimOrNull(input.pin_code),
+    govt_id_type: trimOrNull(input.govt_id_type),
+    govt_id_number: trimOrNull(input.govt_id_number),
+    ...(input.govt_id_documents !== undefined
+      ? { govt_id_documents: input.govt_id_documents }
+      : {}),
+    ...(input.latest_prescription_documents !== undefined
+      ? { latest_prescription_documents: input.latest_prescription_documents }
+      : {}),
     height_cm: input.height_cm ?? null,
     weight_kg: input.weight_kg ?? null,
     allergies: trimOrNull(input.allergies),
@@ -377,6 +404,50 @@ export async function updatePatientProfileForUser(
   };
 
   return updatePatientByAuthUserId(authUserId, payload);
+}
+
+/** Upload a profile document (govt ID photo or latest prescription) to R2. */
+export async function uploadPatientAttachedDocument(file: File): Promise<{
+  data: PatientAttachedDocument | null;
+  error: { message: string } | null;
+}> {
+  const validationError = medicalFileValidationError(file);
+  if (validationError) {
+    return { data: null, error: { message: validationError } };
+  }
+  if (!isR2StorageConfigured()) {
+    return {
+      data: null,
+      error: { message: 'File storage is not configured. Set VITE_R2_API_URL so documents can be saved.' }
+    };
+  }
+
+  const contentType = file.type || 'application/octet-stream';
+  const { data: uploadTarget, error: presignError } = await createR2UploadUrl(file);
+  if (presignError || !uploadTarget) {
+    return { data: null, error: presignError ?? { message: 'Could not prepare document upload.' } };
+  }
+
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    contentType,
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { data: null, error: { message: uploadError.message } };
+  }
+
+  return {
+    data: {
+      id: crypto.randomUUID(),
+      storage_path: uploadTarget.storagePath,
+      file_name: file.name,
+      mime_type: contentType,
+      uploaded_at: new Date().toISOString()
+    },
+    error: null
+  };
 }
 
 /** Patient updates their profile photo (optional; RLS: patients_update_own). */

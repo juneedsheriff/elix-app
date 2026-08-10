@@ -1,4 +1,9 @@
-import type { ElixHealthNavId } from '../../lib/staffPermissions';
+import type { AdminRole } from '../../types/admin';
+import {
+  requestsNavLabel,
+  staffLandingNavId,
+  type ElixHealthNavId
+} from '../../lib/staffPermissions';
 
 export const ELIX_HEALTH_PATHS = {
   overview: '/elixhealth',
@@ -14,17 +19,34 @@ export const ELIX_HEALTH_PATHS = {
   workspaceCases: '/elixhealth/workspace/cases',
   workspaceConsultation: '/elixhealth/workspace/consultation',
   workspaceHomeCare: '/elixhealth/workspace/homecare',
-  workspaceAvailability: '/elixhealth/workspace/availability'
+  workspaceAvailability: '/elixhealth/workspace/availability',
+  workspaceProfile: '/elixhealth/workspace/profile'
 } as const;
 
-export type ElixHealthDoctorNavId = 'dashboard' | 'cases' | 'homecare' | 'availability';
+const NAV_PATH: Record<ElixHealthNavId, string> = {
+  overview: ELIX_HEALTH_PATHS.overview,
+  doctors: ELIX_HEALTH_PATHS.doctors,
+  patients: ELIX_HEALTH_PATHS.patients,
+  requests: ELIX_HEALTH_PATHS.requests,
+  staff: ELIX_HEALTH_PATHS.staff,
+  profile: ELIX_HEALTH_PATHS.profile
+};
+
+/** Landing path for staff after login (clinic PSE → requests). */
+export function staffLandingPath(role: AdminRole): string {
+  return NAV_PATH[staffLandingNavId(role)];
+}
+
+export type ElixHealthDoctorNavId = 'dashboard' | 'profile';
 
 const DOCTOR_SCREEN_TO_PATH: Record<string, string> = {
   'doctor-dashboard': ELIX_HEALTH_PATHS.workspace,
-  'case-review': ELIX_HEALTH_PATHS.workspaceCases,
+  'case-review': ELIX_HEALTH_PATHS.workspace,
   'doctor-consultation': ELIX_HEALTH_PATHS.workspaceConsultation,
   'doctor-homecare': ELIX_HEALTH_PATHS.workspaceHomeCare,
-  availability: ELIX_HEALTH_PATHS.workspaceAvailability
+  availability: ELIX_HEALTH_PATHS.workspaceAvailability,
+  settings: ELIX_HEALTH_PATHS.workspaceProfile,
+  'doctor-profile': ELIX_HEALTH_PATHS.workspaceProfile
 };
 
 export function doctorWorkspacePath(screenId: string): string {
@@ -32,18 +54,16 @@ export function doctorWorkspacePath(screenId: string): string {
 }
 
 export function doctorNavIdFromPathname(pathname: string): ElixHealthDoctorNavId {
-  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'cases';
-  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceHomeCare)) return 'homecare';
-  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'availability';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceProfile)) return 'profile';
   return 'dashboard';
 }
 
 export function doctorPageTitleFromPathname(pathname: string): string {
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceConsultation)) return 'Consultation';
-  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceCases)) return 'Cases';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceProfile)) return 'Profile';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceHomeCare)) return 'Home Care';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Scheduler';
-  return 'Dashboard';
+  return 'Patient Requests';
 }
 
 export function doctorEditUrl(id: string, tab?: 'clinic' | 'scheduler' | 'login') {
@@ -69,7 +89,11 @@ export function navIdFromPathname(pathname: string): ElixHealthNavId {
   return 'overview';
 }
 
-export function pageTitleFromPathname(pathname: string, search: string): string {
+export function pageTitleFromPathname(
+  pathname: string,
+  search: string,
+  role?: AdminRole
+): string {
   if (pathname === '/elixhealth/doctor/new') {
     return 'Add doctor';
   }
@@ -87,6 +111,8 @@ export function pageTitleFromPathname(pathname: string, search: string): string 
   if (pathname === '/elixhealth/patients') return 'Patients';
   if (pathname === '/elixhealth/staff') return 'Staff';
   if (pathname === '/elixhealth/profile') return 'My profile';
-  if (pathname === '/elixhealth/requests') return 'Requests';
+  if (pathname === '/elixhealth/requests') {
+    return role ? requestsNavLabel(role) : 'Requests';
+  }
   return 'Dashboard';
 }

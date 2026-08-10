@@ -29,19 +29,124 @@ import {
   fetchConsultationSummary,
   fetchDoctorOpinionRequests,
   fetchStaffOpinionRequestById,
+  labOrderFileValidationError,
+  prescriptionImageValidationError,
   saveDoctorConsultation,
   saveDoctorConsultationUpload,
   subscribeOpinionRequestLiveUpdates
 } from '../../lib/opinionRequests';
 import { hasConsultationSummary } from '../../lib/consultationWizard';
 import { dataUrlToFile } from '../../lib/imageFiles';
+import { caseDetailsFromRequest } from '../../lib/patientCaseDetails';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
 
 const CONSULTATION_NOTES_ACCEPT =
   '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.doc,.docx,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+const PRESCRIPTION_IMAGE_ACCEPT =
+  '.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif';
+
+const LAB_ORDER_FILE_ACCEPT = CONSULTATION_NOTES_ACCEPT;
+
 type ConsultationMode = 'fill' | 'upload';
+
+const VITAL_SIGN_FIELDS = [
+  { key: 'blood_pressure', label: 'Blood Pressure', placeholder: 'e.g. 120/80' },
+  { key: 'pulse_rate', label: 'Pulse Rate', placeholder: 'bpm' },
+  { key: 'respiratory_rate', label: 'Respiratory Rate', placeholder: 'breaths/min' },
+  { key: 'temperature', label: 'Temperature', placeholder: 'C / F' },
+  { key: 'spo2', label: 'SpO₂', placeholder: '%' },
+  { key: 'height', label: 'Height', placeholder: 'cm' },
+  { key: 'weight', label: 'Weight', placeholder: 'kg' }
+] as const;
+
+type VitalSignKey = (typeof VITAL_SIGN_FIELDS)[number]['key'];
+type VitalSignsDraft = Record<VitalSignKey, string>;
+
+function emptyVitalSignsDraft(): VitalSignsDraft {
+  return {
+    blood_pressure: '',
+    pulse_rate: '',
+    respiratory_rate: '',
+    temperature: '',
+    spo2: '',
+    height: '',
+    weight: ''
+  };
+}
+
+function normalizeVitalSignLabel(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function vitalSignKeyFromLabel(label: string): VitalSignKey | null {
+  const normalized = normalizeVitalSignLabel(label);
+  if (normalized === 'bloodpressure' || normalized === 'bp') return 'blood_pressure';
+  if (normalized === 'pulserate' || normalized === 'pulse' || normalized === 'heartrate') return 'pulse_rate';
+  if (normalized === 'respiratoryrate' || normalized === 'rr') return 'respiratory_rate';
+  if (normalized === 'temperature' || normalized === 'temp') return 'temperature';
+  if (normalized === 'spo2' || normalized === 'oxygensaturation') return 'spo2';
+  if (normalized === 'height') return 'height';
+  if (normalized === 'weight') return 'weight';
+  return null;
+}
+
+function parseVitalSignsText(text: string): VitalSignsDraft {
+  const parsed = emptyVitalSignsDraft();
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+
+    // Common format: "Blood Pressure: 120/80" (also supports "-" or "=" separators)
+    const inlineMatch = line.match(/^([^:=\-]+)\s*[:=\-]\s*(.+)$/);
+    if (inlineMatch) {
+      const key = vitalSignKeyFromLabel(inlineMatch[1] ?? '');
+      if (key) {
+        parsed[key] = (inlineMatch[2] ?? '').trim();
+        continue;
+      }
+    }
+
+    // Legacy format: label on one line, value on next line.
+    const key = vitalSignKeyFromLabel(line);
+    if (!key) continue;
+    const nextLine = lines[index + 1];
+    if (!nextLine) continue;
+    if (vitalSignKeyFromLabel(nextLine)) continue;
+    parsed[key] = nextLine.trim();
+    index += 1;
+  }
+
+  return parsed;
+}
+
+function stringifyVitalSigns(draft: VitalSignsDraft): string {
+  return VITAL_SIGN_FIELDS.map((field) => {
+    const value = draft[field.key].trim();
+    if (!value) return null;
+    return `${field.label}: ${value}`;
+  })
+    .filter((line): line is string => Boolean(line))
+    .join('\n');
+}
+
+function vitalSignsDraftFromCaseDetails(request: OpinionRequest): VitalSignsDraft {
+  const details = caseDetailsFromRequest(request);
+  return {
+    blood_pressure: details.vitalSigns.bloodPressure?.trim() ?? '',
+    pulse_rate: details.vitalSigns.pulseRate?.trim() ?? '',
+    respiratory_rate: details.vitalSigns.respiratoryRate?.trim() ?? '',
+    temperature: details.vitalSigns.temperature?.trim() ?? '',
+    spo2: details.vitalSigns.spo2?.trim() ?? '',
+    height: details.vitalSigns.height?.trim() ?? '',
+    weight: details.vitalSigns.weight?.trim() ?? ''
+  };
+}
 
 export default function DoctorConsultationPage({
   dbConnected,
@@ -54,15 +159,19 @@ export default function DoctorConsultationPage({
   const [mode, setMode] = useState<ConsultationMode>('fill');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadNote, setUploadNote] = useState('');
+  const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
+  const [labOrderFile, setLabOrderFile] = useState<File | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prescriptionFileInputRef = useRef<HTMLInputElement>(null);
+  const labOrderFileInputRef = useRef<HTMLInputElement>(null);
   const consultationRequestIdRef = useRef(getDoctorConsultationRequestId());
 
-  const [returnScreen] = useState(() => consumeReturnScreen() ?? 'case-review');
+  const [returnScreen] = useState(() => consumeReturnScreen() ?? 'doctor-dashboard');
   const [caseContextOpen, setCaseContextOpen] = useState(() => {
     if (!consumeDoctorConsultationOpenCaseContext()) return false;
     return typeof document !== 'undefined' && Boolean(document.querySelector('.mobile-shell'));
@@ -116,7 +225,7 @@ export default function DoctorConsultationPage({
 
   const goToCasesAfterSubmit = useCallback(() => {
     stopVoice();
-    onNavigate?.('case-review');
+    onNavigate?.('doctor-dashboard');
     clearDoctorConsultationRequestId();
     consultationRequestIdRef.current = null;
   }, [onNavigate, stopVoice]);
@@ -166,15 +275,27 @@ export default function DoctorConsultationPage({
 
     setRequest(match);
     setSummary(summaryRes.data ?? null);
+    setPrescriptionFile(null);
+    setLabOrderFile(null);
+    if (prescriptionFileInputRef.current) prescriptionFileInputRef.current.value = '';
+    if (labOrderFileInputRef.current) labOrderFileInputRef.current.value = '';
 
     const fromSummary = consultationSummaryToFormValues(summaryRes.data);
+    const fallbackVitalSigns = stringifyVitalSigns(vitalSignsDraftFromCaseDetails(match));
     const hasSummary = Object.values(fromSummary).some(Boolean);
     if (hasSummary) {
-      setValues(fromSummary);
+      setValues({
+        ...fromSummary,
+        vital_signs: fromSummary.vital_signs.trim() || fallbackVitalSigns
+      });
     } else if (match.doctor_response?.trim()) {
-      setValues({ ...emptyConsultationSummaryValues(), assessment_plan: match.doctor_response.trim() });
+      setValues({
+        ...emptyConsultationSummaryValues(),
+        vital_signs: fallbackVitalSigns,
+        assessment_plan: match.doctor_response.trim()
+      });
     } else {
-      setValues(emptyConsultationSummaryValues());
+      setValues({ ...emptyConsultationSummaryValues(), vital_signs: fallbackVitalSigns });
     }
 
     if (summaryRes.data?.pdf_storage_path && !hasSummary) {
@@ -228,6 +349,40 @@ export default function DoctorConsultationPage({
       return;
     }
 
+    const prescriptionText = values.prescription.trim();
+    const labOrderText = values.labs_diagnostics.trim();
+    const hasExistingPrescriptionFile = Boolean(summary?.prescription_file_path?.trim());
+    const hasExistingLabOrderFile = Boolean(summary?.lab_order_file_path?.trim());
+    const hasPrescription =
+      Boolean(prescriptionText) || Boolean(prescriptionFile) || hasExistingPrescriptionFile;
+    const hasLabOrder =
+      Boolean(labOrderText) || Boolean(labOrderFile) || hasExistingLabOrderFile;
+
+    // Type and/or upload — at least one for prescription and one for lab order.
+    if (!hasPrescription) {
+      setError('Add a prescription by typing it or uploading an image.');
+      return;
+    }
+    if (!hasLabOrder) {
+      setError('Add a lab order by typing it or uploading a file.');
+      return;
+    }
+
+    if (prescriptionFile) {
+      const prescriptionValidation = prescriptionImageValidationError(prescriptionFile);
+      if (prescriptionValidation) {
+        setError(prescriptionValidation);
+        return;
+      }
+    }
+    if (labOrderFile) {
+      const labOrderValidation = labOrderFileValidationError(labOrderFile);
+      if (labOrderValidation) {
+        setError(labOrderValidation);
+        return;
+      }
+    }
+
     const doctorId =
       doctorProfile?.id?.trim() ||
       request.doctor_id?.trim() ||
@@ -251,18 +406,47 @@ export default function DoctorConsultationPage({
       vital_signs: values.vital_signs.trim() || null,
       current_medications: values.current_medications.trim() || null,
       past_medical_history: values.past_medical_history.trim() || null,
-      labs_diagnostics: values.labs_diagnostics.trim() || null,
+      labs_diagnostics: labOrderText || null,
       assessment_plan: values.assessment_plan.trim(),
       followup_date: values.followup_date.trim() || null,
-      prescription: values.prescription.trim() || null
+      prescription: prescriptionText || null
     };
+
+    const orderNoteParts: string[] = [];
+    if (!prescriptionText && (prescriptionFile || hasExistingPrescriptionFile)) {
+      orderNoteParts.push(
+        `Prescription:\n[Uploaded file: ${
+          prescriptionFile?.name ||
+          summary?.prescription_file_name?.trim() ||
+          'prescription image'
+        }]`
+      );
+    }
+    if (!labOrderText && (labOrderFile || hasExistingLabOrderFile)) {
+      orderNoteParts.push(
+        `Lab Order:\n[Uploaded file: ${
+          labOrderFile?.name || summary?.lab_order_file_name?.trim() || 'lab order file'
+        }]`
+      );
+    }
+    const responseText = [formatConsultationResponse(values), ...orderNoteParts]
+      .filter(Boolean)
+      .join('\n\n');
 
     const { error: submitError } = await saveDoctorConsultation(
       request.id,
       request,
       payload,
-      formatConsultationResponse(values),
-      doctorProfile
+      responseText,
+      doctorProfile,
+      {
+        prescriptionFile,
+        labOrderFile,
+        existingPrescriptionFilePath: summary?.prescription_file_path ?? null,
+        existingPrescriptionFileName: summary?.prescription_file_name ?? null,
+        existingLabOrderFilePath: summary?.lab_order_file_path ?? null,
+        existingLabOrderFileName: summary?.lab_order_file_name ?? null
+      }
     );
     setSubmitting(false);
     if (submitError) {
@@ -302,6 +486,38 @@ export default function DoctorConsultationPage({
       return;
     }
     goToCasesAfterSubmit();
+  };
+
+  const handlePrescriptionFileChange = (file: File | null) => {
+    if (!file) {
+      setPrescriptionFile(null);
+      return;
+    }
+    const validationError = prescriptionImageValidationError(file);
+    if (validationError) {
+      setError(validationError);
+      setPrescriptionFile(null);
+      if (prescriptionFileInputRef.current) prescriptionFileInputRef.current.value = '';
+      return;
+    }
+    setError(null);
+    setPrescriptionFile(file);
+  };
+
+  const handleLabOrderFileChange = (file: File | null) => {
+    if (!file) {
+      setLabOrderFile(null);
+      return;
+    }
+    const validationError = labOrderFileValidationError(file);
+    if (validationError) {
+      setError(validationError);
+      setLabOrderFile(null);
+      if (labOrderFileInputRef.current) labOrderFileInputRef.current.value = '';
+      return;
+    }
+    setError(null);
+    setLabOrderFile(file);
   };
 
   const handleFileChange = (file: File | null) => {
@@ -403,7 +619,6 @@ export default function DoctorConsultationPage({
       {!loading && request ? (
         <div className='doctor-consultation-page__workspace'>
           <aside className='doctor-consultation-page__case-context' aria-label='Patient case details'>
-            <h3 className='doctor-consultation-page__case-context-title'>Patient case details</h3>
             <DoctorPatientCaseDetailsSections
               request={request}
               onOpenError={setError}
@@ -456,8 +671,9 @@ export default function DoctorConsultationPage({
                 onSubmit={(e) => void handleFillSubmit(e)}
               >
                 <p className='muted doctor-consultation-page__mode-hint'>
-                  Complete the fields below. A branded consultation notes PDF with ElixClinix logo and your
-                  clinic details will be generated on submit.
+                  Complete the fields below. Prescription and Lab Order can each be typed, uploaded, or
+                  both — they are saved separately (typed orders become their own PDFs; uploads keep
+                  the original file). A full consultation notes PDF is also generated on submit.
                 </p>
 
                 <div
@@ -480,6 +696,7 @@ export default function DoctorConsultationPage({
                     const fieldHasContent =
                       Boolean(values[key].trim()) ||
                       (isRecording && Boolean(voiceSessionText.trim() || voiceInterimText.trim()));
+                    const vitalSignsDraft = key === 'vital_signs' ? parseVitalSignsText(values.vital_signs) : null;
 
                     if (key === 'followup_date') {
                       return (
@@ -513,10 +730,109 @@ export default function DoctorConsultationPage({
                       );
                     }
 
+                    if (key === 'vital_signs' && vitalSignsDraft) {
+                      return (
+                        <label key={key} className='doctor-respond-label'>
+                          <span className='doctor-respond-label__head'>
+                            <span>{label}</span>
+                            <span className='doctor-respond-label__actions'>
+                              <button
+                                type='button'
+                                className='doctor-consultation-clear-btn'
+                                onClick={() => handleClearField(key)}
+                                disabled={submitting || micGateActive || !fieldHasContent}
+                                aria-label={`Clear ${label}`}
+                                title={`Clear ${label}`}
+                              >
+                                <Eraser size={14} aria-hidden />
+                                <span>Clear</span>
+                              </button>
+                            </span>
+                          </span>
+                          <div className='doctor-consultation-vital-grid'>
+                            {VITAL_SIGN_FIELDS.map((field) => (
+                              <label key={field.key} className='doctor-consultation-vital-item'>
+                                <span>{field.label}</span>
+                                <input
+                                  type='text'
+                                  className='doctor-consultation-vital-input'
+                                  value={vitalSignsDraft[field.key]}
+                                  onChange={(event) => {
+                                    const next = {
+                                      ...vitalSignsDraft,
+                                      [field.key]: event.target.value
+                                    };
+                                    setValues((prev) => ({
+                                      ...prev,
+                                      vital_signs: stringifyVitalSigns(next)
+                                    }));
+                                  }}
+                                  disabled={submitting || micGateActive}
+                                  placeholder={field.placeholder}
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </label>
+                      );
+                    }
+
+                    const isPrescription = key === 'prescription';
+                    const isLabOrder = key === 'labs_diagnostics';
+                    const showOrderAttachment = isPrescription || isLabOrder;
+                    const attachmentFile = isPrescription ? prescriptionFile : isLabOrder ? labOrderFile : null;
+                    const existingAttachmentName = isPrescription
+                      ? summary?.prescription_file_name?.trim() ||
+                        (summary?.prescription_file_path ? 'Uploaded prescription image' : null)
+                      : isLabOrder
+                        ? summary?.lab_order_file_name?.trim() ||
+                          (summary?.lab_order_file_path ? 'Uploaded lab order file' : null)
+                        : null;
+                    const attachmentInputRef = isPrescription
+                      ? prescriptionFileInputRef
+                      : isLabOrder
+                        ? labOrderFileInputRef
+                        : null;
+                    const attachmentAccept = isPrescription
+                      ? PRESCRIPTION_IMAGE_ACCEPT
+                      : LAB_ORDER_FILE_ACCEPT;
+                    const attachmentHint = isPrescription
+                      ? 'Type the prescription above and/or upload an image (JPG, PNG, WebP, HEIC, or GIF, max 10 MB). Stored separately as a prescription PDF or file.'
+                      : isLabOrder
+                        ? 'Type the lab order above and/or upload a file (PDF, JPG, PNG, DOC, or DOCX, max 10 MB). Stored separately as a lab order PDF or file.'
+                        : null;
+                    const onAttachmentChange = isPrescription
+                      ? handlePrescriptionFileChange
+                      : isLabOrder
+                        ? handleLabOrderFileChange
+                        : null;
+                    const clearAttachment = () => {
+                      if (isPrescription) {
+                        setPrescriptionFile(null);
+                        if (prescriptionFileInputRef.current) {
+                          prescriptionFileInputRef.current.value = '';
+                        }
+                      }
+                      if (isLabOrder) {
+                        setLabOrderFile(null);
+                        if (labOrderFileInputRef.current) {
+                          labOrderFileInputRef.current.value = '';
+                        }
+                      }
+                    };
+
                     return (
-                      <label key={key} className='doctor-respond-label'>
+                      <div key={key} className='doctor-respond-label'>
                         <span className='doctor-respond-label__head'>
-                          <span>{label}</span>
+                          <span>
+                            {label}
+                            {showOrderAttachment ? (
+                              <span className='doctor-respond-required' aria-hidden>
+                                {' '}
+                                *
+                              </span>
+                            ) : null}
+                          </span>
                           <span className='doctor-respond-label__actions'>
                             <button
                               type='button'
@@ -540,20 +856,82 @@ export default function DoctorConsultationPage({
                         </span>
                         <textarea
                           className={`doctor-respond-textarea ${isRecording ? 'doctor-respond-textarea--recording' : ''}`}
-                          rows={key === 'prescription' || key === 'assessment_plan' ? 5 : 4}
+                          rows={
+                            key === 'prescription' ||
+                            key === 'labs_diagnostics' ||
+                            key === 'assessment_plan'
+                              ? 5
+                              : 4
+                          }
                           value={displayValue}
                           onChange={(event) =>
                             setValues((prev) => ({ ...prev, [key]: event.target.value }))
                           }
                           disabled={submitting || isRecording}
-                          placeholder={`Enter ${label.toLowerCase()}…`}
+                          placeholder={
+                            isPrescription
+                              ? 'Type prescription, or leave blank and upload an image below…'
+                              : isLabOrder
+                                ? 'Type lab order, or leave blank and upload a file below…'
+                                : `Enter ${label.toLowerCase()}…`
+                          }
                         />
                         {isRecording ? (
                           <span className='doctor-respond-voice-status' role='status'>
                             Listening… tap Stop when finished
                           </span>
                         ) : null}
-                      </label>
+                        {showOrderAttachment && attachmentInputRef && onAttachmentChange ? (
+                          <div className='doctor-consultation-field-upload'>
+                            <p className='muted doctor-consultation-field-upload__hint'>{attachmentHint}</p>
+                            <input
+                              ref={attachmentInputRef}
+                              type='file'
+                              accept={attachmentAccept}
+                              className='doctor-consultation-page__file-input'
+                              onChange={(event) =>
+                                onAttachmentChange(event.target.files?.[0] ?? null)
+                              }
+                              disabled={submitting || micGateActive}
+                            />
+                            <div className='doctor-consultation-field-upload__actions'>
+                              <button
+                                type='button'
+                                className='secondary-btn doctor-consultation-page__upload-btn'
+                                disabled={submitting || micGateActive}
+                                onClick={() => attachmentInputRef.current?.click()}
+                              >
+                                <FileUp size={16} aria-hidden />
+                                {attachmentFile || existingAttachmentName
+                                  ? 'Replace file'
+                                  : isPrescription
+                                    ? 'Upload image'
+                                    : 'Upload file'}
+                              </button>
+                              {attachmentFile ? (
+                                <button
+                                  type='button'
+                                  className='secondary-btn doctor-consultation-clear-btn'
+                                  disabled={submitting || micGateActive}
+                                  onClick={clearAttachment}
+                                >
+                                  <Eraser size={14} aria-hidden />
+                                  <span>Remove</span>
+                                </button>
+                              ) : null}
+                            </div>
+                            {attachmentFile ? (
+                              <p className='doctor-consultation-page__file-name'>{attachmentFile.name}</p>
+                            ) : existingAttachmentName ? (
+                              <p className='doctor-consultation-page__file-name'>
+                                On file: {existingAttachmentName}
+                              </p>
+                            ) : (
+                              <p className='muted doctor-consultation-page__file-hint'>No file selected</p>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     );
                   })}
 

@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Group, Modal, Stack, Text } from '@mantine/core';
-import { fetchAllPatientsForAdmin, deletePatientForAdmin, removePatientFromClinicForAdmin } from '../../lib/admins';
+import { useNavigate } from 'react-router-dom';
+import {
+  fetchAllDoctorsForAdmin,
+  fetchAllPatientsForAdmin,
+  deletePatientForAdmin,
+  removePatientFromClinicForAdmin
+} from '../../lib/admins';
 import {
   countOpinionRequestsForPatient,
   deleteAllOpinionRequestsForPatientForAdmin
 } from '../../lib/opinionRequests';
 import {
+  canBookConsultation,
   canCreatePatients,
+  canCreateRequests,
   canDeletePatients,
   canDeleteRequests,
   canEditProfiles,
   isAdministrator
 } from '../../lib/staffPermissions';
+import type { Doctor } from '../../types/doctor';
 import type { Patient } from '../../types/patient';
 import AssignPatientToClinicModal from './patients/AssignPatientToClinicModal';
 import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
@@ -23,7 +32,6 @@ import PatientsTableToolbar from './patients/PatientsTableToolbar';
 import {
   applyPatientQuickFilters,
   computePatientAnalytics,
-  exportPatientsCsv,
   uniqueSorted,
   type PatientQuickFilters
 } from './patients/patientsUtils';
@@ -31,6 +39,9 @@ import { usePatientsTableColumns } from './patients/patientsTableColumns';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 import WorkspaceTabs from './WorkspaceTabs';
 import AdminPatientCreateForm from './forms/AdminPatientCreateForm';
+import ClinicPseCreateRequestModal from './requests/ClinicPseCreateRequestModal';
+import ClinicPseHomeCareRequestModal from './requests/ClinicPseHomeCareRequestModal';
+import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import './doctors/doctors-management.css';
 
 const DEFAULT_FILTERS: PatientQuickFilters = {
@@ -60,22 +71,28 @@ function matchesSearch(patient: Patient, query: string) {
 }
 
 export default function ElixHealthPatientsPage() {
+  const navigate = useNavigate();
   const { staff } = useElixHealthStaff();
   const canEdit = canEditProfiles(staff);
   const canAddPatient = canCreatePatients(staff);
   const canDeletePatient = canDeletePatients(staff);
   const canDeletePatientRequests = canDeleteRequests(staff);
+  const canBookForPatient = canBookConsultation(staff);
+  const canRequestHomeCareForPatient = canCreateRequests(staff);
   const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<PatientQuickFilters>(DEFAULT_FILTERS);
   const [workspaceTab, setWorkspaceTab] = useState('global');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [consultationPatient, setConsultationPatient] = useState<Patient | null>(null);
+  const [homeCarePatient, setHomeCarePatient] = useState<Patient | null>(null);
   const [deleteRequestsPatient, setDeleteRequestsPatient] = useState<Patient | null>(null);
   const [deleteRequestsCount, setDeleteRequestsCount] = useState<number | null>(null);
   const [deleteRequestsBusy, setDeleteRequestsBusy] = useState(false);
@@ -89,15 +106,26 @@ export default function ElixHealthPatientsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: fetchError } = await fetchAllPatientsForAdmin();
-    if (fetchError) {
-      setError(fetchError.message);
+    const [patientsRes, doctorsRes] = await Promise.all([
+      fetchAllPatientsForAdmin(),
+      canBookForPatient
+        ? fetchAllDoctorsForAdmin()
+        : Promise.resolve({ data: [] as Doctor[], error: null })
+    ]);
+    if (patientsRes.error) {
+      setError(patientsRes.error.message);
       setPatients([]);
     } else {
-      setPatients(data ?? []);
+      setPatients(patientsRes.data ?? []);
+    }
+    if (doctorsRes.error) {
+      setError(doctorsRes.error.message);
+      setDoctors([]);
+    } else if (canBookForPatient) {
+      setDoctors(doctorsRes.data ?? []);
     }
     setLoading(false);
-  }, []);
+  }, [canBookForPatient]);
 
   useEffect(() => {
     void load();
@@ -173,11 +201,6 @@ export default function ElixHealthPatientsPage() {
 
   const analytics = useMemo(
     () => computePatientAnalytics(workspaceScopedPatients),
-    [workspaceScopedPatients]
-  );
-
-  const countryOptions = useMemo(
-    () => uniqueSorted(workspaceScopedPatients.map((patient) => patient.country)),
     [workspaceScopedPatients]
   );
 
@@ -321,17 +344,25 @@ export default function ElixHealthPatientsPage() {
     onDeleteAllRequests: canDeletePatientRequests
       ? (patient) => void openDeleteAllRequests(patient)
       : undefined,
-    onDeletePatient: canDeletePatient ? (patient) => void openDeletePatient(patient) : undefined
+    onDeletePatient: canDeletePatient ? (patient) => void openDeletePatient(patient) : undefined,
+    onBookConsultation: canBookForPatient
+      ? (patient) => {
+          setHomeCarePatient(null);
+          setConsultationPatient(patient);
+        }
+      : undefined,
+    onRequestHomeCare: canRequestHomeCareForPatient
+      ? (patient) => {
+          setConsultationPatient(null);
+          setHomeCarePatient(patient);
+        }
+      : undefined
   });
 
   const clearFilters = useCallback(() => {
     setSearch('');
     setFilters(DEFAULT_FILTERS);
   }, []);
-
-  const handleExport = useCallback(() => {
-    exportPatientsCsv(filteredPatients);
-  }, [filteredPatients]);
 
   if (error) {
     const hint = error.toLowerCase().includes('infinite recursion')
@@ -355,7 +386,6 @@ export default function ElixHealthPatientsPage() {
         totalCount={workspaceScopedPatients.length}
         canEdit={canEdit || canAddPatient}
         onOpenFilters={() => setDrawerOpen(true)}
-        onExport={handleExport}
         onAddPatient={() => setAddModalOpen(true)}
       />
 
@@ -392,7 +422,6 @@ export default function ElixHealthPatientsPage() {
               search={search}
               onSearchChange={setSearch}
               filters={filters}
-              countryOptions={countryOptions}
               cityOptions={cityOptions}
               onFilterChange={setFilters}
             />
@@ -404,7 +433,6 @@ export default function ElixHealthPatientsPage() {
         opened={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         filters={filters}
-        countryOptions={countryOptions}
         cityOptions={cityOptions}
         bloodGroupOptions={bloodGroupOptions}
         onChange={setFilters}
@@ -576,6 +604,45 @@ export default function ElixHealthPatientsPage() {
           setActionMessage(null);
         }}
       />
+
+      {canBookForPatient ? (
+        <ClinicPseCreateRequestModal
+          opened={Boolean(consultationPatient)}
+          onClose={() => setConsultationPatient(null)}
+          staff={staff}
+          patients={patients}
+          doctors={doctors}
+          initialPatientId={consultationPatient?.id ?? null}
+          allowCreatePatient={false}
+          lockPatient
+          onCreated={(requestId) => {
+            setConsultationPatient(null);
+            navigate(
+              `${ELIX_HEALTH_PATHS.requests}?id=${encodeURIComponent(requestId)}&created=1`,
+              { replace: false }
+            );
+          }}
+        />
+      ) : null}
+
+      {canRequestHomeCareForPatient && staff.clinic_id ? (
+        <ClinicPseHomeCareRequestModal
+          opened={Boolean(homeCarePatient)}
+          onClose={() => setHomeCarePatient(null)}
+          staff={staff}
+          patients={patients}
+          initialPatientId={homeCarePatient?.id ?? null}
+          lockPatient
+          allowCreatePatient={false}
+          onCreated={(requestId) => {
+            setHomeCarePatient(null);
+            navigate(
+              `${ELIX_HEALTH_PATHS.requests}?tab=homecare&id=${encodeURIComponent(requestId)}&created=1`,
+              { replace: false }
+            );
+          }}
+        />
+      ) : null}
 
       <Modal
         opened={Boolean(removeClinicPatient)}

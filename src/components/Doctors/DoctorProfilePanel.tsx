@@ -74,7 +74,7 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
               <dd>{doctor.languages}</dd>
             </div>
             <div>
-              <dt>Consultation fees</dt>
+              <dt>Consultation fee</dt>
               <dd>
                 <ConsultationTierPricingDisplay doctor={doctor} />
               </dd>

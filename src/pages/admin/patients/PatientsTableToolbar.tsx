@@ -12,7 +12,6 @@ type PatientsTableToolbarProps = {
   search: string;
   onSearchChange: (value: string) => void;
   filters: PatientQuickFilters;
-  countryOptions: string[];
   cityOptions: string[];
   onFilterChange: (filters: PatientQuickFilters) => void;
 };
@@ -31,7 +30,6 @@ function PatientsTableToolbar({
   search,
   onSearchChange,
   filters,
-  countryOptions,
   cityOptions,
   onFilterChange
 }: PatientsTableToolbarProps) {
@@ -48,16 +46,6 @@ function PatientsTableToolbar({
       />
 
       <Group gap='sm' className='doctors-mgmt-quick-filters' wrap='wrap'>
-        <Select
-          className='doctors-mgmt-quick-select'
-          placeholder='Country'
-          clearable
-          searchable
-          data={countryOptions}
-          value={filters.country}
-          onChange={(value) => onFilterChange({ ...filters, country: value })}
-          radius='md'
-        />
         <Select
           className='doctors-mgmt-quick-select'
           placeholder='City'

@@ -64,21 +64,21 @@ import {
   formatPatientAvailability,
   toDatetimeLocalInputValue
 } from '../../lib/doctorSchedule';
-import { normalizeConsultationCurrency } from '../../lib/consultationCurrency';
-import { formatConsultationTierLabel, formatDurationMinutesLabel } from '../../lib/consultationTiers';
+import { normalizeConsultationCurrency, formatConsultationFee } from '../../lib/consultationCurrency';
+import { getTierFeeFromTiers } from '../../lib/consultationTiers';
 import { formatConsultationFeeUsd } from '../../lib/doctors';
 import type { ConsultationSummary, OpinionRequest, OpinionRequestRecommendation } from '../../types/opinionRequest';
 import './consultation-wizard.css';
 
-function recommendationFeeLabel(
-  rec: OpinionRequestRecommendation,
-  durationMinutes: number | null | undefined
-) {
-  if (!durationMinutes || !rec.doctor_consultation_tiers?.length) return null;
-  const fee = rec.doctor_consultation_tiers.find((tier) => tier.duration_minutes === durationMinutes)?.fee_usd;
-  if (fee == null) return null;
+function recommendationFeeLabel(rec: OpinionRequestRecommendation) {
+  if (!rec.doctor_consultation_tiers?.length) return null;
   const currency = normalizeConsultationCurrency(rec.doctor_consultation_currency);
-  return formatConsultationTierLabel({ duration_minutes: durationMinutes, fee_usd: fee }, { currency });
+  const primary =
+    getTierFeeFromTiers(rec.doctor_consultation_tiers, 30) ??
+    rec.doctor_consultation_tiers.find((tier) => tier.fee_usd > 0)?.fee_usd ??
+    null;
+  if (primary == null) return null;
+  return formatConsultationFee(primary, currency);
 }
 
 type PatientConsultationWizardProps = {
@@ -384,7 +384,6 @@ export default function PatientConsultationWizard({
     });
     setBusy(true);
     const { error } = await patientSelectDoctorWithAvailability(request.id, pickingDoctorId, payload, {
-      consultationDurationMinutes: request.consultation_duration_minutes,
       recommendation: pickingDoctor ?? undefined
     });
     setBusy(false);
@@ -789,15 +788,10 @@ export default function PatientConsultationWizard({
                     check the doctor&apos;s availability.
                   </p>
                 ) : null}
-                {request.consultation_duration_minutes ? (
-                  <p className='patient-consultation-duration-note'>
-                    Consultation length:{' '}
-                    <strong>{formatDurationMinutesLabel(request.consultation_duration_minutes)}</strong>
-                  </p>
-                ) : null}
                 <ul className='list patient-doctor-choice-list'>
                   {recommendations.map((rec) => {
                     const isActive = pickingDoctorId === rec.doctor_id;
+                    const feeLabel = recommendationFeeLabel(rec);
                     return (
                       <li
                         key={rec.id}
@@ -807,9 +801,9 @@ export default function PatientConsultationWizard({
                           <strong>{rec.doctor_name ?? 'Doctor'}</strong>
                           {rec.doctor_specialty ? ` · ${rec.doctor_specialty}` : ''}
                         </p>
-                        {recommendationFeeLabel(rec, request.consultation_duration_minutes) ? (
+                        {feeLabel ? (
                           <p className='patient-doctor-choice__fee muted'>
-                            {recommendationFeeLabel(rec, request.consultation_duration_minutes)}
+                            Consultation fee: {feeLabel}
                           </p>
                         ) : null}
                         {isActive ? (
@@ -952,9 +946,6 @@ export default function PatientConsultationWizard({
                         Number(request.payment_amount),
                         normalizeConsultationCurrency(request.consultation_currency)
                       )}
-                      {request.consultation_duration_minutes
-                        ? ` · ${request.consultation_duration_minutes} min consultation`
-                        : ''}
                     </strong>
                   </p>
                 ) : null}

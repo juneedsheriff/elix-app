@@ -8,6 +8,7 @@ import {
   normalizeConsultationCurrency
 } from '../../../lib/consultationCurrency';
 import { doctorToAdminInput, validateAdminDoctorInput } from '../../../lib/doctorProfile';
+import { primaryConsultationFeeFromTiers } from '../../../lib/consultationTiers';
 import { parsePreferredLanguages } from '../../../lib/patientProfileOptions';
 import PreferredLanguageMultiSelect from '../../../components/patient/PreferredLanguageMultiSelect';
 import type { AdminDoctorUpdateInput, Doctor } from '../../../types/doctor';
@@ -385,29 +386,24 @@ export default function AdminDoctorEditForm({ doctor, onSaved, onAuthChanged, re
                 ))}
               </select>
             </label>
-            {form.consultation_tiers.map((tier) => (
-              <label key={tier.duration_minutes} className='elixhealth-field'>
-                <span>
-                  {tier.duration_minutes === 60 ? '1 hour' : `${tier.duration_minutes} min`} consultation
-                  fee ({consultationCurrencySymbol(form.consultation_currency)})
-                </span>
-                <input
-                  type='number'
-                  min={0}
-                  value={tier.fee_usd}
-                  onChange={(e) =>
-                    setField(
-                      'consultation_tiers',
-                      form.consultation_tiers.map((item) =>
-                        item.duration_minutes === tier.duration_minutes
-                          ? { ...item, fee_usd: Number(e.target.value) }
-                          : item
-                      )
-                    )
-                  }
-                />
-              </label>
-            ))}
+            <label className='elixhealth-field'>
+              <span>
+                Consultation charge ({consultationCurrencySymbol(form.consultation_currency)})
+              </span>
+              <input
+                type='number'
+                min={0}
+                value={primaryConsultationFeeFromTiers(form.consultation_tiers)}
+                onChange={(e) => {
+                  const fee = Math.max(0, Math.round(Number(e.target.value)));
+                  setField(
+                    'consultation_tiers',
+                    form.consultation_tiers.map((item) => ({ ...item, fee_usd: fee }))
+                  );
+                  setField('consultation_fee', fee);
+                }}
+              />
+            </label>
             <label className='elixhealth-field elixhealth-field--full'>
               <span>About clinic</span>
               <textarea

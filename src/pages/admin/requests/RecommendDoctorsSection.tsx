@@ -6,7 +6,6 @@ import {
   Group,
   MultiSelect,
   Paper,
-  SegmentedControl,
   Select,
   Stack,
   Text
@@ -20,10 +19,9 @@ import {
 } from '../../../lib/opinionRequests';
 import { isScheduleConfirmed } from '../../../lib/consultationWizard';
 import {
-  consultationDurationSelectOptions,
   doctorConsultationCurrency,
   formatConsultationTierLabel,
-  getTierFeeUsd
+  getPrimaryConsultationTier
 } from '../../../lib/consultationTiers';
 import { formatPatientAvailability } from '../../../lib/doctorSchedule';
 import type { Doctor } from '../../../types/doctor';
@@ -55,9 +53,6 @@ export default function RecommendDoctorsSection({
   const [assignDoctorId, setAssignDoctorId] = useState<string | null>(
     () => request.selected_doctor_id ?? request.doctor_id ?? null
   );
-  const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<string>(
-    String(request.consultation_duration_minutes ?? 30)
-  );
   const [busy, setBusy] = useState(false);
 
   const loadRecommendations = useCallback(async () => {
@@ -88,21 +83,16 @@ export default function RecommendDoctorsSection({
     setAssignDoctorId(request.selected_doctor_id ?? request.doctor_id ?? null);
   }, [request.id]);
 
-  const durationMinutes = Number(consultationDurationMinutes);
   const scheduleConfirmed = isScheduleConfirmed(request);
   const canAssignWithoutPatient = canCoordinate && !scheduleConfirmed;
 
   const doctorOptions = doctors.map((doctor) => {
-    const fee = Number.isFinite(durationMinutes)
-      ? getTierFeeUsd(doctor, durationMinutes)
+    const primary = getPrimaryConsultationTier(doctor);
+    const feeLabel = primary
+      ? formatConsultationTierLabel(primary, {
+          currency: doctorConsultationCurrency(doctor)
+        })
       : null;
-    const feeLabel =
-      fee != null && Number.isFinite(durationMinutes)
-        ? formatConsultationTierLabel(
-            { duration_minutes: durationMinutes, fee_usd: fee },
-            { currency: doctorConsultationCurrency(doctor) }
-          )
-        : null;
     return {
       value: doctor.id,
       label: `${doctor.full_name} · ${doctor.specialty}${feeLabel ? ` · ${feeLabel}` : ''}`
@@ -161,9 +151,7 @@ export default function RecommendDoctorsSection({
     }
 
     if (shareWithPatient) {
-      const { error: shareError } = await markRecommendationsShared(request.id, {
-        consultationDurationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : undefined
-      });
+      const { error: shareError } = await markRecommendationsShared(request.id);
       setBusy(false);
       if (shareError) {
         onError(shareError.message);
@@ -188,7 +176,6 @@ export default function RecommendDoctorsSection({
     setBusy(true);
     const recommendation = recommendations.find((item) => item.doctor_id === assignDoctorId);
     const { error } = await pseAssignAndApproveDoctor(request.id, assignDoctorId, {
-      consultationDurationMinutes: Number.isFinite(durationMinutes) ? durationMinutes : undefined,
       recommendation: recommendation
         ? {
             doctor_id: recommendation.doctor_id,
@@ -254,7 +241,8 @@ export default function RecommendDoctorsSection({
               </Text>
               <Text size='xs' c='dimmed'>
                 Add or update doctors, then share the list with the patient — or assign a doctor
-                directly without waiting for patient approval.
+                directly without waiting for patient approval. Each doctor&apos;s consultation charge
+                is taken from their profile.
               </Text>
             </Stack>
             <Badge
@@ -265,21 +253,6 @@ export default function RecommendDoctorsSection({
               {isSharedWithPatient ? 'Shared with patient' : 'Not shared yet'}
             </Badge>
           </Group>
-
-          <Stack gap={4} mb='sm'>
-            <Text size='sm' fw={600}>
-              Consultation duration for this case
-            </Text>
-            <Text size='xs' c='dimmed'>
-              Patients will see each doctor&apos;s fee for this session length.
-            </Text>
-            <SegmentedControl
-              value={consultationDurationMinutes}
-              onChange={setConsultationDurationMinutes}
-              data={consultationDurationSelectOptions()}
-              disabled={busy}
-            />
-          </Stack>
 
           <MultiSelect
             label='Doctors to recommend'

@@ -40,5 +40,5 @@ export function doctorConsultationButtonLabel(request: OpinionRequest): string {
   if (request.doctor_response?.trim()) {
     return 'Update consultation';
   }
-  return 'Give consultation';
+  return 'Start Consultation';
 }

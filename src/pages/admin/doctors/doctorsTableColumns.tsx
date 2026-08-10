@@ -26,10 +26,12 @@ import type { Doctor } from '../../../types/doctor';
 import type { DoctorWorkspaceLink } from '../../../types/clinicDoctorRequest';
 import { doctorEditUrl } from '../elixHealthRoutes';
 import {
+  avatarColorFromName,
   doctorClinicName,
   doctorCountry,
   doctorInitials,
   doctorMobile,
+  doctorPhotoUrl,
   loginStatusForDoctor,
   specialtyBadgeColor
 } from './doctorsUtils';
@@ -69,25 +71,39 @@ export function useDoctorsTableColumns({
         Cell: ({ row }) => {
           const doctor = row.original;
           const isPlatformGranted = grantedDoctorIds?.has(doctor.id) ?? false;
+          const photoUrl = doctorPhotoUrl(doctor.image_url);
+          const initials = doctorInitials(doctor.full_name);
+          const bg = avatarColorFromName(doctor.full_name);
           return (
             <Group gap='sm' wrap='nowrap' className='doctors-mgmt-doctor-cell'>
               <Avatar
+                src={photoUrl ?? undefined}
+                alt={doctor.full_name}
                 radius='xl'
                 size={40}
-                variant='filled'
-                className='doctors-mgmt-avatar'
+                className={
+                  photoUrl
+                    ? 'doctors-mgmt-avatar doctors-mgmt-avatar--photo'
+                    : 'doctors-mgmt-avatar doctors-mgmt-avatar--initials'
+                }
                 styles={{
                   root: {
-                    flexShrink: 0
+                    flexShrink: 0,
+                    backgroundColor: photoUrl ? undefined : bg
                   },
                   placeholder: {
                     color: '#fff',
-                    fontWeight: 700,
-                    fontSize: '0.8rem'
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    letterSpacing: '0.02em',
+                    backgroundColor: photoUrl ? undefined : bg
+                  },
+                  image: {
+                    objectFit: 'cover'
                   }
                 }}
               >
-                {doctorInitials(doctor.full_name)}
+                {initials}
               </Avatar>
               <Stack gap={2} className='doctors-mgmt-doctor-cell__text'>
                 <Group gap={6} wrap='wrap'>

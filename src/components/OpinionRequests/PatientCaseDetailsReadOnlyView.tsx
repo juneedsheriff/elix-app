@@ -10,6 +10,10 @@ import './patient-case-details-readonly.css';
 type PatientCaseDetailsReadOnlyViewProps = {
   request: OpinionRequest;
   sectionsThrough?: 6 | 8;
+  /** When false, hides “4. Current Healthcare Provider” (clinic PSE workflow). */
+  showCurrentHealthcareProvider?: boolean;
+  /** When false, hides “6. Questions for the Doctor Consultation” (clinic PSE workflow). */
+  showConsultationQuestions?: boolean;
 };
 
 function SectionHeading({ title }: { title: string }) {
@@ -27,7 +31,9 @@ function DetailField({ label, value }: { label: string; value: string }) {
 
 export default function PatientCaseDetailsReadOnlyView({
   request,
-  sectionsThrough = 6
+  sectionsThrough = 6,
+  showCurrentHealthcareProvider = true,
+  showConsultationQuestions = true
 }: PatientCaseDetailsReadOnlyViewProps) {
   const details = caseDetailsFromRequest(request);
   const specialty =
@@ -88,17 +94,12 @@ export default function PatientCaseDetailsReadOnlyView({
         <DetailField label='SpO₂' value={formatCaseDetailValue(details.vitalSigns.spo2)} />
         <DetailField label='Height' value={formatCaseDetailValue(details.vitalSigns.height)} />
         <DetailField label='Weight' value={formatCaseDetailValue(details.vitalSigns.weight)} />
-        <DetailField label='Current Diagnosis' value={formatCaseDetailValue(details.currentDiagnosis)} />
-        <DetailField
-          label='Current Treatment Plan'
-          value={formatCaseDetailValue(details.currentTreatmentPlan)}
-        />
       </div>
 
       <SectionHeading title='3. Medical History' />
       <div className='patient-case-details-readonly__grid'>
         <DetailField
-          label='Medical History'
+          label='Current Medical Condition'
           value={formatCaseDetailValue(details.existingMedicalConditions)}
         />
         <DetailField label='Surgical History' value={formatCaseDetailValue(details.previousSurgeries)} />
@@ -111,32 +112,43 @@ export default function PatientCaseDetailsReadOnlyView({
         />
       </div>
 
-      <SectionHeading title='4. Current Healthcare Provider' />
-      <div className='patient-case-details-readonly__grid'>
-        <DetailField
-          label='Treating Doctor Name'
-          value={formatCaseDetailValue(details.treatingDoctorName)}
-        />
-        <DetailField
-          label='Hospital / Clinic Name'
-          value={formatCaseDetailValue(details.hospitalClinicName)}
-        />
-        <DetailField
-          label='Specialty of Treating Doctor'
-          value={formatCaseDetailValue(details.treatingDoctorSpecialty)}
-        />
-        <DetailField
-          label='Date of Last Consultation'
-          value={formatCaseDetailValue(details.lastConsultationDate)}
-        />
-      </div>
+      {showCurrentHealthcareProvider ? (
+        <>
+          <SectionHeading title='4. Current Healthcare Provider' />
+          <div className='patient-case-details-readonly__grid'>
+            <DetailField
+              label='Treating Doctor Name'
+              value={formatCaseDetailValue(details.treatingDoctorName)}
+            />
+            <DetailField
+              label='Hospital / Clinic Name'
+              value={formatCaseDetailValue(details.hospitalClinicName)}
+            />
+            <DetailField
+              label='Specialty of Treating Doctor'
+              value={formatCaseDetailValue(details.treatingDoctorSpecialty)}
+            />
+            <DetailField
+              label='Date of Last Consultation'
+              value={formatCaseDetailValue(details.lastConsultationDate)}
+            />
+          </div>
+        </>
+      ) : null}
 
-      <SectionHeading title='6. Questions for the Doctor Consultation' />
+      {showConsultationQuestions ? (
+        <>
+          <SectionHeading title='6. Questions for the Doctor Consultation' />
+          <div className='patient-case-details-readonly__grid'>
+            <DetailField
+              label='What specific questions would you like answered?'
+              value={formatCaseDetailList(questions)}
+            />
+          </div>
+        </>
+      ) : null}
+
       <div className='patient-case-details-readonly__grid'>
-        <DetailField
-          label='What specific questions would you like answered?'
-          value={formatCaseDetailList(questions)}
-        />
         <DetailField
           label='Additional Questions or Concerns'
           value={formatCaseDetailValue(details.additionalQuestions)}

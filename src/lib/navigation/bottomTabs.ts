@@ -9,8 +9,6 @@ export function getBottomTabs(role: Role, language: Language): BottomTab[] {
   if (role === 'doctor') {
     return [
       { id: 'doctor-dashboard', label: t.bottom.home, icon: SCREEN_ICONS['doctor-dashboard'] },
-      { id: 'case-review', label: t.bottom.cases, icon: SCREEN_ICONS['case-review'] },
-      { id: 'availability', label: t.bottom.schedule, icon: SCREEN_ICONS.availability },
       { id: 'settings', label: t.profile, icon: SCREEN_ICONS.settings }
     ];
   }

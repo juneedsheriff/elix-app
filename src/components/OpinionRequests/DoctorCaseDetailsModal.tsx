@@ -35,7 +35,7 @@ export default function DoctorCaseDetailsModal({
   onClose,
   onRequestUpdated,
   onNavigate,
-  returnScreen = 'case-review',
+  returnScreen = 'doctor-dashboard',
   onOpenError
 }: DoctorCaseDetailsModalProps) {
   useEffect(() => {

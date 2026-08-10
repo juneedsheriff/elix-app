@@ -16,7 +16,7 @@ type ElixHealthAdminShellProps = {
 export default function ElixHealthAdminShell({ admin, onStaffUpdated, onSignOut }: ElixHealthAdminShellProps) {
   const location = useLocation();
   const activeNav = navIdFromPathname(location.pathname);
-  const pageTitle = pageTitleFromPathname(location.pathname, location.search);
+  const pageTitle = pageTitleFromPathname(location.pathname, location.search, admin.role);
 
   const refreshStaff = useCallback(async () => {
     if (!admin.auth_user_id) return;

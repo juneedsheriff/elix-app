@@ -226,13 +226,24 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
       if (!doctor && !patient && !admin && nextSession.user.email) {
         const { data: authUser, error: authUserError } = await supabase.auth.getUser();
-        if (authUserError || !authUser.user) {
+        // Only drop the session for definitive auth failures — not network blips.
+        const hardFailure =
+          authUserError &&
+          (authUserError.status === 401 ||
+            authUserError.status === 403 ||
+            (authUserError.message ?? '').toLowerCase().includes('user from sub claim') ||
+            (authUserError.message ?? '').toLowerCase().includes('session from session_id claim'));
+        if (hardFailure || (!authUserError && !authUser.user)) {
           await supabase.auth.signOut();
           if (mounted) {
             setSession(null);
             setDoctorProfile(null);
             setPatientProfile(null);
           }
+          return;
+        }
+        if (authUserError) {
+          // Transient error: keep the Supabase session; profiles may resolve on next refresh.
           return;
         }
 
@@ -271,6 +282,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // If PSE/admin disables or deletes the patient while they are signed in, force logout.
+  // Staff/doctor sessions skip this poll. Transient network/auth glitches must not sign anyone out.
   useEffect(() => {
     if (!isSupabaseConfigured || !session?.user) return;
 
@@ -286,24 +298,46 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const isDefinitiveAuthFailure = (error: { message?: string; status?: number; code?: string } | null) => {
+      if (!error) return false;
+      const status = error.status;
+      const code = (error.code ?? '').toLowerCase();
+      const message = (error.message ?? '').toLowerCase();
+      // Session truly gone / banned user — not temporary network or rate-limit issues.
+      if (status === 401 || status === 403) return true;
+      if (code === 'user_not_found' || code === 'session_not_found') return true;
+      if (message.includes('user from sub claim in jwt does not exist')) return true;
+      if (message.includes('session from session_id claim in jwt does not exist')) return true;
+      if (message.includes('invalid claim') && message.includes('session')) return true;
+      return false;
+    };
+
     const verifyPatientSessionStillValid = async () => {
-      const [doctor, adminResult, patient, authUser] = await Promise.all([
+      // Never run patient logout heuristics against staff or doctor accounts.
+      const [doctor, adminResult] = await Promise.all([
         resolveDoctorForUser(session.user),
-        fetchAdminByAuthUserId(userId),
+        fetchAdminByAuthUserId(userId)
+      ]);
+      if (cancelled) return;
+      if (adminResult.data || doctor) return;
+
+      const [patient, authUser] = await Promise.all([
         resolvePatientForUser(session.user),
         supabase.auth.getUser()
       ]);
 
       if (cancelled) return;
 
-      // Auth user banned/deleted — JWT no longer valid.
-      if (authUser.error || !authUser.data.user) {
+      if (authUser.error) {
+        if (isDefinitiveAuthFailure(authUser.error)) {
+          await forceSignOut();
+        }
+        return;
+      }
+      if (!authUser.data.user) {
         await forceSignOut();
         return;
       }
-
-      // Staff/doctor sessions are managed separately.
-      if (adminResult.data || doctor) return;
 
       if (patient && isPatientLoginBlocked(patient)) {
         await forceSignOut();
@@ -326,7 +360,7 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', onVisibility);
     const intervalId = window.setInterval(() => {
       void verifyPatientSessionStillValid();
-    }, 12_000);
+    }, 60_000);
 
     return () => {
       cancelled = true;

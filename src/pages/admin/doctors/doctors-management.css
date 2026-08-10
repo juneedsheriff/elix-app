@@ -219,6 +219,7 @@
 .doctors-mgmt-header__primary {
   background: linear-gradient(135deg, var(--brand-cyan), color-mix(in srgb, var(--brand-cyan) 70%, #0ea5e9)) !important;
   border: none !important;
+  color: #fff !important;
   box-shadow: 0 8px 24px color-mix(in srgb, var(--brand-cyan) 35%, transparent);
   transition: transform 160ms ease, box-shadow 160ms ease;
 }
@@ -226,6 +227,12 @@
 .doctors-mgmt-header__primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 28px color-mix(in srgb, var(--brand-cyan) 42%, transparent);
+  color: #fff !important;
+}
+
+.doctors-mgmt-header__primary .mantine-Button-label,
+.doctors-mgmt-header__primary .mantine-Button-section {
+  color: #fff !important;
 }
 
 .doctors-mgmt-header__ghost {
@@ -550,6 +557,26 @@ body.doctors-mgmt-table-fullscreen-open .mantine-Tooltip-tooltip {
 
 .doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-content-wrapper {
   color: var(--text-soft) !important;
+  overflow: visible;
+  white-space: normal;
+  line-height: 1.25;
+  text-overflow: unset;
+  max-width: none;
+}
+
+/* Prevent truncated column titles (El → Elix ID, LO → Login status, etc.) */
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-labels,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-content-labels,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mantine-TableTh-th,
+.doctors-mgmt-mrt-paper .doctors-mgmt-th .mrt-table-head-cell-content {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: unset;
+  max-width: none;
+}
+
+.doctors-mgmt-mrt-paper .doctors-mgmt-th {
+  vertical-align: middle;
 }
 
 /* Sort & filter icons — no background, compact size */
@@ -609,17 +636,30 @@ body.doctors-mgmt-table-fullscreen-open .mantine-Tooltip-tooltip {
 }
 
 .doctors-mgmt-avatar {
-  background: linear-gradient(135deg, #09abc0, #078596) !important;
   color: #fff !important;
-  border: 2px solid color-mix(in srgb, var(--brand-cyan) 25%, #fff);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--brand-cyan) 20%, transparent),
-    0 4px 12px color-mix(in srgb, var(--brand-cyan) 35%, transparent);
+  border: none;
+  box-shadow: none;
+}
+
+.doctors-mgmt-avatar--photo {
+  background: var(--surface) !important;
+  border: 1px solid var(--border);
+}
+
+.doctors-mgmt-avatar--initials,
+.doctors-mgmt-avatar--initials .mantine-Avatar-placeholder {
+  color: #fff !important;
 }
 
 .doctors-mgmt-avatar .mantine-Avatar-placeholder {
   color: #fff !important;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .doctors-mgmt-link {

@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronRight, ClipboardList, Home, LayoutDashboard, LogOut, Menu, Stethoscope, X } from 'lucide-react';
+import { ChevronRight, LayoutDashboard, LogOut, Menu, UserCog, X } from 'lucide-react';
 import ElixLogo from '../../components/ui/ElixLogo';
+import {
+  avatarColorFromName,
+  displayInitials,
+  resolveProfilePhotoUrl
+} from '../../lib/avatarDisplay';
 import type { Doctor } from '../../types/doctor';
 import {
   doctorNavIdFromPathname,
@@ -18,14 +23,17 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', path: ELIX_HEALTH_PATHS.workspace, icon: LayoutDashboard },
-  { id: 'cases', label: 'Cases', path: ELIX_HEALTH_PATHS.workspaceCases, icon: ClipboardList },
-  { id: 'homecare', label: 'Home Care', path: ELIX_HEALTH_PATHS.workspaceHomeCare, icon: Home },
   {
-    id: 'availability',
-    label: 'Scheduler',
-    path: ELIX_HEALTH_PATHS.workspaceAvailability,
-    icon: Calendar
+    id: 'dashboard',
+    label: 'Patient Requests',
+    path: ELIX_HEALTH_PATHS.workspace,
+    icon: LayoutDashboard
+  },
+  {
+    id: 'profile',
+    label: 'Profile',
+    path: ELIX_HEALTH_PATHS.workspaceProfile,
+    icon: UserCog
   }
 ];
 
@@ -35,6 +43,30 @@ type ElixHealthDoctorLayoutProps = {
   onSignOut: () => void;
   children: ReactNode;
 };
+
+function DoctorAvatar({ doctor, className }: { doctor: Doctor; className: string }) {
+  const photoUrl = resolveProfilePhotoUrl(doctor.image_url);
+  const initials = displayInitials(doctor.full_name);
+  const bg = avatarColorFromName(doctor.full_name);
+
+  if (photoUrl) {
+    return (
+      <span className={`${className} elixhealth-sidebar-avatar--photo`} aria-hidden>
+        <img src={photoUrl} alt='' className='elixhealth-sidebar-avatar-img' />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`${className} elixhealth-sidebar-avatar--initials`}
+      style={{ background: bg }}
+      aria-hidden
+    >
+      {initials}
+    </span>
+  );
+}
 
 export default function ElixHealthDoctorLayout({
   doctor,
@@ -111,15 +143,18 @@ export default function ElixHealthDoctorLayout({
         </nav>
 
         <div className='elixhealth-sidebar-footer'>
-          <div className='elixhealth-sidebar-user-card' title={doctor.email}>
-            <span className='elixhealth-sidebar-avatar' aria-hidden>
-              <Stethoscope size={18} />
-            </span>
+          <button
+            type='button'
+            className='elixhealth-sidebar-user-card elixhealth-sidebar-user-card--button'
+            title={doctor.email}
+            onClick={() => handleNav(ELIX_HEALTH_PATHS.workspaceProfile)}
+          >
+            <DoctorAvatar doctor={doctor} className='elixhealth-sidebar-avatar' />
             <div className='elixhealth-sidebar-user-text'>
               <strong>{doctor.full_name}</strong>
               <span>{doctor.specialty}</span>
             </div>
-          </div>
+          </button>
           <button type='button' className='elixhealth-sidebar-signout' onClick={onSignOut}>
             <LogOut size={16} aria-hidden />
             Sign out
@@ -148,7 +183,15 @@ export default function ElixHealthDoctorLayout({
             </div>
           </div>
           <div className='elixhealth-topbar-end'>
-            <span className='elixhealth-topbar-user'>{doctor.full_name}</span>
+            <button
+              type='button'
+              className='elixhealth-topbar-user elixhealth-topbar-user--with-photo'
+              onClick={() => handleNav(ELIX_HEALTH_PATHS.workspaceProfile)}
+              title='Open profile'
+            >
+              <DoctorAvatar doctor={doctor} className='elixhealth-topbar-avatar' />
+              <span>{doctor.full_name}</span>
+            </button>
           </div>
         </header>
 

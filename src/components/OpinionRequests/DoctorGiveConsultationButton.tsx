@@ -16,7 +16,7 @@ type DoctorGiveConsultationButtonProps = {
 export default function DoctorGiveConsultationButton({
   request,
   onNavigate,
-  returnScreen = 'case-review',
+  returnScreen = 'doctor-dashboard',
   compact = false
 }: DoctorGiveConsultationButtonProps) {
   const routerNavigate = useNavigate();

@@ -7,11 +7,9 @@ import {
   clearPendingOpinionRequest,
   savePendingOpinionRequest
 } from '../../lib/navigation/pendingOpinionRequest';
-import ConsultationDurationSelect from '../ConsultationWorkflow/ConsultationDurationSelect';
+import ConsultationTierPricingDisplay from './ConsultationTierPricingDisplay';
 import MedicalRecordsChoicePrompt from '../OpinionRequests/MedicalRecordsChoicePrompt';
 import PatientCaseDetailsForm from '../OpinionRequests/PatientCaseDetailsForm';
-import { normalizeConsultationCurrency } from '../../lib/consultationCurrency';
-import { getOfferedConsultationTiers, STANDARD_CONSULTATION_DURATIONS } from '../../lib/consultationTiers';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import {
   emptyPatientCaseDetails,
@@ -43,10 +41,6 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [caseDetails, setCaseDetails] = useState<PatientCaseDetails>(() =>
     emptyPatientCaseDetails({ specialtyRequired: doctor.specialty })
-  );
-  const consultationTiers = getOfferedConsultationTiers(doctor);
-  const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<number>(
-    consultationTiers[0]?.duration_minutes ?? STANDARD_CONSULTATION_DURATIONS[0]
   );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -167,7 +161,6 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
       recordIds: [...selectedIds],
       patientId: user?.id ?? null,
       patientName,
-      consultationDurationMinutes,
       caseDetails: serialized
     });
     setSubmitting(false);
@@ -282,15 +275,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
 
         {!awaitingRecordsChoice ? (
           <>
-        <ConsultationDurationSelect
-          tiers={consultationTiers}
-          value={consultationDurationMinutes}
-          onChange={setConsultationDurationMinutes}
-          disabled={submitting}
-          currency={normalizeConsultationCurrency(doctor.consultation_currency)}
-          label='Choose consultation duration'
-          hint={`Select how long you need with ${doctor.full_name}. The fee shown is what you will pay for that session.`}
-        />
+        <ConsultationTierPricingDisplay doctor={doctor} />
 
         <PatientCaseDetailsForm
           value={caseDetails}

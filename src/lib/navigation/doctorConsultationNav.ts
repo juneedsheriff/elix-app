@@ -38,7 +38,7 @@ export function clearDoctorConsultationRequestId() {
 export function openDoctorConsultation(
   requestId: string,
   onNavigate: (screenId: string) => void,
-  returnScreen = 'case-review',
+  returnScreen = 'doctor-dashboard',
   options?: { openCaseContext?: boolean }
 ) {
   saveReturnScreen(returnScreen);

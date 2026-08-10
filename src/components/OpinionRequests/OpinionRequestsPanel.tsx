@@ -23,7 +23,7 @@ function statusLabel(status: string, view: 'patient' | 'doctor', request?: Opini
     return patientRequestStatusLabel(request);
   }
   if (status === 'in_review') return 'In review';
-  if (status === 'closed') return 'Closed';
+  if (status === 'closed') return 'Completed';
   return 'Submitted';
 }
 
@@ -56,8 +56,8 @@ type OpinionRequestsPanelProps = {
   signInHint: string;
   onNavigate?: (screenId: string) => void;
   doctorReturnScreen?: string;
-  /** When set, only show consultation or home-care requests. */
-  requestKind?: 'consultations' | 'homecare';
+  /** Request filter mode. */
+  requestKind?: 'consultations' | 'homecare' | 'all';
 };
 
 export default function OpinionRequestsPanel({
@@ -72,7 +72,7 @@ export default function OpinionRequestsPanel({
   signInHint,
   onNavigate,
   doctorReturnScreen = 'case-review',
-  requestKind = 'consultations'
+  requestKind = 'all'
 }: OpinionRequestsPanelProps) {
   const location = useLocation();
   const isElixHealthWorkspace =
@@ -89,6 +89,9 @@ export default function OpinionRequestsPanel({
   const canLoad = view === 'patient' ? Boolean(patientAuthUserId) : Boolean(doctorId || doctorEmail);
 
   const kindFilteredRequests = useMemo(() => {
+    if (requestKind === 'all') {
+      return requests;
+    }
     if (requestKind === 'homecare') {
       return requests.filter(isHomeCareOpinionRequest);
     }

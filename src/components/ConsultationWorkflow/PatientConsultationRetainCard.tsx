@@ -150,10 +150,10 @@ export default function PatientConsultationRetainCard({
         : 'Your consultation details';
 
   const consultationFeeLine =
-    request.consultation_duration_minutes && request.consultation_fee_usd != null
+    request.consultation_fee_usd != null && Number(request.consultation_fee_usd) > 0
       ? formatConsultationTierLabel(
           {
-            duration_minutes: request.consultation_duration_minutes,
+            duration_minutes: request.consultation_duration_minutes ?? 30,
             fee_usd: request.consultation_fee_usd
           },
           { currency: normalizeConsultationCurrency(request.consultation_currency) }

@@ -5,6 +5,7 @@ import {
   canDoctorGiveConsultation,
   hasPatientConsultationNotes
 } from '../../lib/doctorConsultation';
+import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import { formatRequestDate } from '../../pages/admin/requests/requestsUtils';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import DoctorCaseDetailsModal from './DoctorCaseDetailsModal';
@@ -26,7 +27,7 @@ type DoctorIncomingRequestsCardListProps = {
 
 function doctorStatusLabel(status: string): string {
   if (status === 'in_review') return 'In review';
-  if (status === 'closed') return 'Closed';
+  if (status === 'closed') return 'Completed';
   return 'Submitted';
 }
 
@@ -82,7 +83,7 @@ export default function DoctorIncomingRequestsCardList({
             value={search}
             onChange={(event) => onSearchChange(event.currentTarget.value)}
             placeholder='Search by patient, email, or message…'
-            aria-label='Search incoming requests'
+            aria-label='Search patient requests'
           />
         </label>
         <p className='doctor-cases-cards-count muted'>
@@ -95,7 +96,7 @@ export default function DoctorIncomingRequestsCardList({
           <p className='muted'>
             {hasActiveFilters
               ? 'No cases match your search.'
-              : 'No incoming requests yet. Patients can send cases from a doctor profile → Get opinion.'}
+              : 'No patient requests yet. Patients can send cases from a doctor profile → Get opinion.'}
           </p>
           {hasActiveFilters ? (
             <button type='button' className='secondary-btn' onClick={onClearFilters}>
@@ -109,6 +110,9 @@ export default function DoctorIncomingRequestsCardList({
             const meetingLink = request.meeting_link?.trim();
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);
+            const followupDate =
+              formatConsultationFollowupDate(request.consultation_summary?.followup_date) ||
+              formatConsultationFollowupDate(request.home_care_followup_date);
 
             return (
               <li key={request.id} className='doctor-request-card doctor-incoming-card'>
@@ -124,6 +128,10 @@ export default function DoctorIncomingRequestsCardList({
                 <p className='doctor-request-meta'>
                   Submitted {formatRequestDate(request.created_at)}
                 </p>
+
+                {followupDate ? (
+                  <p className='doctor-request-meta'>Patient follow-up: {followupDate}</p>
+                ) : null}
 
                 {request.message?.trim() ? (
                   <p className='doctor-request-message'>{request.message.trim()}</p>
@@ -168,7 +176,7 @@ export default function DoctorIncomingRequestsCardList({
                       onClick={() => setConsultationNotesRequest(request)}
                     >
                       <FileText size={16} aria-hidden />
-                      View notes
+                      View Previous Consultation
                     </button>
                   ) : null}
 

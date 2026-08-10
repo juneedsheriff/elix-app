@@ -87,7 +87,7 @@ function RequestsPageHeader({
             leftSection={<IconPlus size={18} />}
             onClick={onAddRequest}
           >
-            Add request
+            Add Consultation Request
           </Button>
         ) : null}
       </Group>

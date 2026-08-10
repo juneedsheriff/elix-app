@@ -7,6 +7,7 @@ import {
   consultationNotesPreview,
   hasPatientConsultationNotes
 } from '../../lib/doctorConsultation';
+import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import { formatRequestDate, patientInitials } from '../../pages/admin/requests/requestsUtils';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
@@ -25,7 +26,7 @@ function displayCell(value: string | null | undefined) {
 
 function doctorStatusLabel(status: string): string {
   if (status === 'in_review') return 'In review';
-  if (status === 'closed') return 'Closed';
+  if (status === 'closed') return 'Completed';
   return 'Submitted';
 }
 
@@ -41,9 +42,15 @@ function truncateMessage(message: string, maxLength = 72): string {
   return `${trimmed.slice(0, maxLength).trimEnd()}…`;
 }
 
+function patientFollowupDate(request: OpinionRequest): string {
+  const fromSummary = formatConsultationFollowupDate(request.consultation_summary?.followup_date);
+  if (fromSummary) return fromSummary;
+  return formatConsultationFollowupDate(request.home_care_followup_date) || '—';
+}
+
 export function useDoctorCasesTableColumns({
   onNavigate,
-  returnScreen = 'case-review',
+  returnScreen = 'doctor-dashboard',
   onViewCaseDetails,
   onViewConsultationNotes
 }: UseDoctorCasesTableColumnsOptions) {
@@ -98,8 +105,8 @@ export function useDoctorCasesTableColumns({
       {
         accessorKey: 'message',
         header: 'Message',
-        size: 220,
-        minSize: 160,
+        size: 200,
+        minSize: 150,
         Cell: ({ row }) => (
           <Tooltip label={row.original.message} multiline maw={320} withArrow>
             <Text size='sm' lineClamp={2} className='doctors-mgmt-muted'>
@@ -112,8 +119,8 @@ export function useDoctorCasesTableColumns({
         id: 'consultation',
         header: 'Consultation',
         accessorFn: (row) => row.scheduled_at ?? row.meeting_link ?? '',
-        size: 190,
-        minSize: 160,
+        size: 180,
+        minSize: 150,
         Cell: ({ row }) => {
           const request = row.original;
           const meetingLink = request.meeting_link?.trim();
@@ -162,6 +169,21 @@ export function useDoctorCasesTableColumns({
         }
       },
       {
+        id: 'patient_followup_date',
+        header: 'Patient Follow-up Date',
+        accessorFn: (row) =>
+          row.consultation_summary?.followup_date?.trim() ||
+          row.home_care_followup_date?.trim() ||
+          '',
+        size: 160,
+        minSize: 140,
+        Cell: ({ row }) => (
+          <Text size='sm' className='doctors-mgmt-muted'>
+            {patientFollowupDate(row.original)}
+          </Text>
+        )
+      },
+      {
         id: 'case_details',
         header: 'Case Details',
         accessorFn: (row) => row.records.length,
@@ -208,63 +230,48 @@ export function useDoctorCasesTableColumns({
                 leftSection={<IconFileText size={15} stroke={1.6} />}
                 onClick={() => onViewConsultationNotes(request)}
               >
-                View notes
+                View Previous Consultation
               </Button>
             </Stack>
           );
         }
       },
       {
-        id: 'status',
+        id: 'status_action',
         header: 'Status',
         accessorFn: (row) => doctorStatusLabel(row.status),
-        size: 140,
-        minSize: 120,
-        Cell: ({ row }) => (
-          <Badge
-            variant='dot'
-            color={doctorStatusColor(row.original.status)}
-            radius='xl'
-            size='lg'
-            className='doctors-mgmt-status'
-          >
-            {doctorStatusLabel(row.original.status)}
-          </Badge>
-        )
-      },
-      {
-        id: 'actions',
-        header: '',
-        size: 170,
-        minSize: 150,
-        enableSorting: false,
+        size: 190,
+        minSize: 160,
         enableColumnFilter: false,
         Cell: ({ row }) => {
           const request = row.original;
+          const canConsult = canDoctorGiveConsultation(request);
 
-          if (!canDoctorGiveConsultation(request)) {
-            if (request.doctor_response?.trim()) {
-              return (
+          return (
+            <Stack gap={8} align='flex-start' className='doctor-cases-status-action'>
+              <Badge
+                variant='dot'
+                color={doctorStatusColor(request.status)}
+                radius='xl'
+                size='lg'
+                className='doctors-mgmt-status'
+              >
+                {doctorStatusLabel(request.status)}
+              </Badge>
+
+              {canConsult ? (
+                <DoctorGiveConsultationButton
+                  request={request}
+                  onNavigate={onNavigate}
+                  returnScreen={returnScreen}
+                  compact
+                />
+              ) : request.doctor_response?.trim() ? (
                 <Badge variant='light' color='green' radius='xl' size='md' className='doctors-mgmt-pill'>
                   Responded
                 </Badge>
-              );
-            }
-
-            return (
-              <Text size='sm' className='doctors-mgmt-muted'>
-                —
-              </Text>
-            );
-          }
-
-          return (
-            <DoctorGiveConsultationButton
-              request={request}
-              onNavigate={onNavigate}
-              returnScreen={returnScreen}
-              compact
-            />
+              ) : null}
+            </Stack>
           );
         }
       }

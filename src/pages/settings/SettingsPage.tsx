@@ -2,7 +2,15 @@ import { Check, Mail, User, WifiOff } from 'lucide-react';
 import ElixLogo from '../../components/ui/ElixLogo';
 import PatientProfileEditSection from '../../components/patient/PatientProfileEditSection';
 import SectionCard from '../../components/ui/SectionCard';
+import { useSupabase } from '../../context/SupabaseProvider';
+import {
+  avatarColorFromName,
+  displayInitials,
+  resolveProfilePhotoUrl
+} from '../../lib/avatarDisplay';
 import type { ScreenPageProps } from '../types';
+import DoctorConsultationPricingSection from '../doctor/DoctorConsultationPricingSection';
+import DoctorMyProfileForm from '../doctor/DoctorMyProfileForm';
 import './settings-page.css';
 
 export default function SettingsPage({
@@ -12,6 +20,11 @@ export default function SettingsPage({
   patientProfile,
   dbConnected
 }: ScreenPageProps) {
+  const { refreshDoctorProfile } = useSupabase();
+  const photoUrl = resolveProfilePhotoUrl(doctorProfile?.image_url);
+  const initials = displayInitials(doctorProfile?.full_name ?? userEmail);
+  const avatarBg = avatarColorFromName(doctorProfile?.full_name ?? userEmail);
+
   return (
     <div className='screen-grid settings-page'>
       <section className='settings-hero-banner' aria-labelledby='settings-hero-heading'>
@@ -50,30 +63,42 @@ export default function SettingsPage({
           </div>
         </div>
         <div className='settings-hero-banner__art' aria-hidden>
-          <ElixLogo className='settings-hero-banner__logo' width={72} height={72} />
+          {doctorProfile ? (
+            photoUrl ? (
+              <img
+                src={photoUrl}
+                alt=''
+                className='settings-hero-banner__doctor-photo'
+                width={72}
+                height={72}
+              />
+            ) : (
+              <span
+                className='settings-hero-banner__doctor-initials'
+                style={{ background: avatarBg }}
+              >
+                {initials}
+              </span>
+            )
+          ) : (
+            <ElixLogo className='settings-hero-banner__logo' width={72} height={72} />
+          )}
         </div>
       </section>
 
       {doctorProfile ? (
-        <SectionCard title='Doctor account' subtitle='Login credentials on file'>
-          <ul className='list doctor-credentials-list'>
-            <li>
-              <strong>{doctorProfile.full_name}</strong>
-              <span>
-                {doctorProfile.specialty} • {doctorProfile.hospital}
-              </span>
-            </li>
-            <li>
-              <strong>Email (login)</strong>
-              <span>{doctorProfile.email}</span>
-            </li>
-            <li>
-              <strong>Phone</strong>
-              <span>{doctorProfile.phone}</span>
-            </li>
-          </ul>
-          <p className='muted'>Change password via Forgot password on the sign-in screen.</p>
-        </SectionCard>
+        <>
+          <SectionCard title='My profile' subtitle='Update your photo and public profile details'>
+            <DoctorMyProfileForm
+              doctor={doctorProfile}
+              onSaved={() => void refreshDoctorProfile()}
+            />
+          </SectionCard>
+          <DoctorConsultationPricingSection
+            doctorProfile={doctorProfile}
+            onUpdated={() => void refreshDoctorProfile()}
+          />
+        </>
       ) : null}
 
       {patientProfile ? (

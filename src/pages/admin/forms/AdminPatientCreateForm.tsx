@@ -1,16 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
-import { createPatientForAdmin, type AdminPatientUpdateInput } from '../../../lib/admins';
+import { createPatientForAdmin, fetchPatientForAdminById, type AdminPatientUpdateInput } from '../../../lib/admins';
 import { provisionPatientLogin } from '../../../lib/adminAuth';
 import {
   CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS,
   CLINIC_PSE_PATIENT_GENDER_OPTIONS
 } from '../../../lib/patientProfileOptions';
+import type { Patient } from '../../../types/patient';
 import { FieldLabel } from './adminDoctorFormUi';
 
 type AdminPatientCreateFormProps = {
   clinicId: string;
-  onCreated: (result?: { warning?: string }) => void;
+  onCreated: (result: { patient: Patient; warning?: string }) => void;
   onCancel: () => void;
 };
 
@@ -24,6 +25,12 @@ function emptyPatientInput(): AdminPatientUpdateInput {
     blood_group: null,
     country: null,
     city: null,
+    address: null,
+    pin_code: null,
+    govt_id_type: null,
+    govt_id_number: null,
+    govt_id_documents: [],
+    latest_prescription_documents: [],
     allergies: null,
     current_medications: null,
     insurance_provider: null,
@@ -80,8 +87,12 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
     const { data: provisionData, error: provisionError } = await provisionPatientLogin(createdPatient.id);
     setBusy(false);
 
+    const { data: refreshedPatient } = await fetchPatientForAdminById(createdPatient.id);
+    const patient = refreshedPatient ?? createdPatient;
+
     if (provisionError) {
       onCreated({
+        patient,
         warning:
           `Patient created, but auto login setup failed: ${provisionError}. ` +
           'Open the patient profile to enable login manually.'
@@ -90,6 +101,7 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
     }
 
     onCreated({
+      patient,
       warning: provisionData?.emailSent
         ? undefined
         : (provisionData?.warning ??
@@ -106,13 +118,15 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
       ) : null}
 
       <p className='muted elixhealth-form-intro'>
-        Add a patient to your clinic workspace. Login is enabled automatically and a temporary password is emailed.
+        Add a patient to your clinic. Login is enabled automatically and a temporary password is emailed.
       </p>
 
       <fieldset disabled={busy} className='elixhealth-form-fieldset'>
         <div className='elixhealth-form-grid'>
           <label className='elixhealth-field elixhealth-field--full'>
-            <FieldLabel required>Full name</FieldLabel>
+            <FieldLabel required>
+              Full Name <strong>(As per Govt ID)</strong>
+            </FieldLabel>
             <input
               type='text'
               value={form.full_name}
@@ -172,14 +186,6 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
             />
           </label>
           <label className='elixhealth-field'>
-            <span>Country</span>
-            <input
-              type='text'
-              value={form.country ?? ''}
-              onChange={(e) => setField('country', e.target.value || null)}
-            />
-          </label>
-          <label className='elixhealth-field'>
             <span>City</span>
             <input
               type='text'
@@ -189,7 +195,7 @@ export default function AdminPatientCreateForm({ clinicId, onCreated, onCancel }
           </label>
         </div>
 
-        <div className='elixhealth-form-actions'>
+        <div className='elixhealth-form-actions elixhealth-form-actions--end'>
           <button type='button' className='secondary-btn' disabled={busy} onClick={onCancel}>
             Cancel
           </button>

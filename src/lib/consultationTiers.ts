@@ -1,7 +1,7 @@
 import type { ConsultationCurrency, ConsultationTier, Doctor } from '../types/doctor';
 import { formatConsultationFee, normalizeConsultationCurrency } from './consultationCurrency';
 
-/** Standard session lengths doctors can price and patients can choose. */
+/** Standard session lengths used for doctor profile tier storage (not shown on consultation screens). */
 export const STANDARD_CONSULTATION_DURATIONS = [15, 30, 45, 60] as const;
 
 export type StandardConsultationDuration = (typeof STANDARD_CONSULTATION_DURATIONS)[number];
@@ -134,29 +134,96 @@ export function getTierFeeUsd(
   return tier.fee_usd;
 }
 
+/** Primary consultation tier used across patient/PSE/admin/doctor consultation screens. */
+export function getPrimaryConsultationTier(
+  doctor: Pick<Doctor, 'consultation_tiers' | 'consultation_fee' | 'fee_usd'>
+): ConsultationTier | null {
+  const tiers = getOfferedConsultationTiers(doctor);
+  if (!tiers.length) return null;
+  const thirty = tiers.find((tier) => tier.duration_minutes === 30 && tier.fee_usd > 0);
+  if (thirty) return thirty;
+  const offered = tiers.filter((tier) => tier.fee_usd > 0);
+  return offered[0] ?? tiers[0] ?? null;
+}
+
+export function getPrimaryConsultationDurationMinutes(
+  doctor: Pick<Doctor, 'consultation_tiers' | 'consultation_fee' | 'fee_usd'>
+): number | null {
+  const tier = getPrimaryConsultationTier(doctor);
+  return tier ? tier.duration_minutes : null;
+}
+
+export function getPrimaryConsultationFeeUsd(
+  doctor: Pick<Doctor, 'consultation_tiers' | 'consultation_fee' | 'fee_usd'>
+): number | null {
+  const tier = getPrimaryConsultationTier(doctor);
+  if (!tier || tier.fee_usd <= 0) return null;
+  return tier.fee_usd;
+}
+
+/**
+ * Resolve which tier to charge: explicit duration when present, otherwise the doctor's primary fee.
+ * Internal only — duration is never shown on consultation screens.
+ */
+export function resolveConsultationPricing(
+  doctor: Pick<Doctor, 'consultation_tiers' | 'consultation_fee' | 'fee_usd' | 'consultation_currency'>,
+  durationMinutes?: number | null
+): {
+  durationMinutes: number | null;
+  feeUsd: number | null;
+  currency: ConsultationCurrency;
+} {
+  const explicit = normalizeConsultationDurationMinutes(durationMinutes);
+  if (explicit != null) {
+    const fee = getTierFeeUsd(doctor, explicit);
+    if (fee != null) {
+      return {
+        durationMinutes: explicit,
+        feeUsd: fee,
+        currency: doctorConsultationCurrency(doctor)
+      };
+    }
+  }
+  const primary = getPrimaryConsultationTier(doctor);
+  return {
+    durationMinutes: primary?.duration_minutes ?? null,
+    feeUsd: primary && primary.fee_usd > 0 ? primary.fee_usd : null,
+    currency: doctorConsultationCurrency(doctor)
+  };
+}
+
 export function doctorConsultationCurrency(
   doctor: Pick<Doctor, 'consultation_currency'>
 ): ConsultationCurrency {
   return normalizeConsultationCurrency(doctor.consultation_currency);
 }
 
+/** Fee label for consultation screens — never includes duration. */
 export function formatConsultationTierLabel(
   tier: ConsultationTier,
-  options?: { showFee?: boolean; currency?: ConsultationCurrency }
+  options?: { showFee?: boolean; showDuration?: boolean; currency?: ConsultationCurrency }
 ): string {
   const showFee = options?.showFee ?? tier.fee_usd > 0;
+  const showDuration = options?.showDuration ?? false;
   const duration = formatDurationMinutesLabel(tier.duration_minutes);
   const currency = options?.currency ?? 'USD';
-  return showFee ? `${duration} · ${formatConsultationFee(tier.fee_usd, currency)}` : duration;
+  if (showFee && showDuration) {
+    return `${duration} · ${formatConsultationFee(tier.fee_usd, currency)}`;
+  }
+  if (showFee) {
+    return formatConsultationFee(tier.fee_usd, currency);
+  }
+  return showDuration ? duration : formatConsultationFee(tier.fee_usd, currency);
 }
 
+/** Doctor profile / browse views: primary consultation charge only. */
 export function formatConsultationTiersSummary(
   doctor: Pick<Doctor, 'consultation_tiers' | 'consultation_fee' | 'fee_usd' | 'consultation_currency'>
 ): string {
   const currency = doctorConsultationCurrency(doctor);
-  return getOfferedConsultationTiers(doctor)
-    .map((tier) => formatConsultationTierLabel(tier, { currency }))
-    .join(' · ');
+  const primary = getPrimaryConsultationTier(doctor);
+  if (!primary || primary.fee_usd <= 0) return 'Fee on request';
+  return formatConsultationFee(primary.fee_usd, currency);
 }
 
 export function normalizeConsultationTiersInput(tiers: ConsultationTier[]): ConsultationTier[] {

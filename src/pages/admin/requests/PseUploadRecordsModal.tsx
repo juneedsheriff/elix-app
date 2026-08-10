@@ -152,7 +152,7 @@ export default function PseUploadRecordsModal({
                 setCategory((value as MedicalRecordCategoryId) ?? DEFAULT_MEDICAL_RECORD_CATEGORY)
               }
               disabled={uploading}
-              comboboxProps={{ withinPortal: true }}
+              comboboxProps={{ withinPortal: true, zIndex: 460 }}
             />
           </section>
 

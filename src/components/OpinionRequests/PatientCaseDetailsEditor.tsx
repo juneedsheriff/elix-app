@@ -22,6 +22,10 @@ type PatientCaseDetailsEditorProps = {
   actorRole: 'patient' | 'pse';
   showPreferences?: boolean;
   showConsent?: boolean;
+  /** When false, hides “4. Current Healthcare Provider” (clinic PSE workflow). */
+  showCurrentHealthcareProvider?: boolean;
+  /** When false, hides “6. Questions for the Doctor Consultation” (clinic PSE workflow). */
+  showConsultationQuestions?: boolean;
   sectionsThrough?: 6 | 8;
   canMarkReviewed?: boolean;
   markReviewedBusy?: boolean;
@@ -39,6 +43,8 @@ export default function PatientCaseDetailsEditor({
   actorRole,
   showPreferences = false,
   showConsent = false,
+  showCurrentHealthcareProvider = true,
+  showConsultationQuestions = true,
   sectionsThrough = 8,
   canMarkReviewed = false,
   markReviewedBusy = false,
@@ -158,6 +164,8 @@ export default function PatientCaseDetailsEditor({
         doctorSpecialty={doctorSpecialty}
         showPreferences={showPreferences}
         showConsent={showConsent}
+        showCurrentHealthcareProvider={showCurrentHealthcareProvider}
+        showConsultationQuestions={showConsultationQuestions}
         sectionsThrough={sectionsThrough}
       />
 

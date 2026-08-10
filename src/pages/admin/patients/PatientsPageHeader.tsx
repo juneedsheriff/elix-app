@@ -1,12 +1,11 @@
 import { memo } from 'react';
 import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconDownload, IconFilter, IconPlus } from '@tabler/icons-react';
+import { IconFilter, IconPlus } from '@tabler/icons-react';
 
 type PatientsPageHeaderProps = {
   totalCount: number;
   canEdit: boolean;
   onOpenFilters: () => void;
-  onExport: () => void;
   onAddPatient: () => void;
 };
 
@@ -14,7 +13,6 @@ function PatientsPageHeader({
   totalCount,
   canEdit,
   onOpenFilters,
-  onExport,
   onAddPatient
 }: PatientsPageHeaderProps) {
   return (
@@ -37,16 +35,6 @@ function PatientsPageHeader({
           onClick={onOpenFilters}
         >
           Filters
-        </Button>
-
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconDownload size={18} />}
-          onClick={onExport}
-        >
-          Export
         </Button>
 
         {canEdit ? (

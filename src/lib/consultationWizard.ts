@@ -7,6 +7,7 @@ import type {
 import { normalizeConsultationCurrency } from './consultationCurrency';
 import {
   doctorConsultationCurrency,
+  getPrimaryConsultationFeeUsd,
   getTierFeeFromTiers,
   getTierFeeUsd,
   normalizeConsultationDurationMinutes
@@ -672,12 +673,12 @@ export function resolvePsePaymentQuote(
   }
 
   const doctorId = request.selected_doctor_id ?? request.doctor_id;
-  if (doctorId && durationMinutes != null) {
+  if (doctorId) {
     const recommendation = recommendations.find((item) => item.doctor_id === doctorId);
-    const recommendationFee = getTierFeeFromTiers(
-      recommendation?.doctor_consultation_tiers,
-      durationMinutes
-    );
+    const recommendationFee =
+      durationMinutes != null
+        ? getTierFeeFromTiers(recommendation?.doctor_consultation_tiers, durationMinutes)
+        : null;
     if (recommendationFee != null) {
       return {
         amount: recommendationFee,
@@ -687,10 +688,24 @@ export function resolvePsePaymentQuote(
 
     const doctor = doctors.find((item) => item.id === doctorId);
     if (doctor) {
-      const fee = getTierFeeUsd(doctor, durationMinutes);
-      if (fee != null && Number.isFinite(fee)) {
+      const fee =
+        durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+      const resolved =
+        fee != null && Number.isFinite(fee)
+          ? fee
+          : (() => {
+              const tiers = recommendation?.doctor_consultation_tiers;
+              if (tiers?.length) {
+                const fromTiers =
+                  getTierFeeFromTiers(tiers, 30) ??
+                  tiers.find((t) => t.fee_usd > 0)?.fee_usd;
+                if (fromTiers != null && fromTiers > 0) return fromTiers;
+              }
+              return getPrimaryConsultationFeeUsd(doctor);
+            })();
+      if (resolved != null && Number.isFinite(resolved) && resolved > 0) {
         return {
-          amount: fee,
+          amount: resolved,
           currency: doctorConsultationCurrency(doctor)
         };
       }
@@ -725,7 +740,9 @@ export function hasConsultationSummary(summary: ConsultationSummary | null | und
       summary.labs_diagnostics?.trim() ||
       summary.assessment_plan?.trim() ||
       summary.followup_date?.trim() ||
-      summary.prescription?.trim()
+      summary.prescription?.trim() ||
+      summary.prescription_file_path?.trim() ||
+      summary.lab_order_file_path?.trim()
   );
 }
 

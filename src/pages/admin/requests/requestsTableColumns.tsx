@@ -12,11 +12,11 @@ import { IconEye, IconTrash } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import { formatPatientAvailability } from '../../../lib/doctorSchedule';
 import { homeCareServicesFromRequest } from '../../../lib/homeCareServices';
-import { consultationStageLabel, staffRequestStatusLabel } from '../../../lib/opinionRequests';
+import { staffRequestStatusLabel } from '../../../lib/opinionRequests';
+import { avatarColorFromName, displayInitials } from '../../../lib/avatarDisplay';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import {
   formatRequestDate,
-  patientInitials,
   requestStatusColor
 } from './requestsUtils';
 
@@ -44,23 +44,37 @@ export function useRequestsTableColumns({
         {
           accessorKey: 'patient_name',
           header: 'Patient',
-          size: 260,
-          minSize: 220,
+          size: 240,
+          minSize: 200,
+          grow: true,
+          enableColumnActions: false,
           Cell: ({ row }) => {
             const request = row.original;
+            const name = request.patient_name;
+            const initials = displayInitials(name);
+            const bg = avatarColorFromName(name);
             return (
               <Group gap='sm' wrap='nowrap' className='doctors-mgmt-doctor-cell'>
                 <Avatar
+                  alt={name ?? 'Patient'}
                   radius='xl'
                   size={40}
-                  variant='filled'
-                  className='doctors-mgmt-avatar'
+                  className='doctors-mgmt-avatar doctors-mgmt-avatar--initials'
                   styles={{
-                    root: { flexShrink: 0 },
-                    placeholder: { color: '#fff', fontWeight: 700, fontSize: '0.8rem' }
+                    root: {
+                      flexShrink: 0,
+                      backgroundColor: bg
+                    },
+                    placeholder: {
+                      color: '#fff',
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      letterSpacing: '0.02em',
+                      backgroundColor: bg
+                    }
                   }}
                 >
-                  {patientInitials(request.patient_name)}
+                  {initials}
                 </Avatar>
                 <Stack gap={2} className='doctors-mgmt-doctor-cell__text'>
                   <Text fw={700} size='sm'>
@@ -80,8 +94,10 @@ export function useRequestsTableColumns({
           ? {
               id: 'homeCareServices',
               header: 'Requested services',
-              size: 280,
-              minSize: 220,
+              size: 260,
+              minSize: 200,
+              grow: true,
+              enableColumnActions: false,
               Cell: ({ row }: { row: { original: OpinionRequest } }) => {
                 const services = homeCareServicesFromRequest(row.original);
                 if (!services.length) {
@@ -106,7 +122,9 @@ export function useRequestsTableColumns({
               accessorKey: 'doctor_name',
               header: 'Doctor',
               size: 200,
-              minSize: 170,
+              minSize: 160,
+              grow: true,
+              enableColumnActions: false,
               Cell: ({ row }: { row: { original: OpinionRequest } }) => {
                 const request = row.original;
                 const preferredTime = formatPatientAvailability(request.patient_availability);
@@ -138,8 +156,9 @@ export function useRequestsTableColumns({
         {
           accessorKey: 'created_at',
           header: 'Submitted',
-          size: 130,
+          size: 120,
           minSize: 110,
+          enableColumnActions: false,
           Cell: ({ cell }) => (
             <Text size='sm' className='doctors-mgmt-muted'>
               {formatRequestDate(cell.getValue<string>())}
@@ -150,8 +169,9 @@ export function useRequestsTableColumns({
           id: 'records',
           header: 'Records',
           accessorFn: (row) => row.records.length,
-          size: 90,
-          minSize: 80,
+          size: 100,
+          minSize: 90,
+          enableColumnActions: false,
           Cell: ({ row }) => (
             <Badge variant='light' color='cyan' radius='xl' size='md' className='doctors-mgmt-pill'>
               {row.original.records.length}
@@ -159,23 +179,12 @@ export function useRequestsTableColumns({
           )
         },
         {
-          id: 'workflow',
-          header: 'Workflow',
-          accessorFn: (row) => consultationStageLabel(row.consultation_stage),
-          size: 160,
-          minSize: 140,
-          Cell: ({ row }) => (
-            <Badge variant='light' color='cyan' radius='xl' size='md' className='doctors-mgmt-pill'>
-              {consultationStageLabel(row.original.consultation_stage)}
-            </Badge>
-          )
-        },
-        {
           id: 'status',
           header: 'Status',
           accessorFn: (row) => staffRequestStatusLabel(row),
-          size: 150,
-          minSize: 130,
+          size: 200,
+          minSize: 170,
+          enableColumnActions: false,
           Cell: ({ row }) => {
             const request = row.original;
             return (
@@ -185,6 +194,7 @@ export function useRequestsTableColumns({
                 radius='xl'
                 size='lg'
                 className='doctors-mgmt-status'
+                style={{ whiteSpace: 'nowrap' }}
               >
                 {staffRequestStatusLabel(request)}
               </Badge>
@@ -198,8 +208,9 @@ export function useRequestsTableColumns({
           id: 'workspace',
           header: 'Workspace',
           accessorFn: (row) => row.clinic_name ?? 'Global',
-          size: 170,
+          size: 160,
           minSize: 140,
+          enableColumnActions: false,
           Cell: ({ row }) => (
             <Badge
               variant='light'
@@ -217,8 +228,9 @@ export function useRequestsTableColumns({
           id: 'assigned_to',
           header: 'Assigned to',
           accessorFn: (row) => row.assigned_to_name ?? row.assigned_to ?? '',
-          size: 180,
-          minSize: 150,
+          size: 160,
+          minSize: 140,
+          enableColumnActions: false,
           Cell: ({ row }) => {
             const request = row.original;
             const label = request.assigned_to_name?.trim();
@@ -233,11 +245,12 @@ export function useRequestsTableColumns({
 
       columns.push({
         id: 'actions',
-        header: '',
-        size: 130,
-        minSize: 120,
+        header: 'Actions',
+        size: onDelete ? 110 : 72,
+        minSize: onDelete ? 100 : 64,
         enableSorting: false,
         enableColumnFilter: false,
+        enableColumnActions: false,
         enablePinning: true,
         Cell: ({ row }) => (
           <Group gap='xs' wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>

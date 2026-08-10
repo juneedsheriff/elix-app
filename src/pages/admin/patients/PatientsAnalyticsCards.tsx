@@ -16,7 +16,7 @@ type PatientsAnalyticsCardsProps = {
 const CARDS = [
   {
     key: 'total',
-    label: 'Total Patients',
+    label: 'Total Patients Registered',
     icon: IconUsers,
     gradient: 'doctors-mgmt-stat--total',
     value: (a: PatientAnalytics) => a.total.toLocaleString()

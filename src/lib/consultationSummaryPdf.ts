@@ -30,7 +30,7 @@ const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'past_medical_history', label: 'Past medical history' },
   { key: 'current_medications', label: 'Current medications' },
   { key: 'vital_signs', label: 'Vital signs' },
-  { key: 'labs_diagnostics', label: 'Labs / diagnostics' },
+  { key: 'labs_diagnostics', label: 'Lab Order' },
   { key: 'assessment_plan', label: 'Assessment & plan' },
   { key: 'followup_date', label: 'Follow-up date' },
   { key: 'prescription', label: 'Prescription' }
@@ -187,6 +187,20 @@ async function buildConsultationSummaryPdf(
     if (!value) continue;
     addLine(label, 11, true);
     addLine(value, 10);
+    y += 8;
+  }
+
+  if (!sectionDisplayValue('prescription', summary.prescription) && summary.prescription_file_name?.trim()) {
+    addLine('Prescription (uploaded file)', 11, true);
+    addLine(summary.prescription_file_name.trim(), 10);
+    y += 8;
+  }
+  if (
+    !sectionDisplayValue('labs_diagnostics', summary.labs_diagnostics) &&
+    summary.lab_order_file_name?.trim()
+  ) {
+    addLine('Lab Order (uploaded file)', 11, true);
+    addLine(summary.lab_order_file_name.trim(), 10);
     y += 8;
   }
 

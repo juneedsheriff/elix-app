@@ -3,7 +3,6 @@ import type { Doctor } from '../types/doctor';
 import {
   formatConsultationFeeForPdf
 } from './consultationCurrency';
-import { formatDurationMinutesLabel } from './consultationTiers';
 import {
   ELIX_BRAND,
   loadElixLogoDataUrl,
@@ -198,12 +197,7 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
     input.lineItemDescription?.trim() ||
     (isHomeCare
       ? 'Home care services'
-      : (() => {
-          const durationLabel = input.durationMinutes
-            ? formatDurationMinutesLabel(input.durationMinutes)
-            : 'Consultation';
-          return `${durationLabel} online consultation${doctorDisplayName ? ` — ${doctorDisplayName}` : ''}`;
-        })());
+      : `Online consultation${doctorDisplayName ? ` — ${doctorDisplayName}` : ''}`);
   const feeLabel = input.feeLabel?.trim() || (isHomeCare ? 'Home care fee' : 'Consultation fee');
 
   ensureSpace(120);

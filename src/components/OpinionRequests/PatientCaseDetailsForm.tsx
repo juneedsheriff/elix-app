@@ -20,6 +20,10 @@ export type PatientCaseDetailsFormProps = {
   doctorSpecialty?: string | null;
   showPreferences?: boolean;
   showConsent?: boolean;
+  /** When false, hides “4. Current Healthcare Provider” (clinic PSE workflow). */
+  showCurrentHealthcareProvider?: boolean;
+  /** When false, hides “6. Questions for the Doctor Consultation” (clinic PSE workflow). */
+  showConsultationQuestions?: boolean;
   /** When false, hides numbered sections 1–6 (used during initial request submission). */
   showCaseSections?: boolean;
   sectionsThrough?: 6 | 8;
@@ -64,6 +68,8 @@ export default function PatientCaseDetailsForm({
   doctorSpecialty,
   showPreferences = false,
   showConsent = false,
+  showCurrentHealthcareProvider = true,
+  showConsultationQuestions = true,
   showCaseSections = true,
   sectionsThrough = 8,
   disabled = false,
@@ -239,37 +245,15 @@ export default function PatientCaseDetailsForm({
             />
           </label>
         ))}
-
-        <label className='opinion-message-label patient-case-details-form__full'>
-          Current Diagnosis (if any)
-          <textarea
-            className='opinion-message'
-            rows={2}
-            value={value.currentDiagnosis}
-            onChange={(event) => patch(value, onChange, { currentDiagnosis: event.target.value })}
-            disabled={isDisabled}
-          />
-        </label>
-
-        <label className='opinion-message-label patient-case-details-form__full'>
-          Current Treatment Plan
-          <textarea
-            className='opinion-message'
-            rows={3}
-            value={value.currentTreatmentPlan}
-            onChange={(event) => patch(value, onChange, { currentTreatmentPlan: event.target.value })}
-            disabled={isDisabled}
-          />
-        </label>
       </div>
 
       <SectionTitle>3. Medical History</SectionTitle>
       <div className='patient-case-details-form__grid'>
         {(
           [
-            ['Existing Medical Conditions', 'existingMedicalConditions'],
-            ['Previous Surgeries', 'previousSurgeries'],
-            ['Relevant Family History', 'familyHistory'],
+            ['Current Medical Condition', 'existingMedicalConditions'],
+            ['Surgical History', 'previousSurgeries'],
+            ['Family History', 'familyHistory'],
             ['Social History', 'socialHistory'],
             ['Known Allergies', 'knownAllergies'],
             ['Current Medications', 'currentMedications']
@@ -288,89 +272,101 @@ export default function PatientCaseDetailsForm({
         ))}
       </div>
 
-      <SectionTitle>4. Current Healthcare Provider</SectionTitle>
-      <div className='patient-case-details-form__grid'>
-        <label className='opinion-message-label'>
-          Treating Doctor Name
-          <input
-            className='opinion-select'
-            value={value.treatingDoctorName}
-            onChange={(event) => patch(value, onChange, { treatingDoctorName: event.target.value })}
-            disabled={isDisabled}
-          />
-        </label>
+      {showCurrentHealthcareProvider ? (
+        <>
+          <SectionTitle>4. Current Healthcare Provider</SectionTitle>
+          <div className='patient-case-details-form__grid'>
+            <label className='opinion-message-label'>
+              Treating Doctor Name
+              <input
+                className='opinion-select'
+                value={value.treatingDoctorName}
+                onChange={(event) =>
+                  patch(value, onChange, { treatingDoctorName: event.target.value })
+                }
+                disabled={isDisabled}
+              />
+            </label>
 
-        <label className='opinion-message-label'>
-          Hospital / Clinic Name
-          <input
-            className='opinion-select'
-            value={value.hospitalClinicName}
-            onChange={(event) => patch(value, onChange, { hospitalClinicName: event.target.value })}
-            disabled={isDisabled}
-          />
-        </label>
+            <label className='opinion-message-label'>
+              Hospital / Clinic Name
+              <input
+                className='opinion-select'
+                value={value.hospitalClinicName}
+                onChange={(event) =>
+                  patch(value, onChange, { hospitalClinicName: event.target.value })
+                }
+                disabled={isDisabled}
+              />
+            </label>
 
-        <label className='opinion-message-label'>
-          Specialty of Treating Doctor
-          <select
-            className='opinion-select'
-            value={value.treatingDoctorSpecialty}
-            onChange={(event) =>
-              patch(value, onChange, { treatingDoctorSpecialty: event.target.value })
-            }
-            disabled={isDisabled}
-          >
-            <option value=''>Select a specialty…</option>
-            {allSpecialties.map((specialty) => (
-              <option key={specialty} value={specialty}>
-                {specialty}
-              </option>
-            ))}
-          </select>
-        </label>
+            <label className='opinion-message-label'>
+              Specialty of Treating Doctor
+              <select
+                className='opinion-select'
+                value={value.treatingDoctorSpecialty}
+                onChange={(event) =>
+                  patch(value, onChange, { treatingDoctorSpecialty: event.target.value })
+                }
+                disabled={isDisabled}
+              >
+                <option value=''>Select a specialty…</option>
+                {allSpecialties.map((specialty) => (
+                  <option key={specialty} value={specialty}>
+                    {specialty}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <PatientBirthDatePicker
-          label='Date of Last Consultation'
-          value={value.lastConsultationDate}
-          onChange={(date) => patch(value, onChange, { lastConsultationDate: date })}
-          disabled={isDisabled}
-          placeholder='Select date'
-        />
-      </div>
+            <PatientBirthDatePicker
+              label='Date of Last Consultation'
+              value={value.lastConsultationDate}
+              onChange={(date) => patch(value, onChange, { lastConsultationDate: date })}
+              disabled={isDisabled}
+              placeholder='Select date'
+            />
+          </div>
+        </>
+      ) : null}
 
-      <SectionTitle>6. Questions for the Doctor Consultation</SectionTitle>
-      <fieldset className='opinion-fieldset patient-case-details-form__fieldset'>
-        <legend>What specific questions would you like answered?</legend>
-        <ul className='patient-case-details-form__checkbox-list'>
-          {SECOND_OPINION_QUESTION_OPTIONS.map((question) => (
-            <li key={question}>
-              <label className='patient-case-details-form__checkbox-item'>
-                <input
-                  type='checkbox'
-                  checked={value.questionCategories.includes(question)}
-                  onChange={() => toggleQuestion(question)}
-                  disabled={isDisabled}
-                />
-                <span>{question}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </fieldset>
+      {showConsultationQuestions ? (
+        <>
+          <SectionTitle>6. Questions for the Doctor Consultation</SectionTitle>
+          <fieldset className='opinion-fieldset patient-case-details-form__fieldset'>
+            <legend>What specific questions would you like answered?</legend>
+            <ul className='patient-case-details-form__checkbox-list'>
+              {SECOND_OPINION_QUESTION_OPTIONS.map((question) => (
+                <li key={question}>
+                  <label className='patient-case-details-form__checkbox-item'>
+                    <input
+                      type='checkbox'
+                      checked={value.questionCategories.includes(question)}
+                      onChange={() => toggleQuestion(question)}
+                      disabled={isDisabled}
+                    />
+                    <span>{question}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
 
-      {value.questionCategories.includes('Other') ? (
-        <label className='opinion-message-label patient-case-details-form__full'>
-          Describe your other question
-          <textarea
-            className='opinion-message'
-            rows={2}
-            value={value.questionCategoriesOther}
-            onChange={(event) =>
-              patch(value, onChange, { questionCategoriesOther: event.target.value })
-            }
-            disabled={isDisabled}
-          />
-        </label>
+          {value.questionCategories.includes('Other') ? (
+            <label className='opinion-message-label patient-case-details-form__full'>
+              Describe your other question
+              <textarea
+                className='opinion-message'
+                rows={2}
+                value={value.questionCategoriesOther}
+                onChange={(event) =>
+                  patch(value, onChange, { questionCategoriesOther: event.target.value })
+                }
+                disabled={isDisabled}
+              />
+            </label>
+          ) : null}
+        </>
       ) : null}
 
       <label className='opinion-message-label patient-case-details-form__full'>
@@ -379,7 +375,9 @@ export default function PatientCaseDetailsForm({
           className='opinion-message'
           rows={3}
           value={value.additionalQuestions}
-          onChange={(event) => patch(value, onChange, { additionalQuestions: event.target.value })}
+          onChange={(event) =>
+            patch(value, onChange, { additionalQuestions: event.target.value })
+          }
           disabled={isDisabled}
         />
       </label>

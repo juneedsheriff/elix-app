@@ -15,7 +15,10 @@ import {
   computeConsultationInvoiceTotals,
   generateConsultationInvoicePdfBlob
 } from './consultationInvoicePdf';
-import { doctorConsultationCurrency, getTierFeeUsd, parseConsultationTiers } from './consultationTiers';
+import {
+  parseConsultationTiers,
+  resolveConsultationPricing
+} from './consultationTiers';
 import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
 import {
   buildHomeCareCaseDetails,
@@ -43,10 +46,12 @@ import { notifyRequestLifecycleEmail } from './adminAuth';
 import { syncConsultationOrdersToPatientVault } from './consultationVaultRecords';
 import {
   createConsultationInvoiceUploadUrl,
+  createConsultationOrderUploadUrl,
   createConsultationSummaryUploadUrl,
   createR2UploadUrl,
   deleteRequestRecord,
   isR2StorageConfigured,
+  registerConsultationOrderVaultRecord,
   uploadFileToR2
 } from './r2Storage';
 import { supabase } from './supabase';
@@ -883,16 +888,13 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
   }
 
   const { patientName, doctorName } = await resolveNames(input, doctor);
-  const durationMinutes = input.consultationDurationMinutes ?? null;
-  const consultationFeeUsd =
-    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
-
+  const pricing = resolveConsultationPricing(doctor, input.consultationDurationMinutes);
   const pricingFields =
-    durationMinutes != null
+    pricing.durationMinutes != null || pricing.feeUsd != null
       ? {
-          consultation_duration_minutes: durationMinutes,
-          consultation_fee_usd: consultationFeeUsd,
-          consultation_currency: doctorConsultationCurrency(doctor)
+          consultation_duration_minutes: pricing.durationMinutes,
+          consultation_fee_usd: pricing.feeUsd,
+          consultation_currency: pricing.currency
         }
       : {};
 
@@ -1012,6 +1014,15 @@ export async function createClinicPseOpinionRequest(input: CreateClinicPseOpinio
   if (patient.clinic_id !== input.clinicId) {
     return { data: null, error: { message: 'Patient is not in your clinic workspace.' } };
   }
+  if (!patient.auth_user_id) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Patient login is not set up yet. Open the patient profile to enable login, then try again.'
+      }
+    };
+  }
 
   const { doctor, error: doctorError } = await resolveDoctorRecord(input.doctorId);
   if (doctorError || !doctor) {
@@ -1030,16 +1041,14 @@ export async function createClinicPseOpinionRequest(input: CreateClinicPseOpinio
   }
 
   const message = input.message.trim() || 'Consultation request';
-  const durationMinutes = input.consultationDurationMinutes ?? null;
-  const consultationFeeUsd =
-    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+  const pricing = resolveConsultationPricing(doctor, input.consultationDurationMinutes);
 
   const pricingFields =
-    durationMinutes != null
+    pricing.durationMinutes != null || pricing.feeUsd != null
       ? {
-          consultation_duration_minutes: durationMinutes,
-          consultation_fee_usd: consultationFeeUsd,
-          consultation_currency: doctorConsultationCurrency(doctor)
+          consultation_duration_minutes: pricing.durationMinutes,
+          consultation_fee_usd: pricing.feeUsd,
+          consultation_currency: pricing.currency
         }
       : {};
 
@@ -1113,6 +1122,141 @@ export async function createClinicPseOpinionRequest(input: CreateClinicPseOpinio
       doctor_name: doctor.full_name,
       patient_profile_id: patient.id,
       clinic_created: true
+    }
+  });
+
+  return { data: { id: request.id }, error: null };
+}
+
+export type CreatePlatformPseOpinionRequestInput = {
+  patientProfileId: string;
+  doctorId: string;
+  message: string;
+  consultationDurationMinutes?: number | null;
+  staffId: string;
+};
+
+/** Global (platform) PSE creates a consultation request for a platform patient (auto-assigned to staff). */
+export async function createPlatformPseOpinionRequest(input: CreatePlatformPseOpinionRequestInput) {
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('id, auth_user_id, full_name, clinic_id, email')
+    .eq('id', input.patientProfileId)
+    .maybeSingle();
+
+  if (patientError) {
+    return { data: null, error: patientError };
+  }
+  if (!patient) {
+    return { data: null, error: { message: 'Patient not found.' } };
+  }
+  if (patient.clinic_id) {
+    return {
+      data: null,
+      error: { message: 'This patient belongs to a clinic workspace and cannot be booked from global PSE.' }
+    };
+  }
+  if (!patient.auth_user_id) {
+    return {
+      data: null,
+      error: {
+        message:
+          'Patient login is not set up yet. Open the patient profile to enable login, then try again.'
+      }
+    };
+  }
+
+  const { doctor, error: doctorError } = await resolveDoctorRecord(input.doctorId);
+  if (doctorError || !doctor) {
+    return { data: null, error: doctorError ?? { message: 'Doctor not found.' } };
+  }
+  if (doctor.clinic_id) {
+    return {
+      data: null,
+      error: { message: 'Select a platform doctor (not clinic-only).' }
+    };
+  }
+
+  const message = input.message.trim() || 'Consultation request';
+  const pricing = resolveConsultationPricing(doctor, input.consultationDurationMinutes);
+
+  const pricingFields =
+    pricing.durationMinutes != null || pricing.feeUsd != null
+      ? {
+          consultation_duration_minutes: pricing.durationMinutes,
+          consultation_fee_usd: pricing.feeUsd,
+          consultation_currency: pricing.currency
+        }
+      : {};
+
+  const assignedAt = new Date().toISOString();
+
+  const baseInsert = {
+    doctor_id: doctor.id,
+    doctor_name: doctor.full_name,
+    message,
+    patient_id: patient.auth_user_id,
+    patient_name: patient.full_name,
+    status: 'submitted' as const,
+    doctor_selection_mode: 'self_select' as const,
+    selected_doctor_id: doctor.id,
+    clinic_id: null as string | null,
+    assigned_to: input.staffId,
+    assigned_at: assignedAt,
+    consultation_stage: 'assigned' as const,
+    ...pricingFields
+  };
+
+  let requestError = null;
+  let request: { id: string } | null = null;
+
+  const withWorkflow = await supabase
+    .from('opinion_requests')
+    .insert(baseInsert)
+    .select('id')
+    .single();
+
+  if (!withWorkflow.error && withWorkflow.data) {
+    request = withWorkflow.data;
+  } else if (isMissingDoctorSelectionModeError(withWorkflow.error)) {
+    const { doctor_selection_mode: _mode, ...withoutMode } = baseInsert;
+    const fallback = await supabase.from('opinion_requests').insert(withoutMode).select('id').single();
+    requestError = fallback.error;
+    request = fallback.data;
+  } else if (isMissingWorkflowColumnsError(withWorkflow.error)) {
+    const legacy = await supabase
+      .from('opinion_requests')
+      .insert({
+        doctor_id: doctor.id,
+        doctor_name: doctor.full_name,
+        message,
+        patient_id: patient.auth_user_id,
+        patient_name: patient.full_name,
+        status: 'submitted',
+        assigned_to: input.staffId,
+        assigned_at: assignedAt
+      })
+      .select('id')
+      .single();
+    requestError = legacy.error;
+    request = legacy.data;
+  } else {
+    requestError = withWorkflow.error;
+  }
+
+  if (requestError || !request) {
+    return {
+      data: null,
+      error: { message: requestError?.message ?? 'Could not create request.' }
+    };
+  }
+
+  await logRequestAudit(request.id, 'request_created', 'pse', {
+    metadata: {
+      doctor_id: doctor.id,
+      doctor_name: doctor.full_name,
+      patient_profile_id: patient.id,
+      platform_pse_created: true
     }
   });
 
@@ -3265,8 +3409,7 @@ export async function patientSelectRecommendedDoctor(
   }
 
   const durationMinutes = input?.consultationDurationMinutes ?? null;
-  const consultationFeeUsd =
-    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+  const pricing = resolveConsultationPricing(doctor, durationMinutes);
 
   const { data, error } = await supabase
     .from('opinion_requests')
@@ -3275,11 +3418,11 @@ export async function patientSelectRecommendedDoctor(
       doctor_id: doctor.id,
       doctor_name: doctor.full_name,
       consultation_stage: 'doctor_selected',
-      ...(durationMinutes != null
+      ...(pricing.durationMinutes != null || pricing.feeUsd != null
         ? {
-            consultation_duration_minutes: durationMinutes,
-            consultation_fee_usd: consultationFeeUsd,
-            consultation_currency: doctorConsultationCurrency(doctor)
+            consultation_duration_minutes: pricing.durationMinutes,
+            consultation_fee_usd: pricing.feeUsd,
+            consultation_currency: pricing.currency
           }
         : {})
     })
@@ -3312,8 +3455,7 @@ export async function patientSelectDoctorWithAvailability(
   }
 
   const durationMinutes = input?.consultationDurationMinutes ?? null;
-  const consultationFeeUsd =
-    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+  const pricing = resolveConsultationPricing(doctor, durationMinutes);
 
   const payload = {
     selected_doctor_id: doctor.id,
@@ -3321,11 +3463,11 @@ export async function patientSelectDoctorWithAvailability(
     doctor_name: doctor.full_name,
     patient_availability: availability,
     consultation_stage: 'availability_submitted' as const,
-    ...(durationMinutes != null
+    ...(pricing.durationMinutes != null || pricing.feeUsd != null
       ? {
-          consultation_duration_minutes: durationMinutes,
-          consultation_fee_usd: consultationFeeUsd,
-          consultation_currency: doctorConsultationCurrency(doctor)
+          consultation_duration_minutes: pricing.durationMinutes,
+          consultation_fee_usd: pricing.feeUsd,
+          consultation_currency: pricing.currency
         }
       : {})
   };
@@ -3467,8 +3609,7 @@ export async function pseAssignAndApproveDoctor(
   }
 
   const durationMinutes = input?.consultationDurationMinutes ?? null;
-  const consultationFeeUsd =
-    durationMinutes != null ? getTierFeeUsd(doctor, durationMinutes) : null;
+  const pricing = resolveConsultationPricing(doctor, durationMinutes);
   const confirmedAt = new Date().toISOString();
 
   const payload = {
@@ -3477,11 +3618,11 @@ export async function pseAssignAndApproveDoctor(
     doctor_name: doctor.full_name,
     consultation_stage: 'schedule_confirmed' as const,
     schedule_confirmed_at: confirmedAt,
-    ...(durationMinutes != null
+    ...(pricing.durationMinutes != null || pricing.feeUsd != null
       ? {
-          consultation_duration_minutes: durationMinutes,
-          consultation_fee_usd: consultationFeeUsd,
-          consultation_currency: doctorConsultationCurrency(doctor)
+          consultation_duration_minutes: pricing.durationMinutes,
+          consultation_fee_usd: pricing.feeUsd,
+          consultation_currency: pricing.currency
         }
       : {})
   };
@@ -4318,6 +4459,10 @@ export async function fetchPatientConsultationSummaries(patientAuthUserId: strin
         assessment_plan,
         followup_date,
         prescription,
+        prescription_file_path,
+        prescription_file_name,
+        lab_order_file_path,
+        lab_order_file_name,
         pdf_storage_path,
         created_at,
         updated_at,
@@ -4355,6 +4500,10 @@ const CONSULTATION_SUMMARY_SELECT = `
   assessment_plan,
   followup_date,
   prescription,
+  prescription_file_path,
+  prescription_file_name,
+  lab_order_file_path,
+  lab_order_file_name,
   pdf_storage_path,
   created_at,
   updated_at,
@@ -4404,9 +4553,28 @@ function shouldCloseRequestAfterConsultation(request: OpinionRequest): boolean {
 export async function saveDoctorConsultation(
   requestId: string,
   request: OpinionRequest,
-  input: Omit<ConsultationSummary, 'id' | 'request_id' | 'created_at' | 'updated_at' | 'pdf_storage_path'>,
+  input: Omit<
+    ConsultationSummary,
+    | 'id'
+    | 'request_id'
+    | 'created_at'
+    | 'updated_at'
+    | 'pdf_storage_path'
+    | 'prescription_file_path'
+    | 'prescription_file_name'
+    | 'lab_order_file_path'
+    | 'lab_order_file_name'
+  >,
   responseText: string,
-  doctorProfile?: Doctor | null
+  doctorProfile?: Doctor | null,
+  attachments?: {
+    prescriptionFile?: File | null;
+    labOrderFile?: File | null;
+    existingPrescriptionFilePath?: string | null;
+    existingPrescriptionFileName?: string | null;
+    existingLabOrderFilePath?: string | null;
+    existingLabOrderFileName?: string | null;
+  }
 ) {
   const trimmedResponse = responseText.trim();
   if (!trimmedResponse) {
@@ -4501,8 +4669,41 @@ export async function saveDoctorConsultation(
     };
   }
 
+  let prescriptionFilePath = attachments?.existingPrescriptionFilePath?.trim() || null;
+  let prescriptionFileName = attachments?.existingPrescriptionFileName?.trim() || null;
+  let labOrderFilePath = attachments?.existingLabOrderFilePath?.trim() || null;
+  let labOrderFileName = attachments?.existingLabOrderFileName?.trim() || null;
+
+  if (attachments?.prescriptionFile) {
+    const uploaded = await uploadConsultationAttachmentFile(
+      requestId,
+      attachments.prescriptionFile,
+      'prescriptions',
+      'Doctor prescription upload'
+    );
+    if (uploaded.error) {
+      return { data: null, error: { message: normalizeStorageAuthError(uploaded.error.message) } };
+    }
+    prescriptionFilePath = uploaded.storagePath;
+    prescriptionFileName = attachments.prescriptionFile.name;
+  }
+
+  if (attachments?.labOrderFile) {
+    const uploaded = await uploadConsultationAttachmentFile(
+      requestId,
+      attachments.labOrderFile,
+      'lab_results',
+      'Doctor lab order upload'
+    );
+    if (uploaded.error) {
+      return { data: null, error: { message: normalizeStorageAuthError(uploaded.error.message) } };
+    }
+    labOrderFilePath = uploaded.storagePath;
+    labOrderFileName = attachments.labOrderFile.name;
+  }
+
   const now = new Date().toISOString();
-  const summaryPayload = {
+  const summaryPayload: Record<string, unknown> = {
     request_id: requestId,
     doctor_id: resolvedDoctorId,
     patient_auth_user_id: input.patient_auth_user_id ?? request.patient_id ?? null,
@@ -4515,15 +4716,39 @@ export async function saveDoctorConsultation(
     assessment_plan: input.assessment_plan,
     followup_date: input.followup_date,
     prescription: input.prescription,
+    prescription_file_path: prescriptionFilePath,
+    prescription_file_name: prescriptionFileName,
+    lab_order_file_path: labOrderFilePath,
+    lab_order_file_name: labOrderFileName,
     pdf_storage_path: uploadTarget.storagePath,
     updated_at: now
   };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('consultation_summaries')
     .upsert(summaryPayload, { onConflict: 'request_id' })
     .select(CONSULTATION_SUMMARY_SELECT)
     .single<ConsultationSummaryRow>();
+
+  if (error && isMissingPrescriptionLabOrderColumnsError(error)) {
+    const fallbackPayload = { ...summaryPayload };
+    delete fallbackPayload.prescription_file_path;
+    delete fallbackPayload.prescription_file_name;
+    delete fallbackPayload.lab_order_file_path;
+    delete fallbackPayload.lab_order_file_name;
+    const retry = await supabase
+      .from('consultation_summaries')
+      .upsert(fallbackPayload, { onConflict: 'request_id' })
+      .select(
+        CONSULTATION_SUMMARY_SELECT.replace(
+          /,\s*prescription_file_path,\s*prescription_file_name,\s*lab_order_file_path,\s*lab_order_file_name/,
+          ''
+        )
+      )
+      .single<ConsultationSummaryRow>();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     const hint =
@@ -4531,10 +4756,16 @@ export async function saveDoctorConsultation(
         ? ' Run npm run db:apply-consultation-summary-followup (migration 075).'
         : error.message?.includes('past_medical_history')
         ? ' Run supabase/migrations/066_consultation_summary_past_medical_history.sql in the Supabase SQL Editor.'
+        : error.message?.includes('prescription_file_path') || error.message?.includes('lab_order_file_path')
+          ? ' Run supabase/migrations/079_consultation_prescription_lab_order_files.sql in the Supabase SQL Editor.'
         : error.message?.includes('pdf_storage_path') || error.code === '42703'
           ? ' Run supabase/migrations/027_consultation_summary_pdf.sql in the Supabase SQL Editor.'
         : '';
     return { data: null, error: { message: normalizeStorageAuthError(`${error.message}${hint}`) } };
+  }
+
+  if (!data) {
+    return { data: null, error: { message: 'Could not save consultation notes.' } };
   }
 
   const finalize = await finalizeDoctorConsultationRequest(requestId, request, trimmedResponse);
@@ -4578,6 +4809,63 @@ const CONSULTATION_NOTES_EXTENSION_MIME: Record<string, string> = {
 };
 
 const CONSULTATION_NOTES_ALLOWED_EXTENSIONS = new Set(Object.keys(CONSULTATION_NOTES_EXTENSION_MIME));
+const PRESCRIPTION_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif']);
+
+function isMissingPrescriptionLabOrderColumnsError(error: { message?: string; code?: string } | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('prescription_file_path') ||
+    msg.includes('prescription_file_name') ||
+    msg.includes('lab_order_file_path') ||
+    msg.includes('lab_order_file_name')
+  );
+}
+
+async function uploadConsultationAttachmentFile(
+  requestId: string,
+  file: File,
+  recordCategory: 'prescriptions' | 'lab_results',
+  summary: string
+): Promise<{ storagePath: string | null; error: { message: string } | null }> {
+  const { data: uploadTarget, error: presignError } = await createConsultationOrderUploadUrl(
+    requestId,
+    file.size,
+    file.name,
+    recordCategory
+  );
+  if (presignError || !uploadTarget) {
+    return {
+      storagePath: null,
+      error: { message: presignError?.message ?? 'Could not prepare attachment upload.' }
+    };
+  }
+
+  const mimeType = consultationNotesMimeType(file);
+  const { error: uploadError } = await uploadFileToR2(
+    uploadTarget.uploadUrl,
+    file,
+    mimeType,
+    uploadTarget.storagePath
+  );
+  if (uploadError) {
+    return { storagePath: null, error: uploadError };
+  }
+
+  const { error: registerError } = await registerConsultationOrderVaultRecord({
+    requestId,
+    storagePath: uploadTarget.storagePath,
+    fileName: file.name,
+    mimeType,
+    fileSizeBytes: file.size,
+    recordCategory,
+    summary
+  });
+  if (registerError) {
+    return { storagePath: null, error: registerError };
+  }
+
+  return { storagePath: uploadTarget.storagePath, error: null };
+}
 
 export function consultationNotesFileExtension(file: File): string {
   const fromName = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -4609,6 +4897,28 @@ export function consultationNotesFileValidationError(file: File): string | null 
   const ext = consultationNotesFileExtension(file);
   if (!CONSULTATION_NOTES_ALLOWED_EXTENSIONS.has(ext)) {
     return 'Upload a supported file: PDF, JPG, PNG, DOC, or DOCX.';
+  }
+  return null;
+}
+
+export function prescriptionImageValidationError(file: File): string | null {
+  if (file.size < 1 || file.size > CONSULTATION_NOTES_MAX_BYTES) {
+    return 'Prescription image must be between 1 byte and 10 MB.';
+  }
+  const ext = consultationNotesFileExtension(file);
+  if (!PRESCRIPTION_IMAGE_EXTENSIONS.has(ext)) {
+    return 'Prescription image must be JPG, PNG, WebP, HEIC, or GIF.';
+  }
+  return null;
+}
+
+export function labOrderFileValidationError(file: File): string | null {
+  if (file.size < 1 || file.size > CONSULTATION_NOTES_MAX_BYTES) {
+    return 'Lab order file must be between 1 byte and 10 MB.';
+  }
+  const ext = consultationNotesFileExtension(file);
+  if (!CONSULTATION_NOTES_ALLOWED_EXTENSIONS.has(ext)) {
+    return 'Lab order file must be PDF, JPG, PNG, DOC, or DOCX.';
   }
   return null;
 }

@@ -26,7 +26,7 @@ export type ElixHealthNavId = 'overview' | 'doctors' | 'patients' | 'requests' |
 
 export function navItemsForRole(role: AdminRole): ElixHealthNavId[] {
   if (isAnyPatientServiceExecutive({ role })) {
-    return ['overview', 'requests', 'doctors', 'patients', 'profile'];
+    return ['requests', 'doctors', 'patients', 'profile'];
   }
   if (isAdministrator({ role })) {
     return ['overview', 'doctors', 'patients', 'requests', 'staff', 'profile'];
@@ -34,12 +34,19 @@ export function navItemsForRole(role: AdminRole): ElixHealthNavId[] {
   return ['overview', 'doctors', 'patients', 'requests', 'staff'];
 }
 
+/** Default route after staff sign-in. */
+export function staffLandingNavId(role: AdminRole): ElixHealthNavId {
+  return isAnyPatientServiceExecutive({ role }) ? 'requests' : 'overview';
+}
+
 export function canManageStaffProfiles(admin: Pick<Admin, 'role'>): boolean {
   return isAdministrator(admin);
 }
 
 export function requestsNavLabel(role: AdminRole): string {
-  return isAnyPatientServiceExecutive({ role }) ? 'My requests' : 'Requests';
+  if (isClinicPatientServiceExecutive({ role })) return 'Patient Requests';
+  if (isAnyPatientServiceExecutive({ role })) return 'My requests';
+  return 'Requests';
 }
 
 export function canEditProfiles(admin: Pick<Admin, 'role'>): boolean {
@@ -58,8 +65,19 @@ export function canSelfAssignRequests(admin: Pick<Admin, 'role'>): boolean {
   return isClinicPatientServiceExecutive(admin);
 }
 
+/** Clinic PSE: create consultation + home care requests from staff tools. */
 export function canCreateRequests(admin: Pick<Admin, 'role'>): boolean {
   return isClinicPatientServiceExecutive(admin);
+}
+
+/** Book a consultation for a patient (clinic PSE only). */
+export function canBookConsultation(admin: Pick<Admin, 'role'>): boolean {
+  return isClinicPatientServiceExecutive(admin);
+}
+
+/** Home care tab / request actions (clinic PSE + admin; not global PSE). */
+export function canAccessHomeCareRequests(admin: Pick<Admin, 'role'>): boolean {
+  return isAdministrator(admin) || isClinicPatientServiceExecutive(admin);
 }
 
 /** Soft-delete patients (admin: all; clinic PSE: own clinic via RLS). */

@@ -15,7 +15,7 @@ type DoctorRequestRespondProps = {
 export default function DoctorRequestRespond({
   request,
   onNavigate,
-  returnScreen = 'case-review'
+  returnScreen = 'doctor-dashboard'
 }: DoctorRequestRespondProps) {
   const hasResponse = Boolean(request.doctor_response?.trim());
   const showConsultationButton = canDoctorGiveConsultation(request);

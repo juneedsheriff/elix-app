@@ -6,6 +6,8 @@ import {
   CLINIC_PSE_PATIENT_GENDER_OPTIONS
 } from '../../../lib/patientProfileOptions';
 import type { Patient } from '../../../types/patient';
+import { PATIENT_GOVT_ID_TYPES } from '../../../types/patient';
+import PatientDocumentList from '../../../components/patient/PatientDocumentList';
 import AdminAccountAccessPanel from './AdminAccountAccessPanel';
 import { FieldLabel } from './adminDoctorFormUi';
 
@@ -26,6 +28,12 @@ function toFormState(patient: Patient): AdminPatientUpdateInput {
     blood_group: patient.blood_group,
     country: patient.country,
     city: patient.city,
+    address: patient.address ?? null,
+    pin_code: patient.pin_code ?? null,
+    govt_id_type: patient.govt_id_type ?? null,
+    govt_id_number: patient.govt_id_number ?? null,
+    govt_id_documents: patient.govt_id_documents ?? [],
+    latest_prescription_documents: patient.latest_prescription_documents ?? [],
     allergies: patient.allergies,
     current_medications: patient.current_medications,
     insurance_provider: patient.insurance_provider,
@@ -35,7 +43,12 @@ function toFormState(patient: Patient): AdminPatientUpdateInput {
   };
 }
 
-export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, readOnly = false }: AdminPatientEditFormProps) {
+export default function AdminPatientEditForm({
+  patient,
+  onSaved,
+  onAuthChanged,
+  readOnly = false
+}: AdminPatientEditFormProps) {
   const [form, setForm] = useState<AdminPatientUpdateInput>(() => toFormState(patient));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,16 +88,14 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
 
   const genderValue = form.gender?.trim() ?? '';
   const bloodGroupValue = form.blood_group?.trim() ?? '';
-  const genderOptions = (
-    CLINIC_PSE_PATIENT_GENDER_OPTIONS as readonly string[]
-  ).includes(genderValue)
+  const genderOptions = (CLINIC_PSE_PATIENT_GENDER_OPTIONS as readonly string[]).includes(genderValue)
     ? [...CLINIC_PSE_PATIENT_GENDER_OPTIONS]
     : genderValue
       ? [genderValue, ...CLINIC_PSE_PATIENT_GENDER_OPTIONS]
       : [...CLINIC_PSE_PATIENT_GENDER_OPTIONS];
-  const bloodGroupOptions = (
-    CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS as readonly string[]
-  ).includes(bloodGroupValue)
+  const bloodGroupOptions = (CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS as readonly string[]).includes(
+    bloodGroupValue
+  )
     ? [...CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS]
     : bloodGroupValue
       ? [bloodGroupValue, ...CLINIC_PSE_PATIENT_BLOOD_GROUP_OPTIONS]
@@ -93,176 +104,232 @@ export default function AdminPatientEditForm({ patient, onSaved, onAuthChanged, 
   return (
     <form className='elixhealth-form' onSubmit={(e) => void handleSubmit(e)}>
       <fieldset disabled={readOnly || busy} className='elixhealth-form-fieldset'>
-      {error ? (
-        <p className='auth-error' role='alert'>
-          {error}
+        {error ? (
+          <p className='auth-error' role='alert'>
+            {error}
+          </p>
+        ) : null}
+
+        <p className='elixhealth-readonly-id'>
+          Patient ID: <code>{patient.elix_id}</code>
         </p>
-      ) : null}
 
-      <p className='elixhealth-readonly-id'>
-        Patient ID: <code>{patient.elix_id}</code>
-      </p>
-
-      <div className='elixhealth-form-grid'>
-        <label className='elixhealth-field'>
-          <FieldLabel required>Full name</FieldLabel>
-          <input
-            type='text'
-            value={form.full_name}
-            onChange={(e) => setField('full_name', e.target.value)}
-            required
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <FieldLabel required>Email</FieldLabel>
-          <input
-            type='email'
-            value={form.email}
-            onChange={(e) => setField('email', e.target.value)}
-            required
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>Phone</span>
-          <input
-            type='tel'
-            value={form.phone ?? ''}
-            onChange={(e) => setField('phone', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>Date of birth</span>
-          <input
-            type='date'
-            value={form.date_of_birth ?? ''}
-            onChange={(e) => setField('date_of_birth', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <FieldLabel required>Gender</FieldLabel>
-          <select
-            value={form.gender ?? ''}
-            onChange={(e) => setField('gender', e.target.value || null)}
-            required
-          >
-            <option value='' disabled>
-              Select gender
-            </option>
-            {genderOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
+        <div className='elixhealth-form-grid'>
+          <label className='elixhealth-field elixhealth-field--full'>
+            <FieldLabel required>
+              Full Name <strong>(As per Govt ID)</strong>
+            </FieldLabel>
+            <input
+              type='text'
+              value={form.full_name}
+              onChange={(e) => setField('full_name', e.target.value)}
+              required
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <FieldLabel required>Email</FieldLabel>
+            <input
+              type='email'
+              value={form.email}
+              onChange={(e) => setField('email', e.target.value)}
+              required
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>Phone</span>
+            <input
+              type='tel'
+              value={form.phone ?? ''}
+              onChange={(e) => setField('phone', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>Date of birth</span>
+            <input
+              type='date'
+              value={form.date_of_birth ?? ''}
+              onChange={(e) => setField('date_of_birth', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <FieldLabel required>Gender</FieldLabel>
+            <select
+              value={form.gender ?? ''}
+              onChange={(e) => setField('gender', e.target.value || null)}
+              required
+            >
+              <option value='' disabled>
+                Select gender
               </option>
-            ))}
-          </select>
-        </label>
-        <label className='elixhealth-field'>
-          <FieldLabel required>Blood group</FieldLabel>
-          <select
-            value={form.blood_group ?? ''}
-            onChange={(e) => setField('blood_group', e.target.value || null)}
-            required
-          >
-            <option value='' disabled>
-              Select blood group
-            </option>
-            {bloodGroupOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
+              {genderOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='elixhealth-field'>
+            <FieldLabel required>Blood group</FieldLabel>
+            <select
+              value={form.blood_group ?? ''}
+              onChange={(e) => setField('blood_group', e.target.value || null)}
+              required
+            >
+              <option value='' disabled>
+                Select blood group
               </option>
-            ))}
-          </select>
-        </label>
-        <label className='elixhealth-field'>
-          <span>Country</span>
-          <input
-            type='text'
-            value={form.country ?? ''}
-            onChange={(e) => setField('country', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>City</span>
-          <input
-            type='text'
-            value={form.city ?? ''}
-            onChange={(e) => setField('city', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>Preferred language</span>
-          <input
-            type='text'
-            value={form.preferred_language}
-            onChange={(e) => setField('preferred_language', e.target.value)}
-            required
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>Insurance provider</span>
-          <input
-            type='text'
-            value={form.insurance_provider ?? ''}
-            onChange={(e) => setField('insurance_provider', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>Emergency contact name</span>
-          <input
-            type='text'
-            value={form.emergency_contact_name ?? ''}
-            onChange={(e) => setField('emergency_contact_name', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field'>
-          <span>Emergency contact phone</span>
-          <input
-            type='tel'
-            value={form.emergency_contact_phone ?? ''}
-            onChange={(e) => setField('emergency_contact_phone', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field elixhealth-field--full'>
-          <span>Allergies</span>
-          <textarea
-            rows={2}
-            value={form.allergies ?? ''}
-            onChange={(e) => setField('allergies', e.target.value || null)}
-          />
-        </label>
-        <label className='elixhealth-field elixhealth-field--full'>
-          <span>Current medications</span>
-          <textarea
-            rows={2}
-            value={form.current_medications ?? ''}
-            onChange={(e) => setField('current_medications', e.target.value || null)}
-          />
-        </label>
-      </div>
+              {bloodGroupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      {!readOnly ? (
-        <AdminAccountAccessPanel
-          role='patient'
-          profileId={patient.id}
-          profileEmail={patient.email}
-          authUserId={patient.auth_user_id}
-          loginDisabled={patient.login_disabled}
-          onAuthChanged={onAuthChanged}
-        />
-      ) : null}
+          <label className='elixhealth-field elixhealth-field--full'>
+            <span>Address</span>
+            <textarea
+              rows={2}
+              value={form.address ?? ''}
+              onChange={(e) => setField('address', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>Pin Code</span>
+            <input
+              type='text'
+              value={form.pin_code ?? ''}
+              onChange={(e) => setField('pin_code', e.target.value || null)}
+              inputMode='numeric'
+              autoComplete='postal-code'
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>City</span>
+            <input
+              type='text'
+              value={form.city ?? ''}
+              onChange={(e) => setField('city', e.target.value || null)}
+            />
+          </label>
 
-      {!readOnly ? (
-      <div className='elixhealth-form-actions'>
-        <button type='submit' className='primary-btn' disabled={busy}>
-          {busy ? (
-            <>
-              <Loader2 size={16} className='spin' aria-hidden /> Saving…
-            </>
-          ) : (
-            'Save changes'
-          )}
-        </button>
-      </div>
-      ) : null}
+          <label className='elixhealth-field'>
+            <span>Govt ID type</span>
+            <select
+              value={form.govt_id_type ?? ''}
+              onChange={(e) => setField('govt_id_type', e.target.value || null)}
+            >
+              <option value=''>Select ID type (optional)</option>
+              {PATIENT_GOVT_ID_TYPES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='elixhealth-field'>
+            <span>Govt ID No</span>
+            <input
+              type='text'
+              value={form.govt_id_number ?? ''}
+              onChange={(e) => setField('govt_id_number', e.target.value || null)}
+              placeholder='Optional'
+            />
+          </label>
+          <div className='elixhealth-field elixhealth-field--full'>
+            <PatientDocumentList
+              label='Govt ID document'
+              hint='Optional — upload or take a photo of the ID'
+              documents={form.govt_id_documents}
+              onChange={(next) => setField('govt_id_documents', next)}
+              disabled={readOnly || busy}
+            />
+          </div>
+
+          <label className='elixhealth-field'>
+            <span>Preferred language</span>
+            <input
+              type='text'
+              value={form.preferred_language}
+              onChange={(e) => setField('preferred_language', e.target.value)}
+              required
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>Insurance provider</span>
+            <input
+              type='text'
+              value={form.insurance_provider ?? ''}
+              onChange={(e) => setField('insurance_provider', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>Emergency contact name</span>
+            <input
+              type='text'
+              value={form.emergency_contact_name ?? ''}
+              onChange={(e) => setField('emergency_contact_name', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field'>
+            <span>Emergency contact phone</span>
+            <input
+              type='tel'
+              value={form.emergency_contact_phone ?? ''}
+              onChange={(e) => setField('emergency_contact_phone', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field elixhealth-field--full'>
+            <span>Allergies</span>
+            <textarea
+              rows={2}
+              value={form.allergies ?? ''}
+              onChange={(e) => setField('allergies', e.target.value || null)}
+            />
+          </label>
+          <label className='elixhealth-field elixhealth-field--full'>
+            <span>Current medications</span>
+            <textarea
+              rows={2}
+              value={form.current_medications ?? ''}
+              onChange={(e) => setField('current_medications', e.target.value || null)}
+            />
+          </label>
+          <div className='elixhealth-field elixhealth-field--full'>
+            <PatientDocumentList
+              label='Latest prescription'
+              hint='Optional — doctors can view these against current medications'
+              documents={form.latest_prescription_documents}
+              onChange={(next) => setField('latest_prescription_documents', next)}
+              disabled={readOnly || busy}
+            />
+          </div>
+        </div>
+
+        {!readOnly ? (
+          <AdminAccountAccessPanel
+            role='patient'
+            profileId={patient.id}
+            profileEmail={patient.email}
+            authUserId={patient.auth_user_id}
+            loginDisabled={patient.login_disabled}
+            onAuthChanged={onAuthChanged}
+          />
+        ) : null}
+
+        {!readOnly ? (
+          <div className='elixhealth-form-actions'>
+            <button type='submit' className='primary-btn' disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 size={16} className='spin' aria-hidden /> Saving…
+                </>
+              ) : (
+                'Save patient'
+              )}
+            </button>
+          </div>
+        ) : null}
       </fieldset>
     </form>
   );

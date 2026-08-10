@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Clock,
   FolderOpen,
+  Home,
   Loader2,
   RefreshCw,
   ShieldCheck,
@@ -15,13 +16,16 @@ import { useNavigate } from 'react-router-dom';
 import PatientConsultationRetainCard, {
   isUpcomingPatientConsultation
 } from '../../components/ConsultationWorkflow/PatientConsultationRetainCard';
+import HomeCareServicesModal from '../../components/OpinionRequests/HomeCareServicesModal';
 import PatientRequestListCard from '../../components/OpinionRequests/PatientRequestListCard';
 import '../../components/OpinionRequests/patient-my-requests.css';
 import SecondOpinionChoiceModal from '../../components/OpinionRequests/SecondOpinionChoiceModal';
+import type { HomeCareServiceSelection } from '../../lib/homeCareServices';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
 import { isPatientProfileComplete, patientProfileMissingFields } from '../../lib/patientProfileCompleteness';
 import { splitPatientFullName } from '../../lib/patients';
 import {
+  createHomeCareOpinionRequest,
   fetchPatientOpinionRequests,
   isAwaitingDoctorReply,
   subscribePatientOpinionRequestUpdates
@@ -81,6 +85,9 @@ export default function PatientDashboardPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [choiceModalOpen, setChoiceModalOpen] = useState(false);
+  const [homeCareModalOpen, setHomeCareModalOpen] = useState(false);
+  const [homeCareBusy, setHomeCareBusy] = useState(false);
+  const [homeCareError, setHomeCareError] = useState<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
   const goToScreen = useCallback(
@@ -98,6 +105,41 @@ export default function PatientDashboardPage({
       navigate(`${appScreenPath('my-requests')}?id=${encodeURIComponent(requestId)}`);
     },
     [navigate, onNavigate]
+  );
+
+  const handleHomeCareContinue = useCallback(
+    async (selection: HomeCareServiceSelection) => {
+      if (!userId) {
+        setHomeCareError('Sign in as a patient to request home care services.');
+        return;
+      }
+      if (!patientProfile?.clinic_id) {
+        setHomeCareError('Home care services are available for clinic patients. Contact your clinic team.');
+        return;
+      }
+
+      setHomeCareBusy(true);
+      setHomeCareError(null);
+
+      const { data, error: createError } = await createHomeCareOpinionRequest({
+        patientAuthUserId: userId,
+        patientName: patientProfile.full_name,
+        selection,
+        clinicId: patientProfile.clinic_id,
+        actor: 'patient'
+      });
+
+      setHomeCareBusy(false);
+
+      if (createError || !data) {
+        setHomeCareError(createError?.message ?? 'Could not submit home care request.');
+        return;
+      }
+
+      setHomeCareModalOpen(false);
+      openRequest(data.id);
+    },
+    [userId, patientProfile, openRequest]
   );
 
   const load = useCallback(
@@ -170,6 +212,7 @@ export default function PatientDashboardPage({
   const greetingName = patientGreetingName(patientProfile?.full_name);
   const profileIncomplete = Boolean(patientProfile && !isPatientProfileComplete(patientProfile));
   const missingProfileFields = patientProfileMissingFields(patientProfile);
+  const canRequestHomeCare = Boolean(patientProfile?.clinic_id);
 
   const metrics = [
     {
@@ -227,6 +270,19 @@ export default function PatientDashboardPage({
         }}
       />
 
+      <HomeCareServicesModal
+        open={homeCareModalOpen}
+        onClose={() => {
+          if (!homeCareBusy) {
+            setHomeCareModalOpen(false);
+            setHomeCareError(null);
+          }
+        }}
+        busy={homeCareBusy}
+        error={homeCareError}
+        onContinue={handleHomeCareContinue}
+      />
+
       {profileIncomplete ? (
         <div className='pd-profile-incomplete' role='status'>
           <div>
@@ -265,7 +321,7 @@ export default function PatientDashboardPage({
               <Upload size={20} strokeWidth={2} />
             </span>
             <span className='pd-action__text'>
-              <strong>Upload records</strong>
+              <strong>Upload & View Records</strong>
               <small>Add files to your secure vault</small>
             </span>
             <ChevronRight size={18} className='pd-action__chevron' aria-hidden />
@@ -275,11 +331,30 @@ export default function PatientDashboardPage({
               <Stethoscope size={20} strokeWidth={2} />
             </span>
             <span className='pd-action__text'>
-              <strong>Doctor consultation</strong>
+              <strong>Get Doctor Consultation</strong>
               <small>Choose a doctor or get recommendations</small>
             </span>
             <ChevronRight size={18} className='pd-action__chevron' aria-hidden />
           </button>
+          {canRequestHomeCare ? (
+            <button
+              type='button'
+              className='pd-action'
+              onClick={() => {
+                setHomeCareError(null);
+                setHomeCareModalOpen(true);
+              }}
+            >
+              <span className='pd-action__icon' aria-hidden>
+                <Home size={20} strokeWidth={2} />
+              </span>
+              <span className='pd-action__text'>
+                <strong>Home Care Services</strong>
+                <small>Request in-home care support</small>
+              </span>
+              <ChevronRight size={18} className='pd-action__chevron' aria-hidden />
+            </button>
+          ) : null}
         </section>
 
         {!dbConnected ? (

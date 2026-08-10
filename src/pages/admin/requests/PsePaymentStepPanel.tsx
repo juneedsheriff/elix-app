@@ -23,7 +23,6 @@ import {
   isPseHomeCareWizard,
   isScheduleConfirmed
 } from '../../../lib/consultationWizard';
-import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
 import ConsultationInvoicePdfView from '../../../components/ConsultationWorkflow/ConsultationInvoicePdfView';
 import type { OpinionRequest } from '../../../types/opinionRequest';
 import PaymentProofReview from './PaymentProofReview';
@@ -168,24 +167,14 @@ export default function PsePaymentStepPanel({
             <code>https://elixclinix.com/pay.html?amount=500</code>), then generate the invoice.
           </Alert>
         )
-      ) : request.consultation_duration_minutes && formattedAmount ? (
-        <Alert color='blue' radius='md' variant='light' title='Doctor consultation fee'>
-          {formatDurationMinutesLabel(request.consultation_duration_minutes)} · {formattedAmount} (auto-filled
-          from the selected doctor&apos;s quote).
-        </Alert>
       ) : formattedAmount ? (
         <Alert color='blue' radius='md' variant='light' title='Doctor consultation fee'>
-          {formattedAmount} (auto-filled from the selected doctor&apos;s quote).
-        </Alert>
-      ) : request.consultation_duration_minutes ? (
-        <Alert color='orange' radius='md' variant='light' title='Consultation fee missing'>
-          Could not resolve the fee for a{' '}
-          {formatDurationMinutesLabel(Number(request.consultation_duration_minutes))} session. Check
-          that the selected doctor has pricing for this duration.
+          {formattedAmount} (auto-filled from the selected doctor&apos;s profile charge).
         </Alert>
       ) : (
         <Alert color='orange' radius='md' variant='light' title='Consultation fee missing'>
-          Confirm the patient selected a doctor and session length before sending a payment link.
+          Confirm a doctor is assigned and has a consultation charge on their profile before sending a
+          payment link.
         </Alert>
       )}
 

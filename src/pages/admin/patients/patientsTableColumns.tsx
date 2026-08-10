@@ -4,6 +4,7 @@ import {
   ActionIcon,
   Avatar,
   Badge,
+  Button,
   Code,
   Group,
   Menu,
@@ -16,18 +17,20 @@ import {
   IconBuildingOff,
   IconDots,
   IconEye,
+  IconHomeHeart,
   IconMail,
   IconPencil,
   IconPhone,
+  IconStethoscope,
   IconTrash
 } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import type { Patient } from '../../../types/patient';
+import { avatarColorFromName, displayInitials, resolveProfilePhotoUrl } from '../../../lib/avatarDisplay';
 import { patientEditUrl } from '../elixHealthRoutes';
 import {
   bloodGroupBadgeColor,
   loginStatusForPatient,
-  patientInitials,
   patientLocation
 } from './patientsUtils';
 
@@ -38,16 +41,13 @@ type UsePatientsTableColumnsOptions = {
   onRemoveFromClinic?: (patient: Patient) => void;
   onDeleteAllRequests?: (patient: Patient) => void;
   onDeletePatient?: (patient: Patient) => void;
+  onBookConsultation?: (patient: Patient) => void;
+  onRequestHomeCare?: (patient: Patient) => void;
 };
 
 function displayCell(value: string | null | undefined) {
   const v = value?.trim();
   return v ? v : '—';
-}
-
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString();
 }
 
 export function usePatientsTableColumns({
@@ -56,30 +56,50 @@ export function usePatientsTableColumns({
   onAssignToClinic,
   onRemoveFromClinic,
   onDeleteAllRequests,
-  onDeletePatient
+  onDeletePatient,
+  onBookConsultation,
+  onRequestHomeCare
 }: UsePatientsTableColumnsOptions) {
   return useMemo<MRT_ColumnDef<Patient>[]>(
     () => [
       {
         accessorKey: 'full_name',
         header: 'Patient',
-        size: 260,
-        minSize: 220,
+        size: 300,
+        minSize: 260,
         Cell: ({ row }) => {
           const patient = row.original;
+          const photoUrl = resolveProfilePhotoUrl(patient.avatar_url);
+          const initials = displayInitials(patient.full_name);
+          const bg = avatarColorFromName(patient.full_name);
           return (
             <Group gap='sm' wrap='nowrap' className='doctors-mgmt-doctor-cell'>
               <Avatar
+                src={photoUrl ?? undefined}
+                alt={patient.full_name}
                 radius='xl'
                 size={40}
-                variant='filled'
-                className='doctors-mgmt-avatar'
+                className={
+                  photoUrl
+                    ? 'doctors-mgmt-avatar doctors-mgmt-avatar--photo'
+                    : 'doctors-mgmt-avatar doctors-mgmt-avatar--initials'
+                }
                 styles={{
-                  root: { flexShrink: 0 },
-                  placeholder: { color: '#fff', fontWeight: 700, fontSize: '0.8rem' }
+                  root: {
+                    flexShrink: 0,
+                    backgroundColor: photoUrl ? undefined : bg
+                  },
+                  placeholder: {
+                    color: '#fff',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    letterSpacing: '0.02em',
+                    backgroundColor: photoUrl ? undefined : bg
+                  },
+                  image: { objectFit: 'cover' }
                 }}
               >
-                {patientInitials(patient.full_name)}
+                {initials}
               </Avatar>
               <Stack gap={2} className='doctors-mgmt-doctor-cell__text'>
                 <Text
@@ -94,6 +114,9 @@ export function usePatientsTableColumns({
                 <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
                   {patient.email}
                 </Text>
+                <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
+                  {displayCell(patient.phone)}
+                </Text>
               </Stack>
             </Group>
           );
@@ -101,9 +124,10 @@ export function usePatientsTableColumns({
       },
       {
         accessorKey: 'elix_id',
-        header: 'ElixClinix ID',
-        size: 120,
-        minSize: 100,
+        header: 'Elix ID',
+        size: 140,
+        minSize: 120,
+        enableColumnActions: false,
         Cell: ({ cell }) => (
           <Code className='doctors-mgmt-code' fz='xs'>
             {cell.getValue<string>()}
@@ -111,22 +135,12 @@ export function usePatientsTableColumns({
         )
       },
       {
-        accessorKey: 'phone',
-        header: 'Phone',
-        size: 140,
-        minSize: 120,
-        Cell: ({ cell }) => (
-          <Text size='sm' className='doctors-mgmt-muted'>
-            {displayCell(cell.getValue<string | null>())}
-          </Text>
-        )
-      },
-      {
         id: 'location',
         header: 'Location',
         accessorFn: (row) => patientLocation(row),
-        size: 180,
-        minSize: 150,
+        size: 160,
+        minSize: 140,
+        enableColumnActions: false,
         filterVariant: 'select',
         Cell: ({ row }) => {
           const patient = row.original;
@@ -147,9 +161,10 @@ export function usePatientsTableColumns({
             {
               id: 'pseWorkspace',
               header: 'PSE clinic',
-              size: 200,
+              size: 180,
               minSize: 160,
               enableSorting: false,
+              enableColumnActions: false,
               Cell: ({ row }: { row: { original: Patient } }) => {
                 const patient = row.original;
                 if (!patient.clinic_id) {
@@ -176,8 +191,9 @@ export function usePatientsTableColumns({
       {
         accessorKey: 'blood_group',
         header: 'Blood group',
-        size: 110,
-        minSize: 100,
+        size: 130,
+        minSize: 120,
+        enableColumnActions: false,
         filterVariant: 'select',
         Cell: ({ cell }) => {
           const bg = cell.getValue<string | null>();
@@ -196,34 +212,12 @@ export function usePatientsTableColumns({
         }
       },
       {
-        accessorKey: 'gender',
-        header: 'Gender',
-        size: 100,
-        minSize: 90,
-        Cell: ({ cell }) => (
-          <Text size='sm' c='dimmed' className='doctors-mgmt-muted'>
-            {displayCell(cell.getValue<string | null>())}
-          </Text>
-        )
-      },
-      {
-        accessorKey: 'created_at',
-        header: 'Joined',
-        size: 110,
-        minSize: 100,
-        enableGlobalFilter: false,
-        Cell: ({ cell }) => (
-          <Text size='sm' className='doctors-mgmt-muted'>
-            {formatDate(cell.getValue<string>())}
-          </Text>
-        )
-      },
-      {
         id: 'login',
-        header: 'Login',
+        header: 'Login status',
         accessorFn: (row) => loginStatusForPatient(row).label,
-        size: 120,
-        minSize: 110,
+        size: 150,
+        minSize: 130,
+        enableColumnActions: false,
         Cell: ({ row }) => {
           const status = loginStatusForPatient(row.original);
           return (
@@ -233,14 +227,60 @@ export function usePatientsTableColumns({
           );
         }
       },
+      ...(onBookConsultation || onRequestHomeCare
+        ? [
+            {
+              id: 'bookServices',
+              header: onRequestHomeCare ? 'Book / request' : 'Book Consultation',
+              size: onRequestHomeCare ? 220 : 180,
+              minSize: onRequestHomeCare ? 200 : 160,
+              enableSorting: false,
+              enableColumnFilter: false,
+              enableGlobalFilter: false,
+              enableColumnActions: false,
+              Cell: ({ row }: { row: { original: Patient } }) => {
+                const patient = row.original;
+                return (
+                  <Stack gap={6}>
+                    {onBookConsultation ? (
+                      <Button
+                        size='compact-sm'
+                        radius='md'
+                        variant='outline'
+                        color='cyan'
+                        leftSection={<IconStethoscope size={14} />}
+                        onClick={() => onBookConsultation(patient)}
+                      >
+                        Book Consultation
+                      </Button>
+                    ) : null}
+                    {onRequestHomeCare ? (
+                      <Button
+                        size='compact-sm'
+                        radius='md'
+                        variant='outline'
+                        color='teal'
+                        leftSection={<IconHomeHeart size={14} />}
+                        onClick={() => onRequestHomeCare(patient)}
+                      >
+                        Request Home Care
+                      </Button>
+                    ) : null}
+                  </Stack>
+                );
+              }
+            } as MRT_ColumnDef<Patient>
+          ]
+        : []),
       {
         id: 'actions',
-        header: '',
-        size: 130,
-        minSize: 120,
+        header: 'Actions',
+        size: 120,
+        minSize: 110,
         enableSorting: false,
         enableColumnFilter: false,
         enableGlobalFilter: false,
+        enableColumnActions: false,
         enablePinning: true,
         Cell: ({ row }) => {
           const patient = row.original;
@@ -353,6 +393,15 @@ export function usePatientsTableColumns({
         }
       }
     ],
-    [canEdit, isAdmin, onAssignToClinic, onRemoveFromClinic, onDeleteAllRequests, onDeletePatient]
+    [
+      canEdit,
+      isAdmin,
+      onAssignToClinic,
+      onRemoveFromClinic,
+      onDeleteAllRequests,
+      onDeletePatient,
+      onBookConsultation,
+      onRequestHomeCare
+    ]
   );
 }

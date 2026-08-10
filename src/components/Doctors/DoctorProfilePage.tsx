@@ -95,7 +95,7 @@ export default function DoctorProfilePage({ doctorId, initialDoctor = null, onBa
         footer={
           doctor ? (
             <button type='button' className='primary-btn wide' onClick={() => setView('opinion')}>
-              Get opinion
+           Get Consultation
             </button>
           ) : null
         }

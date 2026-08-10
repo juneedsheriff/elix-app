@@ -20,11 +20,10 @@ export default function DoctorIncomingRequests({
       doctorEmail={doctorEmail}
       configured={configured}
       onNavigate={onNavigate}
-      doctorReturnScreen='case-review'
-      requestKind='consultations'
-      title='Incoming requests'
-      subtitle='Doctor consultation requests from patients assigned to you'
-      signInHint='Sign in as a doctor to view incoming requests.'
+      doctorReturnScreen='doctor-dashboard'
+      title='Patient Requests'
+      subtitle='Consultation and home care requests assigned to you'
+      signInHint='Sign in as a doctor to view patient requests.'
       emptyHint='No requests yet. Patients can send cases from a doctor profile → Get opinion.'
     />
   );

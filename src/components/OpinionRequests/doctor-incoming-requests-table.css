@@ -1,4 +1,11 @@
-/* Doctor incoming requests — card layout (all breakpoints) */
+.doctor-cases-status-action {
+  min-width: 0;
+}
+
+.doctor-cases-status-action .doctor-cases-table-action {
+  white-space: nowrap;
+}
+
 
 .doctor-cases-cards {
   min-width: 0;

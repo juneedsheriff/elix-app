@@ -63,6 +63,10 @@ export type ConsultationSummary = {
   /** YYYY-MM-DD when set. */
   followup_date: string | null;
   prescription: string | null;
+  prescription_file_path?: string | null;
+  prescription_file_name?: string | null;
+  lab_order_file_path?: string | null;
+  lab_order_file_name?: string | null;
   pdf_storage_path: string | null;
   created_at: string;
   updated_at: string;

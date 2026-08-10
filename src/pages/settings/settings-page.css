@@ -122,6 +122,27 @@
   user-select: none;
 }
 
+.settings-hero-banner__doctor-photo {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid color-mix(in srgb, var(--brand-cyan) 30%, #fff);
+  box-shadow: 0 4px 14px rgba(9, 171, 192, 0.2);
+}
+
+.settings-hero-banner__doctor-initials {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
 @media (max-width: 420px) {
   .settings-hero-banner {
      gap: 0.5rem;

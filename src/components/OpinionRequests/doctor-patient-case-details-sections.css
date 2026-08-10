@@ -30,6 +30,22 @@
   color: var(--text);
 }
 
+.doctor-patient-case-details-sections__intro {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.doctor-patient-case-details-sections__reviewed-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #0f766e;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #14b8a6 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, #14b8a6 28%, var(--border));
+}
+
 .doctor-patient-case-details-sections__records-count {
   font-size: 0.78rem;
   font-weight: 600;
@@ -40,6 +56,54 @@
   border: 1px solid color-mix(in srgb, var(--brand-cyan) 18%, var(--border));
 }
 
-.doctor-patient-case-details-sections .patient-case-details-readonly {
-  margin-top: 0;
+.doctor-patient-case-details-sections .patient-case-details-form {
+  margin-top: 0.15rem;
+}
+
+.doctor-patient-case-details-sections .patient-case-details-form__grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.doctor-patient-case-details-sections .patient-case-details-form input:disabled,
+.doctor-patient-case-details-sections .patient-case-details-form select:disabled,
+.doctor-patient-case-details-sections .patient-case-details-form textarea:disabled {
+  opacity: 1;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-soft) 70%, var(--surface));
+  cursor: default;
+}
+
+.doctor-patient-case-details-sections__meds {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+.doctor-patient-case-details-sections__prescriptions {
+  margin-top: 0.75rem;
+}
+
+.doctor-patient-case-details-sections__subhead {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-soft, #64748b);
+}
+
+.doctor-patient-case-details-sections__file-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.doctor-patient-case-details-sections__file-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent, #0d9488);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }

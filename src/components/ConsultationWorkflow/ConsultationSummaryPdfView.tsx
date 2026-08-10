@@ -61,9 +61,16 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const storedFileName = storedPath.split('/').pop() ?? 'consultation-notes';
   const storedIsPdf = storedFileName.toLowerCase().endsWith('.pdf');
   const storedIsImage = isImageFileName(storedFileName);
-  const hasStructuredPreview = sections.length > 0;
-  const hasPrescriptionOrder = Boolean(summary.prescription?.trim());
-  const hasLabOrder = Boolean(summary.labs_diagnostics?.trim());
+  const hasStructuredPreview =
+    sections.length > 0 ||
+    Boolean(summary.prescription_file_name?.trim()) ||
+    Boolean(summary.lab_order_file_name?.trim());
+  const hasPrescriptionOrder = Boolean(
+    summary.prescription?.trim() || summary.prescription_file_path?.trim()
+  );
+  const hasLabOrder = Boolean(
+    summary.labs_diagnostics?.trim() || summary.lab_order_file_path?.trim()
+  );
   const patientDisplayName = withPatientHonorific(request.patient_name, request.patient_gender);
   const doctorDisplayName = withDoctorHonorific(request.doctor_name);
   const doctorId =
@@ -243,21 +250,64 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
     if (pdfUrl) window.open(pdfUrl, '_blank', 'noopener,noreferrer');
   };
 
+  const downloadStoredOrderFile = async (
+    storagePath: string,
+    fileName: string | null | undefined,
+    fallbackName: string
+  ) => {
+    const { data, error } = await getMedicalRecordDownloadUrl(storagePath, {
+      requestId: request.id
+    });
+    if (error || !data?.signedUrl) {
+      throw new Error(
+        normalizeStorageAuthError(error?.message ?? 'Could not download order file.')
+      );
+    }
+    const anchor = document.createElement('a');
+    anchor.href = data.signedUrl;
+    anchor.download = fileName?.trim() || fallbackName;
+    anchor.click();
+    // Signed URL is a blob: URL from getMedicalRecordDownloadUrl — release after click
+    window.setTimeout(() => URL.revokeObjectURL(data.signedUrl), 60_000);
+  };
+
   const handlePrescriptionDownload = async () => {
-    if (!summary.prescription?.trim()) return;
     setPrescriptionDownloading(true);
     try {
-      await downloadPrescriptionOrderPdf(summary.prescription, orderMeta);
+      const typed = summary.prescription?.trim();
+      if (typed) {
+        await downloadPrescriptionOrderPdf(typed, orderMeta);
+        return;
+      }
+      const path = summary.prescription_file_path?.trim();
+      if (path) {
+        await downloadStoredOrderFile(
+          path,
+          summary.prescription_file_name,
+          'Prescription'
+        );
+      }
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : 'Could not download prescription.');
     } finally {
       setPrescriptionDownloading(false);
     }
   };
 
   const handleLabOrderDownload = async () => {
-    if (!summary.labs_diagnostics?.trim()) return;
     setLabOrderDownloading(true);
     try {
-      await downloadLabOrderPdf(summary.labs_diagnostics, orderMeta);
+      const typed = summary.labs_diagnostics?.trim();
+      if (typed) {
+        await downloadLabOrderPdf(typed, orderMeta);
+        return;
+      }
+      const path = summary.lab_order_file_path?.trim();
+      if (path) {
+        await downloadStoredOrderFile(path, summary.lab_order_file_name, 'Lab-Order');
+      }
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : 'Could not download lab order.');
     } finally {
       setLabOrderDownloading(false);
     }
@@ -387,6 +437,19 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
               <p>{section.value}</p>
             </section>
           ))}
+
+          {!summary.prescription?.trim() && summary.prescription_file_name?.trim() ? (
+            <section className='consultation-summary-pdf__section'>
+              <h6>Prescription (uploaded)</h6>
+              <p>{summary.prescription_file_name.trim()}</p>
+            </section>
+          ) : null}
+          {!summary.labs_diagnostics?.trim() && summary.lab_order_file_name?.trim() ? (
+            <section className='consultation-summary-pdf__section'>
+              <h6>Lab Order (uploaded)</h6>
+              <p>{summary.lab_order_file_name.trim()}</p>
+            </section>
+          ) : null}
         </div>
       ) : null}
     </div>

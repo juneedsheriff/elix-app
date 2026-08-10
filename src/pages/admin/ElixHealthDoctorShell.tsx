@@ -5,11 +5,9 @@ import { supabase } from '../../lib/supabase';
 import { clearAuthSurface } from '../../lib/navigation/authSurface';
 import { adminSignOut } from '../../lib/admins';
 import type { Doctor } from '../../types/doctor';
-import AvailabilityPage from '../doctor/AvailabilityPage';
-import CaseReviewPage from '../doctor/CaseReviewPage';
 import DoctorConsultationPage from '../doctor/DoctorConsultationPage';
 import DoctorDashboardPage from '../doctor/DoctorDashboardPage';
-import DoctorHomeCarePage from '../doctor/DoctorHomeCarePage';
+import DoctorMyProfilePage from '../doctor/DoctorMyProfilePage';
 import { doctorWorkspacePath, ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import ElixHealthDoctorLayout from './ElixHealthDoctorLayout';
 import ElixHealthMantineProvider from './ElixHealthMantineProvider';
@@ -45,10 +43,11 @@ function ElixHealthDoctorRoutes({ doctor }: { doctor: Doctor }) {
   return (
     <Routes>
       <Route index element={<DoctorDashboardPage {...pageProps} />} />
-      <Route path='cases' element={<CaseReviewPage {...pageProps} />} />
-      <Route path='homecare' element={<DoctorHomeCarePage {...pageProps} />} />
+      <Route path='cases' element={<Navigate to={ELIX_HEALTH_PATHS.workspace} replace />} />
+      <Route path='homecare' element={<Navigate to={ELIX_HEALTH_PATHS.workspace} replace />} />
+      <Route path='availability' element={<Navigate to={ELIX_HEALTH_PATHS.workspaceProfile} replace />} />
       <Route path='consultation' element={<DoctorConsultationPage {...pageProps} />} />
-      <Route path='availability' element={<AvailabilityPage {...pageProps} />} />
+      <Route path='profile' element={<DoctorMyProfilePage {...pageProps} />} />
     </Routes>
   );
 }

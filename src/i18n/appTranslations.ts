@@ -86,19 +86,18 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     nav: {
       patient: {
         'patient-dashboard': 'Dashboard',
-        'upload-records': 'Upload Records',
+        'upload-records': 'Upload & View Records',
         'my-requests': 'My Requests',
         'doctor-list': 'Doctors',
         payments: 'Payments',
         subscriptions: 'Subscriptions',
-        notifications: 'Notifications',
         timeline: 'Reports Timeline',
         'ai-insights': 'AI Insights',
         settings: 'Settings'
       },
       doctor: {
-        'doctor-dashboard': 'Dashboard',
-        'case-review': 'Incoming Requests',
+        'doctor-dashboard': 'Patient Requests',
+        'case-review': 'Patient Requests',
         availability: 'Availability',
         'doctor-analytics': 'Performance',
         settings: 'Settings'
@@ -159,19 +158,18 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     nav: {
       patient: {
         'patient-dashboard': 'Panel',
-        'upload-records': 'Subir registros',
+        'upload-records': 'Subir y ver registros',
         'my-requests': 'Mis solicitudes',
         'doctor-list': 'Médicos',
         payments: 'Pagos',
         subscriptions: 'Suscripciones',
-        notifications: 'Notificaciones',
         timeline: 'Línea de informes',
         'ai-insights': 'Perspectivas IA',
         settings: 'Ajustes'
       },
       doctor: {
-        'doctor-dashboard': 'Panel',
-        'case-review': 'Solicitudes',
+        'doctor-dashboard': 'Solicitudes de pacientes',
+        'case-review': 'Solicitudes de pacientes',
         availability: 'Disponibilidad',
         'doctor-analytics': 'Rendimiento',
         settings: 'Ajustes'
@@ -232,19 +230,18 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
     nav: {
       patient: {
         'patient-dashboard': 'لوحة التحكم',
-        'upload-records': 'رفع السجلات',
+        'upload-records': 'رفع وعرض السجلات',
         'my-requests': 'طلباتي',
         'doctor-list': 'الأطباء',
         payments: 'المدفوعات',
         subscriptions: 'الاشتراكات',
-        notifications: 'الإشعارات',
         timeline: 'الجدول الزمني',
         'ai-insights': 'رؤى الذكاء',
         settings: 'الإعدادات'
       },
       doctor: {
-        'doctor-dashboard': 'لوحة التحكم',
-        'case-review': 'الطلبات الواردة',
+        'doctor-dashboard': 'طلبات المرضى',
+        'case-review': 'طلبات المرضى',
         availability: 'التوفر',
         'doctor-analytics': 'الأداء',
         settings: 'الإعدادات'
@@ -285,17 +282,13 @@ export const NAV_IDS: Record<Role, string[]> = {
     'doctor-list',
     'payments',
     'subscriptions',
-    'notifications',
     'timeline',
     'ai-insights',
     'settings'
   ],
   doctor: [
     'doctor-dashboard',
-    'case-review',
     'doctor-consultation',
-    'availability',
-    'doctor-analytics',
     'settings'
   ],
   admin: ['admin-dashboard', 'user-management', 'fraud-monitoring', 'admin-analytics', 'cms', 'audit', 'settings']

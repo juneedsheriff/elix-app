@@ -6,7 +6,10 @@ import {
   consultationCurrencySymbol,
   normalizeConsultationCurrency
 } from '../../lib/consultationCurrency';
-import { ensureStandardConsultationTiers, formatDurationMinutesLabel } from '../../lib/consultationTiers';
+import {
+  ensureStandardConsultationTiers,
+  primaryConsultationFeeFromTiers
+} from '../../lib/consultationTiers';
 import { updateDoctorConsultationPricing } from '../../lib/doctors';
 import type { ConsultationCurrency, ConsultationTier, Doctor } from '../../types/doctor';
 import './doctor-pricing.css';
@@ -18,21 +21,34 @@ type DoctorConsultationPricingSectionProps = {
   subtitle?: string;
 };
 
-function tiersFromDoctor(doctor: Doctor | null | undefined): ConsultationTier[] {
-  const fallbackFee = doctor?.consultation_fee ?? doctor?.fee_usd ?? 0;
-  if (!doctor?.consultation_tiers?.length) {
-    return ensureStandardConsultationTiers([], fallbackFee);
+function tiersFromFee(feeUsd: number): ConsultationTier[] {
+  const fee = Math.max(0, Math.round(feeUsd));
+  return ensureStandardConsultationTiers([], fee).map((tier) => ({
+    ...tier,
+    fee_usd: fee
+  }));
+}
+
+function feeFromDoctor(doctor: Doctor | null | undefined): number {
+  if (!doctor) return 0;
+  if (doctor.consultation_tiers?.length) {
+    return primaryConsultationFeeFromTiers(
+      ensureStandardConsultationTiers(
+        doctor.consultation_tiers,
+        doctor.consultation_fee ?? doctor.fee_usd ?? 0
+      )
+    );
   }
-  return ensureStandardConsultationTiers(doctor.consultation_tiers, fallbackFee);
+  return Math.max(0, Math.round(doctor.consultation_fee ?? doctor.fee_usd ?? 0));
 }
 
 export default function DoctorConsultationPricingSection({
   doctorProfile,
   onUpdated,
   title = 'Consultation pricing',
-  subtitle = 'Set fees for each session length you offer'
+  subtitle = 'Set the consultation charge shown on requests and payment steps'
 }: DoctorConsultationPricingSectionProps) {
-  const [tiers, setTiers] = useState<ConsultationTier[]>(() => tiersFromDoctor(doctorProfile));
+  const [feeUsd, setFeeUsd] = useState(() => feeFromDoctor(doctorProfile));
   const [currency, setCurrency] = useState<ConsultationCurrency>(() =>
     normalizeConsultationCurrency(doctorProfile?.consultation_currency)
   );
@@ -41,32 +57,25 @@ export default function DoctorConsultationPricingSection({
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    setTiers(tiersFromDoctor(doctorProfile));
+    setFeeUsd(feeFromDoctor(doctorProfile));
     setCurrency(normalizeConsultationCurrency(doctorProfile?.consultation_currency));
   }, [doctorProfile]);
-
-  const setFee = (durationMinutes: number, feeUsd: number) => {
-    setTiers((current) =>
-      current.map((tier) =>
-        tier.duration_minutes === durationMinutes
-          ? { ...tier, fee_usd: Math.max(0, Math.round(feeUsd)) }
-          : tier
-      )
-    );
-  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     setSuccess(null);
-    const { data, error: saveError } = await updateDoctorConsultationPricing(tiers, currency);
+    const { data, error: saveError } = await updateDoctorConsultationPricing(
+      tiersFromFee(feeUsd),
+      currency
+    );
     setBusy(false);
     if (saveError || !data) {
       setError(saveError?.message ?? 'Could not save consultation pricing.');
       return;
     }
-    setTiers(tiersFromDoctor(data));
+    setFeeUsd(feeFromDoctor(data));
     setCurrency(normalizeConsultationCurrency(data.consultation_currency));
     setSuccess('Consultation pricing updated.');
     onUpdated?.(data);
@@ -78,8 +87,7 @@ export default function DoctorConsultationPricingSection({
     <SectionCard title={title} subtitle={subtitle}>
       <form className='doctor-pricing-form' onSubmit={(e) => void handleSubmit(e)}>
         <p className='muted'>
-          Patients choose a duration when requesting a doctor consultation. Set the charge for each length
-          you offer — use 0 to hide a duration from patients.
+          This charge is used for quotes and payment across patient, PSE, admin, and doctor views.
         </p>
 
         <label className='doctor-pricing-field doctor-pricing-field--currency'>
@@ -97,23 +105,17 @@ export default function DoctorConsultationPricingSection({
           </select>
         </label>
 
-        <div className='doctor-pricing-grid'>
-          {tiers.map((tier) => (
-            <label key={tier.duration_minutes} className='doctor-pricing-field'>
-              <span>
-                {formatDurationMinutesLabel(tier.duration_minutes)} ({currencySymbol})
-              </span>
-              <input
-                type='number'
-                min={0}
-                step={1}
-                value={tier.fee_usd}
-                onChange={(e) => setFee(tier.duration_minutes, Number(e.target.value))}
-                disabled={busy}
-              />
-            </label>
-          ))}
-        </div>
+        <label className='doctor-pricing-field'>
+          <span>Consultation charge ({currencySymbol})</span>
+          <input
+            type='number'
+            min={0}
+            step={1}
+            value={feeUsd}
+            onChange={(e) => setFeeUsd(Math.max(0, Math.round(Number(e.target.value))))}
+            disabled={busy}
+          />
+        </label>
         {error ? (
           <p className='auth-error' role='alert'>
             {error}

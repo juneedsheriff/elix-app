@@ -1,4 +1,9 @@
 import { formatConsultationFeeUsd } from '../../../lib/doctors';
+import {
+  avatarColorFromName,
+  displayInitials,
+  resolveProfilePhotoUrl
+} from '../../../lib/avatarDisplay';
 import type { Doctor } from '../../../types/doctor';
 
 export type LoginFilter = 'all' | 'active' | 'disabled' | 'none';
@@ -25,12 +30,14 @@ export type DoctorQuickFilters = {
 const SPECIALTY_PALETTE = ['cyan', 'blue', 'teal', 'green', 'violet', 'grape', 'indigo'] as const;
 
 export function doctorInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
+  return displayInitials(name);
+}
+
+export { avatarColorFromName };
+
+/** @deprecated Prefer resolveProfilePhotoUrl from lib/avatarDisplay */
+export function doctorPhotoUrl(imageUrl: string | null | undefined): string | null {
+  return resolveProfilePhotoUrl(imageUrl);
 }
 
 export function loginStatusForDoctor(doctor: {

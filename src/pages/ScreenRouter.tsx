@@ -1,8 +1,6 @@
 import AdminDashboardPage from './admin/AdminDashboardPage';
 import CmsAuditPage from './admin/CmsAuditPage';
 import UserManagementPage from './admin/UserManagementPage';
-import AvailabilityPage from './doctor/AvailabilityPage';
-import CaseReviewPage from './doctor/CaseReviewPage';
 import DoctorConsultationPage from './doctor/DoctorConsultationPage';
 import DoctorDashboardPage from './doctor/DoctorDashboardPage';
 import DoctorsPage from './patient/DoctorsPage';
@@ -40,14 +38,13 @@ export default function ScreenRouter({ screenId, onNavigate, ...pageProps }: Scr
     case 'ai-insights':
       return <TimelinePage />;
     case 'case-review':
-      return <CaseReviewPage {...pageProps} onNavigate={onNavigate} />;
-    case 'doctor-consultation':
-      return <DoctorConsultationPage {...pageProps} onNavigate={onNavigate} />;
     case 'doctor-dashboard':
     case 'doctor-analytics':
       return <DoctorDashboardPage {...pageProps} onNavigate={onNavigate} />;
     case 'availability':
-      return <AvailabilityPage {...pageProps} />;
+      return <SettingsPage {...pageProps} />;
+    case 'doctor-consultation':
+      return <DoctorConsultationPage {...pageProps} onNavigate={onNavigate} />;
     case 'admin-dashboard':
     case 'admin-analytics':
       return <AdminDashboardPage />;

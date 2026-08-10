@@ -3,7 +3,9 @@ import { Badge, Group, Stack, Text } from '@mantine/core';
 import PatientCaseDetailsEditor from '../../../components/OpinionRequests/PatientCaseDetailsEditor';
 import PatientCaseDetailsReadOnlyView from '../../../components/OpinionRequests/PatientCaseDetailsReadOnlyView';
 import { fetchDoctorSpecialties } from '../../../lib/doctors';
+import { isClinicPatientServiceExecutive } from '../../../lib/staffPermissions';
 import type { OpinionRequest } from '../../../types/opinionRequest';
+import { useElixHealthStaff } from '../ElixHealthStaffContext';
 
 type Props = {
   request: OpinionRequest;
@@ -24,6 +26,11 @@ export default function PsePatientCaseDetailsPanel({
   onError,
   onSuccess
 }: Props) {
+  const { staff } = useElixHealthStaff();
+  const isClinicPse = isClinicPatientServiceExecutive(staff);
+  const showClinicOnlyCaseSections = !isClinicPse;
+  const specialtyMode =
+    isClinicPse && request.doctor_specialty?.trim() ? 'from_doctor' : 'patient_select';
   const [specialties, setSpecialties] = useState<string[]>([]);
 
   const caseDetailsSyncKey = JSON.stringify({
@@ -66,9 +73,11 @@ export default function PsePatientCaseDetailsPanel({
           key={caseDetailsSyncKey}
           request={request}
           specialties={specialties}
-          specialtyMode='patient_select'
+          specialtyMode={specialtyMode}
           doctorSpecialty={request.doctor_specialty}
           actorRole='pse'
+          showCurrentHealthcareProvider={showClinicOnlyCaseSections}
+          showConsultationQuestions={showClinicOnlyCaseSections}
           canMarkReviewed
           markReviewedBusy={busy}
           onMarkReviewed={onMarkReviewed}
@@ -79,7 +88,11 @@ export default function PsePatientCaseDetailsPanel({
           onSuccess={onSuccess}
         />
       ) : (
-        <PatientCaseDetailsReadOnlyView request={request} />
+        <PatientCaseDetailsReadOnlyView
+          request={request}
+          showCurrentHealthcareProvider={showClinicOnlyCaseSections}
+          showConsultationQuestions={showClinicOnlyCaseSections}
+        />
       )}
     </Stack>
   );

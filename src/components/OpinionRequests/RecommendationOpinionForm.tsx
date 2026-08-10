@@ -7,14 +7,9 @@ import {
   clearPendingOpinionRequest,
   savePendingOpinionRequest
 } from '../../lib/navigation/pendingOpinionRequest';
-import ConsultationDurationSelect from '../ConsultationWorkflow/ConsultationDurationSelect';
 import MedicalRecordsChoicePrompt from './MedicalRecordsChoicePrompt';
 import PatientCaseDetailsForm from './PatientCaseDetailsForm';
 import { DOCTOR_SPECIALTY_OPTIONS } from '../../lib/doctorSpecialtyOptions';
-import {
-  preferredDurationTiers,
-  STANDARD_CONSULTATION_DURATIONS
-} from '../../lib/consultationTiers';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import {
   applyPatientProfileHistoryDefaults,
@@ -46,9 +41,6 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [caseDetails, setCaseDetails] = useState<PatientCaseDetails>(() =>
     applyPatientProfileHistoryDefaults(emptyPatientCaseDetails(), patientProfile)
-  );
-  const [consultationDurationMinutes, setConsultationDurationMinutes] = useState<number>(
-    STANDARD_CONSULTATION_DURATIONS[1]
   );
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -150,10 +142,6 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
     if (records.length === 0 && !proceedWithoutRecords) {
       return;
     }
-    if (!consultationDurationMinutes) {
-      setSubmitError('Choose how long you need for the consultation.');
-      return;
-    }
 
     const serialized = serializePatientCaseDetails(caseDetails);
     const message = '';
@@ -172,7 +160,6 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       patientId: user?.id ?? null,
       patientName,
       requestedSpecialty: selectedSpecialty,
-      consultationDurationMinutes,
       caseDetails: serialized
     });
     setSubmitting(false);
@@ -231,16 +218,6 @@ export default function RecommendationOpinionForm({ onBack, onSubmitted }: Recom
       <form className='opinion-form' onSubmit={(e) => void handleSubmit(e)}>
         {!awaitingRecordsChoice ? (
           <>
-        <ConsultationDurationSelect
-          tiers={preferredDurationTiers()}
-          value={consultationDurationMinutes}
-          onChange={setConsultationDurationMinutes}
-          disabled={submitting || specialtiesLoading}
-          label='Preferred consultation duration'
-          hint='Choose how long you need with the specialist. Exact pricing will be shown when doctors are recommended for your case.'
-          showFees={false}
-        />
-
         {specialtiesError ? (
           <p className='auth-error' role='alert'>
             {specialtiesError}

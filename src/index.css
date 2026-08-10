@@ -1744,6 +1744,9 @@ select {
 }
 
 .doctor-dashboard-welcome {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   padding: 1.1rem 1.15rem;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--brand-cyan) 28%, var(--border));
@@ -1753,6 +1756,36 @@ select {
     color-mix(in srgb, var(--brand-green, #83c847) 8%, var(--surface))
   );
   box-shadow: var(--shadow);
+}
+
+.doctor-dashboard-welcome__avatar {
+  flex-shrink: 0;
+}
+
+.doctor-dashboard-welcome__photo,
+.doctor-dashboard-welcome__initials {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.doctor-dashboard-welcome__photo {
+  object-fit: cover;
+  border: 2px solid color-mix(in srgb, var(--brand-cyan) 35%, #fff);
+  box-shadow: 0 4px 14px rgba(9, 171, 192, 0.2);
+}
+
+.doctor-dashboard-welcome__initials {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.doctor-dashboard-welcome__text {
+  min-width: 0;
 }
 
 .doctor-dashboard-welcome__title {
@@ -1817,6 +1850,90 @@ select {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-soft);
+}
+
+.patient-profile-edit__field span strong,
+.elixhealth-field strong {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.patient-document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.patient-document-list__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.patient-document-list__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.patient-document-list__hint {
+  font-size: 0.75rem;
+}
+
+.patient-document-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.patient-document-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.patient-document-list__name {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--accent, #0d9488);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.patient-document-list__remove {
+  padding: 0.35rem 0.5rem;
+  min-height: 0;
+}
+
+.patient-document-list__empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.patient-document-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.patient-document-list__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .patient-profile-edit__field input {
@@ -2560,7 +2677,7 @@ select {
 
 .doctor-consultation-page__workspace {
   display: grid;
-  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.15fr);
   gap: 1.25rem;
   align-items: start;
 }
@@ -2578,17 +2695,24 @@ select {
   overflow-y: auto;
   position: sticky;
   top: 0.75rem;
+  min-width: 0;
 }
 
 .doctor-consultation-page__case-context-title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text);
 }
 
-.doctor-consultation-page__case-context .patient-case-details-readonly__grid {
-  grid-template-columns: repeat(1, minmax(0, 1fr));
+/* Avoid nested duplicate section titles; the blocks own their headings */
+.doctor-consultation-page__case-context > .doctor-consultation-page__case-context-title {
+  margin-bottom: 0.15rem;
+}
+
+.doctor-consultation-page__case-context .patient-case-details-readonly__grid,
+.doctor-consultation-page__case-context .patient-case-details-form__grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .doctor-consultation-page__main {
@@ -2653,7 +2777,7 @@ select {
   display: none;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
   .doctor-consultation-page__workspace {
     grid-template-columns: 1fr;
   }
@@ -2661,6 +2785,23 @@ select {
   .doctor-consultation-page__case-context {
     position: static;
     max-height: none;
+  }
+}
+
+/* Keep two columns inside ElixClinix desktop workspace when content is wide enough */
+.elixhealth-content .doctor-consultation-page__workspace {
+  grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.2fr);
+}
+
+@media (max-width: 1100px) {
+  .elixhealth-content .doctor-consultation-page__workspace {
+    grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.2fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .elixhealth-content .doctor-consultation-page__workspace {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2905,6 +3046,29 @@ select {
   gap: 1rem;
 }
 
+.doctor-consultation-field-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.doctor-consultation-field-upload__hint {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.doctor-consultation-field-upload__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.doctor-respond-required {
+  color: #b45309;
+  font-weight: 700;
+}
+
 .doctor-consultation-page__fields--locked {
   pointer-events: none;
   user-select: none;
@@ -3146,6 +3310,48 @@ select {
 .doctor-respond-textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.doctor-consultation-vital-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem 0.85rem;
+}
+
+.doctor-consultation-vital-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.doctor-consultation-vital-input {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+  line-height: 1.4;
+  min-height: 2.6rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.doctor-consultation-vital-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.doctor-consultation-vital-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .doctor-consultation-vital-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .doctor-response-block {
@@ -3909,6 +4115,25 @@ body:has(.elixhealth-app),
   color: #fff;
   flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(9, 171, 192, 0.35);
+  overflow: hidden;
+}
+
+.elixhealth-sidebar-avatar--photo {
+  padding: 0;
+  background: var(--surface-soft);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.elixhealth-sidebar-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.elixhealth-sidebar-avatar--initials {
+  letter-spacing: 0.02em;
+  box-shadow: none;
 }
 
 .elixhealth-sidebar-user-text {
@@ -4364,6 +4589,41 @@ body:has(.elixhealth-app),
   border: 1px solid var(--border);
 }
 
+.elixhealth-topbar-user--with-photo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.elixhealth-topbar-user--with-photo:hover {
+  border-color: color-mix(in srgb, var(--brand-cyan) 35%, var(--border));
+  background: color-mix(in srgb, var(--surface-soft) 70%, #fff);
+}
+
+.elixhealth-topbar-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-content: center;
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.elixhealth-topbar-avatar.elixhealth-sidebar-avatar--photo {
+  box-shadow: none;
+}
+
+.elixhealth-topbar-avatar .elixhealth-sidebar-avatar-img {
+  border-radius: inherit;
+}
+
 .elixhealth-content {
   flex: 1;
   min-height: 0;
@@ -4725,6 +4985,10 @@ body:has(.elixhealth-app),
   margin-top: 0.5rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
+}
+
+.elixhealth-form-actions--end {
+  justify-content: flex-end;
 }
 
 .elixhealth-success {

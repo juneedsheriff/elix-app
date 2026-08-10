@@ -45,6 +45,7 @@ import {
 import {
   deleteMedicalRecord,
   fetchUserMedicalRecords,
+  getMedicalRecordDownloadUrl,
   medicalFileValidationError,
   isR2StorageConfigured,
   openMedicalRecordFile,
@@ -425,28 +426,52 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
         type === 'prescription'
           ? summary.prescription?.trim() ?? ''
           : summary.labs_diagnostics?.trim() ?? '';
-      if (!text) return;
+      const storagePath =
+        type === 'prescription'
+          ? summary.prescription_file_path?.trim() ?? ''
+          : summary.lab_order_file_path?.trim() ?? '';
+      const fileName =
+        type === 'prescription'
+          ? summary.prescription_file_name?.trim()
+          : summary.lab_order_file_name?.trim();
+      if (!text && !storagePath) return;
 
       const key = `${summary.id}:${type}`;
       setDownloadingOrderKey(key);
       try {
-        const meta = {
-          patientName: summary.patient_name,
-          patientGender: summary.patient_gender,
-          patientId: summary.patient_auth_user_id,
-          requestId: summary.request_id,
-          doctorName: summary.doctor_name,
-          doctorSpecialty: summary.doctor_specialty,
-          doctorQualification: summary.doctor_qualification,
-          doctorMedicalLicenseNo: summary.doctor_medical_license_no,
-          scheduledAt: summary.scheduled_at,
-          issuedAt: new Date(summary.updated_at || summary.created_at)
-        };
-        if (type === 'prescription') {
-          await downloadPrescriptionOrderPdf(text, meta);
-        } else {
-          await downloadLabOrderPdf(text, meta);
+        if (text) {
+          const meta = {
+            patientName: summary.patient_name,
+            patientGender: summary.patient_gender,
+            patientId: summary.patient_auth_user_id,
+            requestId: summary.request_id,
+            doctorName: summary.doctor_name,
+            doctorSpecialty: summary.doctor_specialty,
+            doctorQualification: summary.doctor_qualification,
+            doctorMedicalLicenseNo: summary.doctor_medical_license_no,
+            scheduledAt: summary.scheduled_at,
+            issuedAt: new Date(summary.updated_at || summary.created_at)
+          };
+          if (type === 'prescription') {
+            await downloadPrescriptionOrderPdf(text, meta);
+          } else {
+            await downloadLabOrderPdf(text, meta);
+          }
+          return;
         }
+
+        const { data, error } = await getMedicalRecordDownloadUrl(storagePath, {
+          requestId: summary.request_id
+        });
+        if (error || !data?.signedUrl) {
+          setStatusMessage(error?.message ?? 'Could not download order file.');
+          return;
+        }
+        const anchor = document.createElement('a');
+        anchor.href = data.signedUrl;
+        anchor.download = fileName || (type === 'prescription' ? 'Prescription' : 'Lab-Order');
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(data.signedUrl), 60_000);
       } finally {
         setDownloadingOrderKey(null);
       }
@@ -921,8 +946,12 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
             </p>
             <ul className='urv-summary-list'>
               {summaries.map((summary) => {
-                const hasPrescription = Boolean(summary.prescription?.trim());
-                const hasLabOrder = Boolean(summary.labs_diagnostics?.trim());
+                const hasPrescription = Boolean(
+                  summary.prescription?.trim() || summary.prescription_file_path?.trim()
+                );
+                const hasLabOrder = Boolean(
+                  summary.labs_diagnostics?.trim() || summary.lab_order_file_path?.trim()
+                );
                 const consultationDate = summary.scheduled_at ?? summary.created_at;
                 const doctorLabel = summary.doctor_name?.trim() || 'Consultation';
                 return (

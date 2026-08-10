@@ -48,7 +48,6 @@ import {
   normalizeConsultationCurrency,
   type ConsultationCurrency
 } from '../../../lib/consultationCurrency';
-import { formatDurationMinutesLabel } from '../../../lib/consultationTiers';
 import AppointmentDateTimePicker from './AppointmentDateTimePicker';
 import PsePatientCaseDetailsPanel from './PsePatientCaseDetailsPanel';
 import PsePaymentStepPanel from './PsePaymentStepPanel';
@@ -492,7 +491,7 @@ export default function RequestWorkflowWizard({
       onError(
         isHomeCare
           ? 'Enter an amount (Amount field or …/pay.html?amount=500 in the link) before generating the invoice.'
-          : 'Consultation fee is missing. Confirm the patient selected a doctor and session length.'
+          : 'Consultation fee is missing. Confirm a doctor is assigned and has a consultation charge on their profile.'
       );
       return;
     }
@@ -568,7 +567,9 @@ export default function RequestWorkflowWizard({
     }
     const { amount } = paymentQuote;
     if (amount == null || !Number.isFinite(amount) || amount <= 0) {
-      onError('Consultation fee is missing. Confirm the patient selected a doctor and session length.');
+      onError(
+        'Consultation fee is missing. Confirm a doctor is assigned and has a consultation charge on their profile.'
+      );
       return;
     }
     const currency = normalizeConsultationCurrency(
@@ -637,7 +638,7 @@ export default function RequestWorkflowWizard({
       onError(
         isHomeCare
           ? 'Enter the amount received (or include amount= in the payment link) before confirming payment.'
-          : 'Consultation fee is missing. Confirm the patient selected a doctor and session length.'
+          : 'Consultation fee is missing. Confirm a doctor is assigned and has a consultation charge on their profile.'
       );
       return;
     }
@@ -938,12 +939,11 @@ export default function RequestWorkflowWizard({
                 {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
               </Text>
             )}
-            {!isHomeCare && request.consultation_duration_minutes && request.consultation_fee_usd != null ? (
+            {!isHomeCare && request.consultation_fee_usd != null ? (
               <Text size='sm'>
                 <Text span fw={600}>
-                  Consultation quote:{' '}
+                  Consultation charge:{' '}
                 </Text>
-                {formatDurationMinutesLabel(request.consultation_duration_minutes)} ·{' '}
                 {formatConsultationFee(
                   request.consultation_fee_usd,
                   normalizeConsultationCurrency(request.consultation_currency)

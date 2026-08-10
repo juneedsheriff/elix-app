@@ -5,13 +5,14 @@ import { adminSignOut, fetchAdminByAuthUserId } from '../../lib/admins';
 import { elixhealthSignIn } from '../../lib/elixhealthAuth';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
 import { clearAuthSurface, getAuthSurface, setAuthSurface } from '../../lib/navigation/authSurface';
+import { isAnyPatientServiceExecutive } from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
 import { ElixHealthAdminGuard } from './ElixHealthAdminShell';
 import ElixHealthDoctorCreatePage from './ElixHealthDoctorCreatePage';
 import ElixHealthDoctorEditPage from './ElixHealthDoctorEditPage';
 import ElixHealthDoctorsPage from './ElixHealthDoctorsPage';
 import { doctorSignOut, ElixHealthDoctorGuard } from './ElixHealthDoctorShell';
-import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
+import { ELIX_HEALTH_PATHS, staffLandingPath } from './elixHealthRoutes';
 import ElixHealthLogin from './ElixHealthLogin';
 import ElixHealthOverviewPage from './ElixHealthOverviewPage';
 import ElixHealthPatientEditPage from './ElixHealthPatientEditPage';
@@ -21,6 +22,10 @@ import ElixHealthMyProfilePage from './ElixHealthMyProfilePage';
 import ElixHealthStaffPage from './ElixHealthStaffPage';
 import { AdministratorOnly } from './AdministratorOnly';
 import ElixPreloader from '../../components/ui/ElixPreloader';
+
+function PseIndexRedirect() {
+  return <Navigate to={ELIX_HEALTH_PATHS.requests} replace />;
+}
 
 export default function ElixHealthApp() {
   const navigate = useNavigate();
@@ -70,6 +75,8 @@ export default function ElixHealthApp() {
     }
   }, [authLoading, checking, isDoctorUser, location.pathname, navigate]);
 
+  const staffHome = admin ? staffLandingPath(admin.role) : null;
+
   const handleSignIn = async (email: string, password: string) => {
     setBusy(true);
     setError(null);
@@ -86,7 +93,7 @@ export default function ElixHealthApp() {
     setAuthSurface('desktop');
     if (signedInAdmin) {
       setAdmin(signedInAdmin);
-      navigate(ELIX_HEALTH_PATHS.overview, { replace: true });
+      navigate(staffLandingPath(signedInAdmin.role), { replace: true });
       return;
     }
     if (signedInDoctor) {
@@ -107,11 +114,7 @@ export default function ElixHealthApp() {
     navigate('/elixhealth/login', { replace: true });
   };
 
-  const loginRedirect = admin
-    ? ELIX_HEALTH_PATHS.overview
-    : isDoctorUser
-      ? ELIX_HEALTH_PATHS.workspace
-      : null;
+  const loginRedirect = staffHome ?? (isDoctorUser ? ELIX_HEALTH_PATHS.workspace : null);
 
   if (authLoading || checking) {
     return <ElixPreloader />;
@@ -135,9 +138,24 @@ export default function ElixHealthApp() {
         }
       />
       <Route
-        element={<ElixHealthAdminGuard admin={admin} onStaffUpdated={setAdmin} onSignOut={() => void handleStaffSignOut()} />}
+        element={
+          <ElixHealthAdminGuard
+            admin={admin}
+            onStaffUpdated={setAdmin}
+            onSignOut={() => void handleStaffSignOut()}
+          />
+        }
       >
-        <Route index element={<ElixHealthOverviewPage />} />
+        <Route
+          index
+          element={
+            admin && isAnyPatientServiceExecutive(admin) ? (
+              <PseIndexRedirect />
+            ) : (
+              <ElixHealthOverviewPage />
+            )
+          }
+        />
         <Route path='doctors' element={<ElixHealthDoctorsPage />} />
         <Route path='doctor/new' element={<ElixHealthDoctorCreatePage />} />
         <Route path='doctor' element={<ElixHealthDoctorEditPage />} />
@@ -145,19 +163,35 @@ export default function ElixHealthApp() {
         <Route path='patient' element={<ElixHealthPatientEditPage />} />
         <Route path='requests' element={<ElixHealthRequestsPage />} />
         <Route path='profile' element={<ElixHealthMyProfilePage />} />
-        <Route path='staff' element={<AdministratorOnly><ElixHealthStaffPage /></AdministratorOnly>} />
+        <Route
+          path='staff'
+          element={
+            <AdministratorOnly>
+              <ElixHealthStaffPage />
+            </AdministratorOnly>
+          }
+        />
       </Route>
       <Route
         path='workspace/*'
         element={
-          <ElixHealthDoctorGuard doctor={isDoctorUser ? doctorProfile : null} onSignOut={() => void handleDoctorSignOut()} />
+          <ElixHealthDoctorGuard
+            doctor={isDoctorUser ? doctorProfile : null}
+            onSignOut={() => void handleDoctorSignOut()}
+          />
         }
       />
       <Route
         path='*'
         element={
           <Navigate
-            to={admin ? ELIX_HEALTH_PATHS.overview : isDoctorUser ? ELIX_HEALTH_PATHS.workspace : '/elixhealth/login'}
+            to={
+              admin
+                ? staffLandingPath(admin.role)
+                : isDoctorUser
+                  ? ELIX_HEALTH_PATHS.workspace
+                  : '/elixhealth/login'
+            }
             replace
           />
         }

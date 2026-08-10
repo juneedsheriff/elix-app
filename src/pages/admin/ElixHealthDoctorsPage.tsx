@@ -443,7 +443,7 @@ export default function ElixHealthDoctorsPage() {
         <WorkspaceTabs tabs={workspaceTabs} value={workspaceTab} onChange={setWorkspaceTab} />
       ) : null}
 
-      <DoctorsAnalyticsCards analytics={analytics} loading={loading} />
+      {isAdmin ? <DoctorsAnalyticsCards analytics={analytics} loading={loading} /> : null}
 
       <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
         <DoctorsDataTable

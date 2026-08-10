@@ -6,7 +6,7 @@ export const CONSULTATION_SUMMARY_FIELDS = [
   { key: 'past_medical_history', label: 'Past Medical History' },
   { key: 'current_medications', label: 'Current Medications' },
   { key: 'vital_signs', label: 'Vital Signs' },
-  { key: 'labs_diagnostics', label: 'Labs/Diagnostics' },
+  { key: 'labs_diagnostics', label: 'Lab Order' },
   { key: 'assessment_plan', label: 'Assessment & Plan' },
   { key: 'followup_date', label: 'Follow-up Date' },
   { key: 'prescription', label: 'Prescription' }

@@ -14,8 +14,10 @@ import {
   splitPatientFullName,
   updatePatientProfileForUser
 } from '../../lib/patients';
-import type { Patient } from '../../types/patient';
+import type { Patient, PatientAttachedDocument } from '../../types/patient';
+import { PATIENT_GOVT_ID_TYPES } from '../../types/patient';
 import PatientBirthDatePicker from './PatientBirthDatePicker';
+import PatientDocumentList from './PatientDocumentList';
 import PatientProfileImageSection from './PatientProfileImageSection';
 import PreferredLanguageMultiSelect from './PreferredLanguageMultiSelect';
 
@@ -34,6 +36,11 @@ type ProfileFormState = {
   country: string;
   city: string;
   address: string;
+  pinCode: string;
+  govtIdType: string;
+  govtIdNumber: string;
+  govtIdDocuments: PatientAttachedDocument[];
+  latestPrescriptionDocuments: PatientAttachedDocument[];
   heightCm: string;
   weightKg: string;
   allergies: string;
@@ -59,6 +66,11 @@ function emptyFormState(): ProfileFormState {
     country: '',
     city: '',
     address: '',
+    pinCode: '',
+    govtIdType: '',
+    govtIdNumber: '',
+    govtIdDocuments: [],
+    latestPrescriptionDocuments: [],
     heightCm: '',
     weightKg: '',
     allergies: '',
@@ -86,6 +98,11 @@ function patientToFormState(patient: Patient): ProfileFormState {
     country: patient.country ?? '',
     city: patient.city ?? '',
     address: patient.address ?? '',
+    pinCode: patient.pin_code ?? '',
+    govtIdType: patient.govt_id_type ?? '',
+    govtIdNumber: patient.govt_id_number ?? '',
+    govtIdDocuments: patient.govt_id_documents ?? [],
+    latestPrescriptionDocuments: patient.latest_prescription_documents ?? [],
     heightCm: patient.height_cm != null ? String(patient.height_cm) : '',
     weightKg: patient.weight_kg != null ? String(patient.weight_kg) : '',
     allergies: patient.allergies ?? '',
@@ -126,7 +143,7 @@ type DetailRow = { label: string; value: string };
 function profileDetailRows(patient: Patient): DetailRow[] {
   const { firstName, lastName } = splitPatientFullName(patient.full_name);
   return [
-    { label: 'First name', value: displayValue(firstName) },
+    { label: 'First name (As per Govt ID)', value: displayValue(firstName) },
     { label: 'Last name', value: displayValue(lastName) },
     { label: 'Email', value: displayValue(patient.email) },
     { label: 'Phone', value: displayValue(patient.phone) },
@@ -134,7 +151,17 @@ function profileDetailRows(patient: Patient): DetailRow[] {
     { label: 'Gender', value: displayValue(patient.gender) },
     { label: 'Blood group', value: displayValue(patient.blood_group) },
     { label: 'Preferred languages', value: languageLabel(patient.preferred_language) },
+    { label: 'Govt ID type', value: displayValue(patient.govt_id_type) },
+    { label: 'Govt ID No', value: displayValue(patient.govt_id_number) },
+    {
+      label: 'Govt ID documents',
+      value:
+        patient.govt_id_documents?.length
+          ? `${patient.govt_id_documents.length} file(s)`
+          : 'Not set'
+    },
     { label: 'Address', value: displayValue(patient.address) },
+    { label: 'Pin Code', value: displayValue(patient.pin_code) },
     { label: 'City', value: displayValue(patient.city) },
     { label: 'Country', value: displayValue(patient.country) },
     {
@@ -151,6 +178,13 @@ function profileDetailRows(patient: Patient): DetailRow[] {
     { label: 'Surgical history', value: displayValue(patient.surgical_history) },
     { label: 'Medical history', value: displayValue(patient.medical_history) },
     { label: 'Current medications', value: displayValue(patient.current_medications) },
+    {
+      label: 'Latest prescriptions',
+      value:
+        patient.latest_prescription_documents?.length
+          ? `${patient.latest_prescription_documents.length} file(s)`
+          : 'Not set'
+    },
     { label: 'Insurance provider', value: displayValue(patient.insurance_provider) },
     { label: 'Emergency contact', value: displayValue(patient.emergency_contact_name) },
     { label: 'Emergency phone', value: displayValue(patient.emergency_contact_phone) },
@@ -228,6 +262,11 @@ export default function PatientProfileEditSection({
       country: form.country.trim() || null,
       city: form.city.trim() || null,
       address: form.address.trim() || null,
+      pin_code: form.pinCode.trim() || null,
+      govt_id_type: form.govtIdType.trim() || null,
+      govt_id_number: form.govtIdNumber.trim() || null,
+      govt_id_documents: form.govtIdDocuments,
+      latest_prescription_documents: form.latestPrescriptionDocuments,
       height_cm: height.value,
       weight_kg: weight.value,
       allergies: form.allergies.trim() || null,
@@ -294,7 +333,9 @@ export default function PatientProfileEditSection({
           <p className='patient-profile-edit__section-title'>Personal details</p>
           <div className='patient-profile-edit__grid'>
             <label className='patient-profile-edit__field'>
-              <span>First name</span>
+              <span>
+                First name <strong>(As per Govt ID)</strong>
+              </span>
               <input
                 type='text'
                 value={form.firstName}
@@ -387,6 +428,17 @@ export default function PatientProfileEditSection({
               />
             </label>
             <label className='patient-profile-edit__field'>
+              <span>Pin Code</span>
+              <input
+                type='text'
+                value={form.pinCode}
+                onChange={(e) => setField('pinCode', e.target.value)}
+                inputMode='numeric'
+                autoComplete='postal-code'
+                disabled={busy}
+              />
+            </label>
+            <label className='patient-profile-edit__field'>
               <span>City</span>
               <input
                 type='text'
@@ -406,6 +458,44 @@ export default function PatientProfileEditSection({
                 disabled={busy}
               />
             </label>
+          </div>
+
+          <p className='patient-profile-edit__section-title'>Government ID</p>
+          <div className='patient-profile-edit__grid'>
+            <label className='patient-profile-edit__field'>
+              <span>Govt ID type</span>
+              <select
+                value={form.govtIdType}
+                onChange={(e) => setField('govtIdType', e.target.value)}
+                disabled={busy}
+              >
+                <option value=''>Select ID type (optional)</option>
+                {PATIENT_GOVT_ID_TYPES.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className='patient-profile-edit__field'>
+              <span>Govt ID No</span>
+              <input
+                type='text'
+                value={form.govtIdNumber}
+                onChange={(e) => setField('govtIdNumber', e.target.value)}
+                placeholder='Optional'
+                disabled={busy}
+              />
+            </label>
+            <div className='patient-profile-edit__field patient-profile-edit__field--full'>
+              <PatientDocumentList
+                label='Govt ID document'
+                hint='Optional — upload or take a photo of the ID'
+                documents={form.govtIdDocuments}
+                onChange={(next) => setField('govtIdDocuments', next)}
+                disabled={busy}
+              />
+            </div>
           </div>
 
           <p className='patient-profile-edit__section-title'>Health information</p>
@@ -494,6 +584,15 @@ export default function PatientProfileEditSection({
                 disabled={busy}
               />
             </label>
+            <div className='patient-profile-edit__field patient-profile-edit__field--full'>
+              <PatientDocumentList
+                label='Latest prescription'
+                hint='Optional — upload one or more prescriptions for your doctor to review'
+                documents={form.latestPrescriptionDocuments}
+                onChange={(next) => setField('latestPrescriptionDocuments', next)}
+                disabled={busy}
+              />
+            </div>
             <label className='patient-profile-edit__field patient-profile-edit__field--full'>
               <span>Insurance provider</span>
               <input

@@ -6,7 +6,6 @@ type PatientsFilterDrawerProps = {
   opened: boolean;
   onClose: () => void;
   filters: PatientQuickFilters;
-  countryOptions: string[];
   cityOptions: string[];
   bloodGroupOptions: string[];
   onChange: (filters: PatientQuickFilters) => void;
@@ -24,7 +23,6 @@ export default function PatientsFilterDrawer({
   opened,
   onClose,
   filters,
-  countryOptions,
   cityOptions,
   bloodGroupOptions,
   onChange,
@@ -42,18 +40,8 @@ export default function PatientsFilterDrawer({
     >
       <Stack gap='lg'>
         <Text size='sm' c='dimmed'>
-          Refine the directory by location, blood group, and login access.
+          Refine the directory by city, blood group, and login access.
         </Text>
-
-        <Select
-          label='Country'
-          placeholder='All countries'
-          clearable
-          searchable
-          data={countryOptions}
-          value={filters.country}
-          onChange={(value) => onChange({ ...filters, country: value })}
-        />
 
         <Select
           label='City'

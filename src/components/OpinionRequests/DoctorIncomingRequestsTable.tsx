@@ -49,7 +49,7 @@ function DoctorCasesEmptyState({
       </ThemeIcon>
       <Stack gap={6} align='center' maw={420}>
         <Title order={4} fw={600}>
-          {hasFilters ? 'No cases match your search' : 'No incoming requests yet'}
+          {hasFilters ? 'No cases match your search' : 'No patient requests yet'}
         </Title>
         <Text size='sm' c='dimmed' ta='center'>
           {hasFilters
