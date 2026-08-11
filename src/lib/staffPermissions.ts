@@ -75,9 +75,14 @@ export function canBookConsultation(admin: Pick<Admin, 'role'>): boolean {
   return isClinicPatientServiceExecutive(admin);
 }
 
-/** Home care tab / request actions (clinic PSE + admin; not global PSE). */
-export function canAccessHomeCareRequests(admin: Pick<Admin, 'role'>): boolean {
-  return isAdministrator(admin) || isClinicPatientServiceExecutive(admin);
+/** Home care tab / request actions (clinic PSE when clinic has Home Care enabled + admin). */
+export function canAccessHomeCareRequests(
+  admin: Pick<Admin, 'role' | 'clinic_home_care_enabled'>
+): boolean {
+  if (isAdministrator(admin)) return true;
+  if (!isClinicPatientServiceExecutive(admin)) return false;
+  // Missing flag (pre-migration) defaults to enabled so existing clinics keep access.
+  return admin.clinic_home_care_enabled !== false;
 }
 
 /** Soft-delete patients (admin: all; clinic PSE: own clinic via RLS). */

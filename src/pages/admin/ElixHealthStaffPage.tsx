@@ -16,12 +16,14 @@ function formatDate(iso: string | null | undefined) {
 function StaffTable({
   members,
   showActions,
+  showHomeCareColumn = false,
   busyId,
   onEdit,
   onToggleActive
 }: {
   members: Admin[];
   showActions: boolean;
+  showHomeCareColumn?: boolean;
   busyId: string | null;
   onEdit: (member: Admin) => void;
   onToggleActive: (member: Admin) => void;
@@ -38,6 +40,7 @@ function StaffTable({
             <th>Name</th>
             <th>Email</th>
             <th>Clinic</th>
+            {showHomeCareColumn ? <th>Home Care</th> : null}
             <th>Status</th>
             <th>Auth linked</th>
             <th>Created</th>
@@ -50,6 +53,19 @@ function StaffTable({
               <td>{member.full_name}</td>
               <td>{member.email}</td>
               <td>{member.clinic_name ?? '—'}</td>
+              {showHomeCareColumn ? (
+                <td>
+                  <span
+                    className={
+                      member.clinic_home_care_enabled !== false
+                        ? 'elixhealth-badge elixhealth-badge--ok'
+                        : 'elixhealth-badge'
+                    }
+                  >
+                    {member.clinic_home_care_enabled !== false ? 'Enabled' : 'Disabled'}
+                  </span>
+                </td>
+              ) : null}
               <td>
                 <span className={member.is_active ? 'elixhealth-badge elixhealth-badge--ok' : 'elixhealth-badge'}>
                   {member.is_active ? 'Active' : 'Inactive'}
@@ -249,6 +265,7 @@ export default function ElixHealthStaffPage() {
         <StaffTable
           members={clinicExecutives}
           showActions={isAdministrator(currentStaff)}
+          showHomeCareColumn
           busyId={busyId}
           onEdit={openEditModal}
           onToggleActive={(member) => void handleToggleActive(member)}

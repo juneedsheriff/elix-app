@@ -73,6 +73,7 @@ export default function ElixHealthRequestsPage() {
   const isClinicPse = isClinicPatientServiceExecutive(staff);
   const canAddRequest = canCreateRequests(staff);
   const showHomeCareTab = canAccessHomeCareRequests(staff);
+  const canCreateHomeCare = canAddRequest && showHomeCareTab;
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -696,7 +697,7 @@ export default function ElixHealthRequestsPage() {
           requestKindTab === 'consultations' ? () => setAddRequestModalOpen(true) : undefined
         }
         onAddHomeCareRequest={
-          canAddRequest && staff.clinic_id && requestKindTab === 'homecare'
+          canCreateHomeCare && staff.clinic_id && requestKindTab === 'homecare'
             ? () => setHomeCareModalOpen(true)
             : undefined
         }
@@ -840,7 +841,7 @@ export default function ElixHealthRequestsPage() {
         />
       ) : null}
 
-      {canAddRequest && staff.clinic_id ? (
+      {canCreateHomeCare && staff.clinic_id ? (
         <ClinicPseHomeCareRequestModal
           opened={homeCareModalOpen}
           onClose={() => setHomeCareModalOpen(false)}

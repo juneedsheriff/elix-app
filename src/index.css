@@ -3154,6 +3154,52 @@ select {
   margin-top: 0.45rem;
 }
 
+.doctor-consultation-order-mode {
+  display: flex;
+  gap: 0.2rem;
+  margin: 0.35rem 0 0.55rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+.doctor-consultation-order-mode__tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.65rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.doctor-consultation-order-mode__tab:hover,
+.doctor-consultation-order-mode__tab:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+
+.doctor-consultation-order-mode__tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.doctor-consultation-order-mode__tab--active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 47, 70, 0.08);
+}
+
 .doctor-consultation-field-upload__hint {
   margin: 0;
   font-size: 0.82rem;
@@ -4980,6 +5026,31 @@ body:has(.elixhealth-app),
 
 .elixhealth-staff-note {
   margin: 0 0 0.85rem;
+}
+
+.elixhealth-staff-home-care {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.elixhealth-staff-home-care__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+}
+
+.elixhealth-staff-home-care__row input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--primary, #0d9488);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.elixhealth-staff-home-care .elixhealth-staff-note {
+  margin: 0;
 }
 
 .elixhealth-field-hint {

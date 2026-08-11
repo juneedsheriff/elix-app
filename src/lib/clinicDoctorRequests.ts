@@ -290,13 +290,72 @@ export async function removeDoctorFromClinicWorkspace(doctorId: string, clinicId
 }
 
 export async function fetchPseClinicsForAdmin() {
-  const { data, error } = await supabase.from('pse_clinics').select('id, name').order('name', { ascending: true });
+  const withFlag = await supabase
+    .from('pse_clinics')
+    .select('id, name, home_care_enabled')
+    .order('name', { ascending: true });
 
+  if (!withFlag.error) {
+    return {
+      data: (withFlag.data ?? []).map((row) => ({
+        id: row.id as string,
+        name: (row.name as string) ?? 'Clinic workspace',
+        home_care_enabled:
+          typeof row.home_care_enabled === 'boolean' ? row.home_care_enabled : true
+      })),
+      error: null
+    };
+  }
+
+  // Pre-migration 080 fallback.
+  if (!/home_care_enabled|column/i.test(withFlag.error.message ?? '')) {
+    return { data: null, error: { message: withFlag.error.message } };
+  }
+
+  const { data, error } = await supabase.from('pse_clinics').select('id, name').order('name', { ascending: true });
   if (error) {
     return { data: null, error: { message: error.message } };
   }
 
-  return { data: data ?? [], error: null };
+  return {
+    data: (data ?? []).map((row) => ({
+      id: row.id as string,
+      name: (row.name as string) ?? 'Clinic workspace',
+      home_care_enabled: true
+    })),
+    error: null
+  };
+}
+
+/** Admin updates whether a PSE clinic can use Home Care Services. */
+export async function updatePseClinicHomeCareEnabled(clinicId: string, enabled: boolean) {
+  const id = clinicId.trim();
+  if (!id) return { data: null, error: { message: 'Clinic id is required.' } };
+
+  const { data, error } = await supabase
+    .from('pse_clinics')
+    .update({ home_care_enabled: enabled, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('id, name, home_care_enabled')
+    .maybeSingle();
+
+  if (error) {
+    const hint = /home_care_enabled|column/i.test(error.message)
+      ? ' Run npm run db:apply-pse-clinic-home-care (migration 080).'
+      : '';
+    return { data: null, error: { message: `${error.message}${hint}` } };
+  }
+  if (!data) return { data: null, error: { message: 'Clinic workspace not found.' } };
+
+  return {
+    data: {
+      id: data.id as string,
+      name: (data.name as string) ?? 'Clinic workspace',
+      home_care_enabled:
+        typeof data.home_care_enabled === 'boolean' ? data.home_care_enabled : enabled
+    },
+    error: null
+  };
 }
 
 export async function fetchDoctorWorkspaceGrantsForDoctor(doctorId: string) {

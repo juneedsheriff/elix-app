@@ -52,6 +52,9 @@ const LAB_ORDER_FILE_ACCEPT = CONSULTATION_NOTES_ACCEPT;
 
 type ConsultationMode = 'fill' | 'upload';
 
+/** How the doctor provides prescription / lab order content. */
+type OrderEntryMode = 'type' | 'upload';
+
 const VITAL_SIGN_FIELDS = [
   { key: 'blood_pressure', label: 'Blood Pressure', placeholder: 'e.g. 120/80' },
   { key: 'pulse_rate', label: 'Pulse Rate', placeholder: 'bpm' },
@@ -162,6 +165,8 @@ export default function DoctorConsultationPage({
   const [uploadNote, setUploadNote] = useState('');
   const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
   const [labOrderFile, setLabOrderFile] = useState<File | null>(null);
+  const [prescriptionEntryMode, setPrescriptionEntryMode] = useState<OrderEntryMode>('type');
+  const [labOrderEntryMode, setLabOrderEntryMode] = useState<OrderEntryMode>('type');
   const [cameraOpen, setCameraOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -282,6 +287,10 @@ export default function DoctorConsultationPage({
     if (labOrderFileInputRef.current) labOrderFileInputRef.current.value = '';
 
     const fromSummary = consultationSummaryToFormValues(summaryRes.data);
+    setPrescriptionEntryMode(
+      summaryRes.data?.prescription_file_path?.trim() ? 'upload' : 'type'
+    );
+    setLabOrderEntryMode(summaryRes.data?.lab_order_file_path?.trim() ? 'upload' : 'type');
     const fallbackVitalSigns = stringifyVitalSigns(vitalSignsDraftFromCaseDetails(match));
     const hasSummary = Object.values(fromSummary).some(Boolean);
     if (hasSummary) {
@@ -355,32 +364,34 @@ export default function DoctorConsultationPage({
     const hasExistingPrescriptionFile = Boolean(summary?.prescription_file_path?.trim());
     const hasExistingLabOrderFile = Boolean(summary?.lab_order_file_path?.trim());
 
-    // Typed text and file upload are both required for Prescription and Lab Order.
-    if (!prescriptionText) {
-      setError('Prescription text is required.');
-      return;
-    }
-    if (!prescriptionFile && !hasExistingPrescriptionFile) {
-      setError('Upload a prescription image or file (PDF, JPG, PNG, DOC, or DOCX).');
-      return;
-    }
-    if (!labOrderText) {
-      setError('Lab Order text is required.');
-      return;
-    }
-    if (!labOrderFile && !hasExistingLabOrderFile) {
-      setError('Upload a lab order file (PDF, JPG, PNG, DOC, or DOCX).');
+    if (prescriptionEntryMode === 'type') {
+      if (!prescriptionText) {
+        setError('Type the prescription, or switch to Upload image / file.');
+        return;
+      }
+    } else if (!prescriptionFile && !hasExistingPrescriptionFile) {
+      setError('Upload a prescription file (PDF, JPG, PNG, DOC, or DOCX), or switch to Type text.');
       return;
     }
 
-    if (prescriptionFile) {
+    if (labOrderEntryMode === 'type') {
+      if (!labOrderText) {
+        setError('Type the lab order, or switch to Upload image / file.');
+        return;
+      }
+    } else if (!labOrderFile && !hasExistingLabOrderFile) {
+      setError('Upload a lab order file (PDF, JPG, PNG, DOC, or DOCX), or switch to Type text.');
+      return;
+    }
+
+    if (prescriptionEntryMode === 'upload' && prescriptionFile) {
       const prescriptionValidation = prescriptionImageValidationError(prescriptionFile);
       if (prescriptionValidation) {
         setError(prescriptionValidation);
         return;
       }
     }
-    if (labOrderFile) {
+    if (labOrderEntryMode === 'upload' && labOrderFile) {
       const labOrderValidation = labOrderFileValidationError(labOrderFile);
       if (labOrderValidation) {
         setError(labOrderValidation);
@@ -411,10 +422,10 @@ export default function DoctorConsultationPage({
       vital_signs: values.vital_signs.trim() || null,
       current_medications: values.current_medications.trim() || null,
       past_medical_history: values.past_medical_history.trim() || null,
-      labs_diagnostics: labOrderText,
+      labs_diagnostics: labOrderEntryMode === 'type' ? labOrderText : null,
       assessment_plan: values.assessment_plan.trim(),
       followup_date: values.followup_date.trim() || null,
-      prescription: prescriptionText
+      prescription: prescriptionEntryMode === 'type' ? prescriptionText : null
     };
 
     const { error: submitError } = await saveDoctorConsultation(
@@ -424,12 +435,16 @@ export default function DoctorConsultationPage({
       formatConsultationResponse(values),
       doctorProfile,
       {
-        prescriptionFile,
-        labOrderFile,
-        existingPrescriptionFilePath: summary?.prescription_file_path ?? null,
-        existingPrescriptionFileName: summary?.prescription_file_name ?? null,
-        existingLabOrderFilePath: summary?.lab_order_file_path ?? null,
-        existingLabOrderFileName: summary?.lab_order_file_name ?? null
+        prescriptionFile: prescriptionEntryMode === 'upload' ? prescriptionFile : null,
+        labOrderFile: labOrderEntryMode === 'upload' ? labOrderFile : null,
+        existingPrescriptionFilePath:
+          prescriptionEntryMode === 'upload' ? (summary?.prescription_file_path ?? null) : null,
+        existingPrescriptionFileName:
+          prescriptionEntryMode === 'upload' ? (summary?.prescription_file_name ?? null) : null,
+        existingLabOrderFilePath:
+          labOrderEntryMode === 'upload' ? (summary?.lab_order_file_path ?? null) : null,
+        existingLabOrderFileName:
+          labOrderEntryMode === 'upload' ? (summary?.lab_order_file_name ?? null) : null
       }
     );
     setSubmitting(false);
@@ -687,9 +702,8 @@ export default function DoctorConsultationPage({
                 onSubmit={(e) => void handleFillSubmit(e)}
               >
                 <p className='muted doctor-consultation-page__mode-hint'>
-                  Complete the fields below. Prescription and Lab Order can each be typed, uploaded, or
-                  both — they are saved separately (typed orders become their own PDFs; uploads keep
-                  the original file). A full consultation notes PDF is also generated on submit.
+                  Complete the fields below. For Prescription and Lab Order, choose Type text (generates a
+                  PDF) or Upload image / file — only one method is required for each.
                 </p>
 
                 <div
@@ -796,7 +810,21 @@ export default function DoctorConsultationPage({
                     const isPrescription = key === 'prescription';
                     const isLabOrder = key === 'labs_diagnostics';
                     const showOrderAttachment = isPrescription || isLabOrder;
-                    const attachmentFile = isPrescription ? prescriptionFile : isLabOrder ? labOrderFile : null;
+                    const entryMode = isPrescription
+                      ? prescriptionEntryMode
+                      : isLabOrder
+                        ? labOrderEntryMode
+                        : null;
+                    const setEntryMode = isPrescription
+                      ? setPrescriptionEntryMode
+                      : isLabOrder
+                        ? setLabOrderEntryMode
+                        : null;
+                    const attachmentFile = isPrescription
+                      ? prescriptionFile
+                      : isLabOrder
+                        ? labOrderFile
+                        : null;
                     const existingAttachmentName = isPrescription
                       ? summary?.prescription_file_name?.trim() ||
                         (summary?.prescription_file_path ? 'Uploaded prescription file' : null)
@@ -812,11 +840,6 @@ export default function DoctorConsultationPage({
                     const attachmentAccept = isPrescription
                       ? PRESCRIPTION_FILE_ACCEPT
                       : LAB_ORDER_FILE_ACCEPT;
-                    const attachmentHint = isPrescription
-                      ? 'Required: type the prescription above and upload an image or file (PDF, JPG, PNG, DOC, or DOCX, max 10 MB).'
-                      : isLabOrder
-                        ? 'Required: type the lab order above and upload a file (PDF, JPG, PNG, DOC, or DOCX, max 10 MB).'
-                        : null;
                     const onAttachmentChange = isPrescription
                       ? handlePrescriptionFileChange
                       : isLabOrder
@@ -836,6 +859,8 @@ export default function DoctorConsultationPage({
                         }
                       }
                     };
+                    const showTypeInput = !showOrderAttachment || entryMode === 'type';
+                    const showUploadInput = showOrderAttachment && entryMode === 'upload';
 
                     return (
                       <div key={key} className='doctor-respond-label'>
@@ -850,57 +875,119 @@ export default function DoctorConsultationPage({
                             ) : null}
                           </span>
                           <span className='doctor-respond-label__actions'>
-                            <button
-                              type='button'
-                              className='doctor-consultation-clear-btn'
-                              onClick={() => handleClearField(key)}
-                              disabled={submitting || micGateActive || !fieldHasContent}
-                              aria-label={`Clear ${label}`}
-                              title={`Clear ${label}`}
-                            >
-                              <Eraser size={14} aria-hidden />
-                              <span>Clear</span>
-                            </button>
-                            <VoiceDictationButton
-                              active={isRecording}
-                              supported={voiceEnabled}
-                              disabled={submitting || micGateActive}
-                              label={label}
-                              onClick={() => startVoice(key)}
-                            />
+                            {showTypeInput ? (
+                              <>
+                                <button
+                                  type='button'
+                                  className='doctor-consultation-clear-btn'
+                                  onClick={() => handleClearField(key)}
+                                  disabled={submitting || micGateActive || !fieldHasContent}
+                                  aria-label={`Clear ${label}`}
+                                  title={`Clear ${label}`}
+                                >
+                                  <Eraser size={14} aria-hidden />
+                                  <span>Clear</span>
+                                </button>
+                                <VoiceDictationButton
+                                  active={isRecording}
+                                  supported={voiceEnabled}
+                                  disabled={submitting || micGateActive}
+                                  label={label}
+                                  onClick={() => startVoice(key)}
+                                />
+                              </>
+                            ) : null}
                           </span>
                         </span>
-                        <textarea
-                          className={`doctor-respond-textarea ${isRecording ? 'doctor-respond-textarea--recording' : ''}`}
-                          rows={
-                            key === 'prescription' ||
-                            key === 'labs_diagnostics' ||
-                            key === 'assessment_plan'
-                              ? 5
-                              : 4
-                          }
-                          value={displayValue}
-                          onChange={(event) =>
-                            setValues((prev) => ({ ...prev, [key]: event.target.value }))
-                          }
-                          disabled={submitting || isRecording}
-                          placeholder={
-                            isPrescription
-                              ? 'Type prescription…'
-                              : isLabOrder
-                                ? 'Type lab order…'
-                                : `Enter ${label.toLowerCase()}…`
-                          }
-                          required={showOrderAttachment}
-                        />
-                        {isRecording ? (
-                          <span className='doctor-respond-voice-status' role='status'>
-                            Listening… tap Stop when finished
-                          </span>
+
+                        {showOrderAttachment && setEntryMode && entryMode ? (
+                          <div
+                            className='doctor-consultation-order-mode'
+                            role='tablist'
+                            aria-label={`${label} entry method`}
+                          >
+                            <button
+                              type='button'
+                              role='tab'
+                              aria-selected={entryMode === 'type'}
+                              className={`doctor-consultation-order-mode__tab${
+                                entryMode === 'type' ? ' doctor-consultation-order-mode__tab--active' : ''
+                              }`}
+                              disabled={submitting || micGateActive}
+                              onClick={() => {
+                                if (voiceField === key) stopVoice({ discard: true });
+                                setEntryMode('type');
+                                setError(null);
+                              }}
+                            >
+                              Type text
+                            </button>
+                            <button
+                              type='button'
+                              role='tab'
+                              aria-selected={entryMode === 'upload'}
+                              className={`doctor-consultation-order-mode__tab${
+                                entryMode === 'upload'
+                                  ? ' doctor-consultation-order-mode__tab--active'
+                                  : ''
+                              }`}
+                              disabled={submitting || micGateActive}
+                              onClick={() => {
+                                if (voiceField === key) stopVoice({ discard: true });
+                                setEntryMode('upload');
+                                setError(null);
+                              }}
+                            >
+                              Upload image / file
+                            </button>
+                          </div>
                         ) : null}
-                        {showOrderAttachment && attachmentInputRef && onAttachmentChange ? (
+
+                        {showTypeInput ? (
+                          <>
+                            <textarea
+                              className={`doctor-respond-textarea ${isRecording ? 'doctor-respond-textarea--recording' : ''}`}
+                              rows={
+                                key === 'prescription' ||
+                                key === 'labs_diagnostics' ||
+                                key === 'assessment_plan'
+                                  ? 5
+                                  : 4
+                              }
+                              value={displayValue}
+                              onChange={(event) =>
+                                setValues((prev) => ({ ...prev, [key]: event.target.value }))
+                              }
+                              disabled={submitting || isRecording}
+                              placeholder={
+                                isPrescription
+                                  ? 'Type prescription… A PDF will be generated on submit.'
+                                  : isLabOrder
+                                    ? 'Type lab order… A PDF will be generated on submit.'
+                                    : `Enter ${label.toLowerCase()}…`
+                              }
+                              required={showOrderAttachment && entryMode === 'type'}
+                            />
+                            {isRecording ? (
+                              <span className='doctor-respond-voice-status' role='status'>
+                                Listening… tap Stop when finished
+                              </span>
+                            ) : null}
+                            {showOrderAttachment && entryMode === 'type' ? (
+                              <p className='muted doctor-consultation-field-upload__hint'>
+                                Typed {isPrescription ? 'prescription' : 'lab order'} becomes a PDF when you
+                                submit.
+                              </p>
+                            ) : null}
+                          </>
+                        ) : null}
+
+                        {showUploadInput && attachmentInputRef && onAttachmentChange ? (
                           <div className='doctor-consultation-field-upload'>
-                            <p className='muted doctor-consultation-field-upload__hint'>{attachmentHint}</p>
+                            <p className='muted doctor-consultation-field-upload__hint'>
+                              Upload {isPrescription ? 'a prescription' : 'a lab order'} as PDF, JPG, PNG,
+                              DOC, or DOCX (max 10 MB). The uploaded file is used as the order document.
+                            </p>
                             <input
                               ref={attachmentInputRef}
                               type='file'

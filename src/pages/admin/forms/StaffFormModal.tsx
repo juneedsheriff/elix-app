@@ -1,7 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { createStaffMember, updateStaffMember } from '../../../lib/adminAuth';
-import { fetchPseClinicsForAdmin } from '../../../lib/clinicDoctorRequests';
+import {
+  fetchPseClinicsForAdmin,
+  updatePseClinicHomeCareEnabled
+} from '../../../lib/clinicDoctorRequests';
 import { adminRoleLabel } from '../../../lib/staffPermissions';
 import type { Admin, AdminRole } from '../../../types/admin';
 
@@ -13,7 +16,7 @@ type StaffFormModalProps = {
   onSaved: () => void;
 };
 
-type ClinicOption = { id: string; name: string };
+type ClinicOption = { id: string; name: string; home_care_enabled: boolean };
 
 const NEW_CLINIC_VALUE = '__new_clinic__';
 
@@ -25,13 +28,16 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
   const [clinicName, setClinicName] = useState('');
   const [clinicOptions, setClinicOptions] = useState<ClinicOption[]>([]);
   const [clinicsLoading, setClinicsLoading] = useState(false);
+  const [homeCareEnabled, setHomeCareEnabled] = useState(true);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = mode === 'edit';
-  const isClinicRole = isEdit ? staff?.role === 'patient_service_executive_clinic' : role === 'patient_service_executive_clinic';
+  const isClinicRole = isEdit
+    ? staff?.role === 'patient_service_executive_clinic'
+    : role === 'patient_service_executive_clinic';
   const usesNewClinic = clinicSelection === NEW_CLINIC_VALUE;
 
   useEffect(() => {
@@ -39,8 +45,9 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
     setFullName(staff?.full_name ?? '');
     setEmail(staff?.email ?? '');
     setRole(staff?.role ?? 'patient_service_executive');
-    setClinicSelection(staff?.clinic_id ?? NEW_CLINIC_VALUE);
+    setClinicSelection(staff?.clinic_id ?? '');
     setClinicName(staff?.clinic_name ?? '');
+    setHomeCareEnabled(staff?.clinic_home_care_enabled !== false);
     setPassword('');
     setConfirmPassword('');
     setError(null);
@@ -54,14 +61,37 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
     setClinicsLoading(true);
     void fetchPseClinicsForAdmin().then(({ data }) => {
       if (cancelled) return;
-      setClinicOptions(data ?? []);
+      const options = data ?? [];
+      setClinicOptions(options);
       setClinicsLoading(false);
+
+      if (isEdit && staff?.clinic_id) {
+        const match = options.find((clinic) => clinic.id === staff.clinic_id);
+        if (match) {
+          setClinicSelection(match.id);
+          setHomeCareEnabled(match.home_care_enabled);
+        }
+      } else if (!isEdit && options.length) {
+        setClinicSelection((prev) => {
+          if (prev && options.some((clinic) => clinic.id === prev)) return prev;
+          return options[0]!.id;
+        });
+        const selected =
+          options.find((clinic) => clinic.id === (staff?.clinic_id ?? options[0]!.id)) ?? options[0]!;
+        setHomeCareEnabled(selected.home_care_enabled);
+      }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [open, isClinicRole]);
+  }, [open, isClinicRole, isEdit, staff?.clinic_id]);
+
+  useEffect(() => {
+    if (!isClinicRole || !clinicSelection || usesNewClinic) return;
+    const match = clinicOptions.find((clinic) => clinic.id === clinicSelection);
+    if (match) setHomeCareEnabled(match.home_care_enabled);
+  }, [clinicSelection, clinicOptions, isClinicRole, usesNewClinic]);
 
   useEffect(() => {
     if (!open) return;
@@ -90,6 +120,12 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
     }
 
     return { clinic_id: clinicSelection };
+  };
+
+  const resolveClinicIdAfterSave = (savedClinicId?: string | null) => {
+    if (savedClinicId?.trim()) return savedClinicId.trim();
+    if (usesNewClinic) return null;
+    return clinicSelection || staff?.clinic_id || null;
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -135,6 +171,8 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
 
     setBusy(true);
 
+    let resolvedClinicId: string | null = null;
+
     if (isEdit) {
       if (!staff) {
         setBusy(false);
@@ -145,34 +183,55 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
       const clinicChanged =
         isClinicRole && (usesNewClinic || clinicSelection !== (staff.clinic_id ?? ''));
 
-      const { error: updateError } = await updateStaffMember(staff.id, {
+      const { data: updated, error: updateError } = await updateStaffMember(staff.id, {
         full_name: trimmedName,
         email: trimmedEmail,
         ...(password ? { password } : {}),
         ...(isClinicRole && clinicChanged ? clinicPayload : {})
       });
-      setBusy(false);
 
       if (updateError) {
+        setBusy(false);
         setError(updateError);
         return;
       }
+
+      resolvedClinicId = resolveClinicIdAfterSave(
+        (updated?.staff as { clinic_id?: string | null } | undefined)?.clinic_id ?? staff.clinic_id
+      );
     } else {
-      const { error: createError } = await createStaffMember({
+      const { data: created, error: createError } = await createStaffMember({
         full_name: trimmedName,
         email: trimmedEmail,
         role,
         password,
         ...(isClinicRole ? clinicPayload : {})
       });
-      setBusy(false);
 
       if (createError) {
+        setBusy(false);
         setError(createError);
+        return;
+      }
+
+      resolvedClinicId = resolveClinicIdAfterSave(
+        (created?.staff as { clinic_id?: string | null } | undefined)?.clinic_id
+      );
+    }
+
+    if (isClinicRole && resolvedClinicId) {
+      const { error: homeCareError } = await updatePseClinicHomeCareEnabled(
+        resolvedClinicId,
+        homeCareEnabled
+      );
+      if (homeCareError) {
+        setBusy(false);
+        setError(homeCareError.message);
         return;
       }
     }
 
+    setBusy(false);
     onSaved();
     onClose();
   };
@@ -204,7 +263,13 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                 : 'Creates a login and staff profile for the ElixClinix console.'}
             </p>
           </div>
-          <button type='button' className='icon-btn elixhealth-modal-close' onClick={onClose} disabled={busy} aria-label='Close'>
+          <button
+            type='button'
+            className='icon-btn elixhealth-modal-close'
+            onClick={onClose}
+            disabled={busy}
+            aria-label='Close'
+          >
             <X size={20} aria-hidden />
           </button>
         </div>
@@ -220,9 +285,15 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
             {!isEdit ? (
               <label className='elixhealth-field elixhealth-field--full'>
                 <span>Role</span>
-                <select value={role} onChange={(e) => setRole(e.target.value as AdminRole)} disabled={busy}>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as AdminRole)}
+                  disabled={busy}
+                >
                   <option value='patient_service_executive'>Patient Service Executive</option>
-                  <option value='patient_service_executive_clinic'>Patient Service Executive (clinic)</option>
+                  <option value='patient_service_executive_clinic'>
+                    Patient Service Executive (clinic)
+                  </option>
                   <option value='administrator'>ElixClinix</option>
                 </select>
               </label>
@@ -242,7 +313,6 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                         {clinic.name}
                       </option>
                     ))}
-                    {/* <option value={NEW_CLINIC_VALUE}>Create new clinic workspace…</option> */}
                   </select>
                 </label>
                 {usesNewClinic ? (
@@ -259,9 +329,25 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                   </label>
                 ) : null}
                 <p className='muted elixhealth-staff-note'>
-                  Changing the clinic moves this executive to another isolated workspace. Existing patients,
-                  doctors, and requests stay with the previous clinic.
+                  Changing the clinic moves this executive to another isolated workspace. Existing
+                  patients, doctors, and requests stay with the previous clinic.
                 </p>
+
+                <label className='elixhealth-field elixhealth-field--full elixhealth-staff-home-care'>
+                  <span className='elixhealth-staff-home-care__row'>
+                    <input
+                      type='checkbox'
+                      checked={homeCareEnabled}
+                      onChange={(e) => setHomeCareEnabled(e.target.checked)}
+                      disabled={busy}
+                    />
+                    <span>Enable Home Care Services for this clinic</span>
+                  </span>
+                  <span className='muted elixhealth-staff-note'>
+                    When enabled, this clinic’s PSE dashboard shows the Home Care tab and can create
+                    home care requests. Applies to the whole clinic workspace, not only this login.
+                  </span>
+                </label>
               </>
             ) : null}
 

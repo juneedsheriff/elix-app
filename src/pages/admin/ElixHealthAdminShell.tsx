@@ -1,7 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import type { Admin } from '../../types/admin';
 import { fetchAdminByAuthUserId } from '../../lib/admins';
+import { isClinicPatientServiceExecutive } from '../../lib/staffPermissions';
 import ElixHealthMantineProvider from './ElixHealthMantineProvider';
 import ElixHealthLayout from './ElixHealthLayout';
 import { ElixHealthStaffContext } from './ElixHealthStaffContext';
@@ -23,6 +24,12 @@ export default function ElixHealthAdminShell({ admin, onStaffUpdated, onSignOut 
     const { data } = await fetchAdminByAuthUserId(admin.auth_user_id);
     if (data) onStaffUpdated(data);
   }, [admin.auth_user_id, onStaffUpdated]);
+
+  // Keep clinic Home Care flag in sync when navigating (admin may have changed it).
+  useEffect(() => {
+    if (!isClinicPatientServiceExecutive(admin)) return;
+    void refreshStaff();
+  }, [location.pathname, admin.role, refreshStaff]);
 
   return (
     <ElixHealthMantineProvider>

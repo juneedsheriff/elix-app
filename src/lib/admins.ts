@@ -11,7 +11,7 @@ import { supabase } from './supabase';
 const ADMIN_COLUMNS_BASE =
   'id, auth_user_id, email, full_name, role, is_active, created_at, updated_at';
 
-const ADMIN_COLUMNS_WITH_CLINIC = `${ADMIN_COLUMNS_BASE}, clinic_id, pse_clinics(name)`;
+const ADMIN_COLUMNS_WITH_CLINIC = `${ADMIN_COLUMNS_BASE}, clinic_id, pse_clinics(name, home_care_enabled)`;
 
 function isMissingClinicSchemaError(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) return false;
@@ -19,13 +19,19 @@ function isMissingClinicSchemaError(error: { message?: string; code?: string } |
   return (
     message.includes('clinic_id') ||
     message.includes('pse_clinics') ||
+    message.includes('home_care_enabled') ||
     message.includes('patient_service_executive_clinic') ||
     error.code === '42703' ||
     error.code === 'PGRST200'
   );
 }
 
-type AdminRow = Admin & { pse_clinics?: { name: string } | { name: string }[] | null };
+type AdminRow = Admin & {
+  pse_clinics?:
+    | { name: string; home_care_enabled?: boolean | null }
+    | { name: string; home_care_enabled?: boolean | null }[]
+    | null;
+};
 
 async function queryAdminSingle(
   applyFilters: (query: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
@@ -35,6 +41,14 @@ async function queryAdminSingle(
 
   if (!isMissingClinicSchemaError(extended.error)) {
     return extended;
+  }
+
+  // Fall back if home_care_enabled column is missing (pre-migration 080).
+  const withNameOnly = await applyFilters(
+    supabase.from('admins').select(`${ADMIN_COLUMNS_BASE}, clinic_id, pse_clinics(name)`)
+  ).maybeSingle();
+  if (!withNameOnly.error || !isMissingClinicSchemaError(withNameOnly.error)) {
+    return withNameOnly;
   }
 
   return applyFilters(supabase.from('admins').select(ADMIN_COLUMNS_BASE)).maybeSingle();
@@ -48,6 +62,13 @@ async function queryAdminList(
 
   if (!isMissingClinicSchemaError(extended.error)) {
     return extended;
+  }
+
+  const withNameOnly = await applyFilters(
+    supabase.from('admins').select(`${ADMIN_COLUMNS_BASE}, clinic_id, pse_clinics(name)`)
+  );
+  if (!withNameOnly.error || !isMissingClinicSchemaError(withNameOnly.error)) {
+    return withNameOnly;
   }
 
   return applyFilters(supabase.from('admins').select(ADMIN_COLUMNS_BASE));
@@ -264,7 +285,14 @@ export async function fetchPatientForAdminById(id: string) {
 
 function normalizeAdmin(row: AdminRow): Admin {
   const clinicJoin = row.pse_clinics;
-  const clinicName = Array.isArray(clinicJoin) ? clinicJoin[0]?.name ?? null : clinicJoin?.name ?? null;
+  const clinicRow = Array.isArray(clinicJoin) ? clinicJoin[0] ?? null : clinicJoin ?? null;
+  const clinicName = clinicRow?.name ?? null;
+  const clinicHomeCare =
+    clinicRow && typeof clinicRow.home_care_enabled === 'boolean'
+      ? clinicRow.home_care_enabled
+      : clinicRow
+        ? true
+        : null;
   const role: Admin['role'] =
     row.role === 'patient_service_executive_clinic'
       ? 'patient_service_executive_clinic'
@@ -280,6 +308,7 @@ function normalizeAdmin(row: AdminRow): Admin {
     role,
     clinic_id: row.clinic_id ?? null,
     clinic_name: clinicName,
+    clinic_home_care_enabled: role === 'patient_service_executive_clinic' ? clinicHomeCare : null,
     is_active: row.is_active,
     created_at: row.created_at,
     updated_at: row.updated_at

@@ -13,8 +13,8 @@ import {
 } from '../../lib/opinionRequests';
 import {
   canBookConsultation,
+  canAccessHomeCareRequests,
   canCreatePatients,
-  canCreateRequests,
   canDeletePatients,
   canDeleteRequests,
   canEditProfiles,
@@ -78,7 +78,7 @@ export default function ElixHealthPatientsPage() {
   const canDeletePatient = canDeletePatients(staff);
   const canDeletePatientRequests = canDeleteRequests(staff);
   const canBookForPatient = canBookConsultation(staff);
-  const canRequestHomeCareForPatient = canCreateRequests(staff);
+  const canRequestHomeCareForPatient = canAccessHomeCareRequests(staff);
   const isAdmin = isAdministrator(staff);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
