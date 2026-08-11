@@ -6,6 +6,7 @@ import { hasPatientConsultationNotes } from '../../lib/doctorConsultation';
 import {
   fetchConsultationSummary,
   fetchStaffOpinionRequestById,
+  mergeConsultationSummaryWithDoctorResponse,
   subscribeOpinionRequestLiveUpdates
 } from '../../lib/opinionRequests';
 import { formatRequestDate } from '../../pages/admin/requests/requestsUtils';
@@ -39,24 +40,23 @@ export default function DoctorConsultationNotesModal({
 
   useEffect(() => {
     if (!open || !request) {
-      setSummary(null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
+    const initialSummary = request.consultation_summary ?? null;
+
+    // Show existing notes immediately; avoid visible modal refresh on open.
+    setSummary(initialSummary);
+    setLoading(!initialSummary);
 
     const loadSummary = async () => {
-      if (hasConsultationSummary(request.consultation_summary)) {
-        setSummary(request.consultation_summary ?? null);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
+      // Fetch from DB in the background so attachment paths stay complete,
+      // but do not force a spinner when we already have summary data.
       const { data } = await fetchConsultationSummary(request.id);
       if (!cancelled) {
-        setSummary(data);
+        setSummary(data ?? initialSummary);
         setLoading(false);
       }
     };
@@ -66,7 +66,7 @@ export default function DoctorConsultationNotesModal({
     return () => {
       cancelled = true;
     };
-  }, [open, request?.id, request?.consultation_summary]);
+  }, [open, request?.id]);
 
   useEffect(() => {
     if (!open || !request) return;
@@ -91,7 +91,12 @@ export default function DoctorConsultationNotesModal({
   if (!open || !request) return null;
 
   const patientLabel = request.patient_name?.trim() || 'Patient';
-  const hasNotes = hasPatientConsultationNotes(request) || hasConsultationSummary(summary);
+  const displaySummary = mergeConsultationSummaryWithDoctorResponse(
+    request,
+    summary,
+    request.doctor_response
+  );
+  const hasNotes = hasPatientConsultationNotes(request) || hasConsultationSummary(displaySummary);
 
   return (
     <div className='elixhealth-modal-root doctor-consultation-notes-modal-root' role='presentation'>
@@ -134,14 +139,13 @@ export default function DoctorConsultationNotesModal({
             </p>
           ) : null}
 
-          {!loading && summary && hasConsultationSummary(summary) ? (
-            <ConsultationSummaryPdfView summary={summary} request={request} />
-          ) : null}
-
-          {!loading && !hasConsultationSummary(summary) && request.doctor_response?.trim() ? (
-            <div className='doctor-consultation-notes-modal__legacy'>
-              <p className='doctor-consultation-notes-modal__legacy-text'>{request.doctor_response}</p>
-            </div>
+          {!loading && displaySummary && hasConsultationSummary(displaySummary) ? (
+            <>
+              <p className='muted doctor-consultation-notes-modal__hint'>
+                Consultation summary, prescription, and lab order PDFs.
+              </p>
+              <ConsultationSummaryPdfView summary={displaySummary} request={request} />
+            </>
           ) : null}
 
           {!loading && !hasNotes ? (

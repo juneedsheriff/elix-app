@@ -24,6 +24,11 @@ export type ConsultationOrderPdfMeta = {
   issuedAt?: Date;
 };
 
+type UploadedOrderFile = {
+  blob: Blob;
+  fileName?: string | null;
+};
+
 function hasHonorificPrefix(name: string): boolean {
   return /^(dr|mr|mrs|ms|miss)\.?\s+/i.test(name.trim());
 }
@@ -82,6 +87,7 @@ export function buildOrderDownloadFilename(
 async function buildOrderPdf(
   title: 'PRESCRIPTION' | 'LAB ORDER',
   bodyText: string,
+  uploadedFile: UploadedOrderFile | null,
   meta: ConsultationOrderPdfMeta
 ) {
   const { jsPDF } = await import('jspdf');
@@ -190,7 +196,45 @@ async function buildOrderPdf(
 
   addLine(title === 'PRESCRIPTION' ? 'Prescription details' : 'Lab order details', 13, true);
   y += 4;
-  addLine(bodyText.trim(), 11);
+  const trimmedText = bodyText.trim();
+  if (trimmedText) {
+    addLine(trimmedText, 11);
+  } else if (uploadedFile) {
+    addLine('Uploaded attachment', 11, true);
+    const fileName = uploadedFile.fileName?.trim() || 'uploaded file';
+    addLine(fileName, 10);
+    y += 8;
+
+    const imageData = await fileToPdfImageData(uploadedFile.blob, uploadedFile.fileName);
+    if (imageData) {
+      const imageMaxWidth = contentWidth;
+      const imageMaxHeight = 260;
+      const scale = Math.min(
+        imageMaxWidth / imageData.width,
+        imageMaxHeight / imageData.height,
+        1
+      );
+      const drawWidth = imageData.width * scale;
+      const drawHeight = imageData.height * scale;
+      ensureSpace(drawHeight + 8);
+      doc.addImage(
+        imageData.dataUrl,
+        imageData.format,
+        margin,
+        y,
+        drawWidth,
+        drawHeight
+      );
+      y += drawHeight + 8;
+    } else {
+      addLine(
+        'Image preview is not available for this file type. Please open the uploaded file directly if needed.',
+        10
+      );
+    }
+  } else {
+    addLine('No order details were provided.', 11);
+  }
 
   y += 18;
   doc.setFont('helvetica', 'normal');
@@ -207,6 +251,70 @@ async function buildOrderPdf(
   return doc;
 }
 
+async function fileToPdfImageData(
+  file: Blob,
+  fileName?: string | null
+): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG'; width: number; height: number } | null> {
+  const ext = fileName?.trim().toLowerCase().split('.').pop() ?? '';
+  const mimeByExt: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml'
+  };
+  const normalizedType = file.type?.trim().toLowerCase() || mimeByExt[ext] || '';
+  const looksLikeImage = normalizedType.startsWith('image/');
+  if (!looksLikeImage) return null;
+
+  const candidate =
+    file.type?.startsWith('image/') || !mimeByExt[ext]
+      ? file
+      : new Blob([await file.arrayBuffer()], { type: mimeByExt[ext] });
+
+  const objectUrl = URL.createObjectURL(candidate);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Could not decode image.'));
+      img.src = objectUrl;
+    });
+
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(image, 0, 0, width, height);
+
+    if (/png|gif/i.test(normalizedType)) {
+      return {
+        dataUrl: canvas.toDataURL('image/png'),
+        format: 'PNG',
+        width,
+        height
+      };
+    }
+    return {
+      dataUrl: canvas.toDataURL('image/jpeg', 0.95),
+      format: 'JPEG',
+      width,
+      height
+    };
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export async function generatePrescriptionOrderPdfBlob(
   prescriptionText: string,
   meta: ConsultationOrderPdfMeta
@@ -217,7 +325,7 @@ export async function generatePrescriptionOrderPdfBlob(
     doctor: meta.doctor,
     patientId: meta.patientId
   });
-  const doc = await buildOrderPdf('PRESCRIPTION', prescriptionText, {
+  const doc = await buildOrderPdf('PRESCRIPTION', prescriptionText, null, {
     ...meta,
     clinicId: clinic.clinicId,
     clinicName: clinic.clinicName
@@ -235,7 +343,45 @@ export async function generateLabOrderPdfBlob(
     doctor: meta.doctor,
     patientId: meta.patientId
   });
-  const doc = await buildOrderPdf('LAB ORDER', labOrderText, {
+  const doc = await buildOrderPdf('LAB ORDER', labOrderText, null, {
+    ...meta,
+    clinicId: clinic.clinicId,
+    clinicName: clinic.clinicName
+  });
+  return doc.output('blob');
+}
+
+export async function generatePrescriptionOrderPdfFromUploadBlob(
+  uploadBlob: Blob,
+  fileName: string | null | undefined,
+  meta: ConsultationOrderPdfMeta
+): Promise<Blob> {
+  const clinic = await resolvePdfClinicContext({
+    clinicId: meta.clinicId,
+    clinicName: meta.clinicName,
+    doctor: meta.doctor,
+    patientId: meta.patientId
+  });
+  const doc = await buildOrderPdf('PRESCRIPTION', '', { blob: uploadBlob, fileName }, {
+    ...meta,
+    clinicId: clinic.clinicId,
+    clinicName: clinic.clinicName
+  });
+  return doc.output('blob');
+}
+
+export async function generateLabOrderPdfFromUploadBlob(
+  uploadBlob: Blob,
+  fileName: string | null | undefined,
+  meta: ConsultationOrderPdfMeta
+): Promise<Blob> {
+  const clinic = await resolvePdfClinicContext({
+    clinicId: meta.clinicId,
+    clinicName: meta.clinicName,
+    doctor: meta.doctor,
+    patientId: meta.patientId
+  });
+  const doc = await buildOrderPdf('LAB ORDER', '', { blob: uploadBlob, fileName }, {
     ...meta,
     clinicId: clinic.clinicId,
     clinicName: clinic.clinicName
@@ -258,6 +404,34 @@ export async function downloadPrescriptionOrderPdf(
 
 export async function downloadLabOrderPdf(labOrderText: string, meta: ConsultationOrderPdfMeta) {
   const blob = await generateLabOrderPdfBlob(labOrderText, meta);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = buildOrderDownloadFilename('lab', meta);
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadPrescriptionOrderPdfFromUploadBlob(
+  uploadBlob: Blob,
+  fileName: string | null | undefined,
+  meta: ConsultationOrderPdfMeta
+) {
+  const blob = await generatePrescriptionOrderPdfFromUploadBlob(uploadBlob, fileName, meta);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = buildOrderDownloadFilename('prescription', meta);
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadLabOrderPdfFromUploadBlob(
+  uploadBlob: Blob,
+  fileName: string | null | undefined,
+  meta: ConsultationOrderPdfMeta
+) {
+  const blob = await generateLabOrderPdfFromUploadBlob(uploadBlob, fileName, meta);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

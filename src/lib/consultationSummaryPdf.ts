@@ -24,15 +24,21 @@ export type ConsultationSummaryPdfMeta = {
   issuedAt?: Date;
 };
 
-const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
+const CLINICAL_SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'chief_complaint', label: 'Chief complaint' },
   { key: 'history_present_illness', label: 'History of present illness' },
   { key: 'past_medical_history', label: 'Past medical history' },
   { key: 'current_medications', label: 'Current medications' },
   { key: 'vital_signs', label: 'Vital signs' },
-  { key: 'labs_diagnostics', label: 'Lab Order' },
   { key: 'assessment_plan', label: 'Assessment & plan' },
-  { key: 'followup_date', label: 'Follow-up date' },
+  { key: 'followup_date', label: 'Follow-up date' }
+];
+
+/** Full section list (includes orders) — kept for callers that want every filled field. */
+const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
+  ...CLINICAL_SECTIONS.slice(0, 5),
+  { key: 'labs_diagnostics', label: 'Lab Order' },
+  ...CLINICAL_SECTIONS.slice(5),
   { key: 'prescription', label: 'Prescription' }
 ];
 
@@ -182,7 +188,7 @@ async function buildConsultationSummaryPdf(
   addLine('Clinical summary', 13, true);
   y += 4;
 
-  for (const { key, label } of SECTIONS) {
+  for (const { key, label } of CLINICAL_SECTIONS) {
     const value = sectionDisplayValue(key, summary[key]);
     if (!value) continue;
     addLine(label, 11, true);
@@ -190,19 +196,7 @@ async function buildConsultationSummaryPdf(
     y += 8;
   }
 
-  if (!sectionDisplayValue('prescription', summary.prescription) && summary.prescription_file_name?.trim()) {
-    addLine('Prescription (uploaded file)', 11, true);
-    addLine(summary.prescription_file_name.trim(), 10);
-    y += 8;
-  }
-  if (
-    !sectionDisplayValue('labs_diagnostics', summary.labs_diagnostics) &&
-    summary.lab_order_file_name?.trim()
-  ) {
-    addLine('Lab Order (uploaded file)', 11, true);
-    addLine(summary.lab_order_file_name.trim(), 10);
-    y += 8;
-  }
+  // Prescription and lab orders are generated/shown as separate PDFs.
 
   ensureSpace(40);
   y += 8;
@@ -286,6 +280,14 @@ export async function downloadConsultationSummaryPdf(
 }
 
 export function getConsultationSummarySections(summary: ConsultationSummary) {
+  return CLINICAL_SECTIONS.map(({ key, label }) => ({
+    label,
+    value: sectionDisplayValue(key, summary[key])
+  })).filter((section) => section.value);
+}
+
+/** All non-empty fields including prescription / lab order text (not used in summary PDF). */
+export function getConsultationAllSections(summary: ConsultationSummary) {
   return SECTIONS.map(({ key, label }) => ({
     label,
     value: sectionDisplayValue(key, summary[key])

@@ -146,7 +146,7 @@ function DoctorIncomingRequestsTable({
     columns,
     data,
     state: { isLoading },
-    layoutMode: 'grid-no-grow',
+    layoutMode: 'grid',
     enableColumnPinning: false,
     enableColumnActions: true,
     enableColumnFilters: true,
@@ -174,11 +174,18 @@ function DoctorIncomingRequestsTable({
       radius: 0,
       withBorder: false,
       className: 'doctors-mgmt-mrt-paper elixhealth-mrt-paper',
-      style: { height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }
+      style: {
+        flex: 1,
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column'
+      }
     },
     mantineTableContainerProps: {
       className: 'doctors-mgmt-mrt-container elixhealth-mrt-container',
-      style: { flex: 1, minHeight: 0, overflow: 'auto' }
+      style: { flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }
     },
     mantineTableProps: {
       highlightOnHover: true,

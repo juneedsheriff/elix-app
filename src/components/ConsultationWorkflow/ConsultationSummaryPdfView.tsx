@@ -8,12 +8,16 @@ import {
 } from '../../lib/consultationSummaryPdf';
 import {
   downloadLabOrderPdf,
-  downloadPrescriptionOrderPdf
+  downloadPrescriptionOrderPdf,
+  generateLabOrderPdfBlob,
+  generatePrescriptionOrderPdfBlob
 } from '../../lib/consultationOrdersPdf';
+import ImageLightboxGallery, { type LightboxImageItem } from '../common/ImageLightboxGallery';
 import { fetchDoctorById } from '../../lib/doctors';
 import { isImageFileName } from '../../lib/imageFiles';
 import { resolvePdfClinicContext } from '../../lib/pdfBranding';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
+import { fetchLatestConsultationOrderFile } from '../../lib/r2Storage';
 import { normalizeStorageAuthError } from '../../lib/supabaseSession';
 import type { Doctor } from '../../types/doctor';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
@@ -22,6 +26,21 @@ import './consultation-wizard.css';
 type ConsultationSummaryPdfViewProps = {
   summary: ConsultationSummary;
   request: OpinionRequest;
+};
+
+type DocKind = 'summary' | 'prescription' | 'lab';
+
+type DocPreviewState = {
+  url: string | null;
+  loading: boolean;
+  error: string | null;
+  isPdf: boolean;
+  isImage: boolean;
+};
+
+type OrderUploadFallback = {
+  path: string | null;
+  fileName: string | null;
 };
 
 function hasHonorificPrefix(name: string): boolean {
@@ -43,34 +62,193 @@ function withPatientHonorific(name: string | null, gender?: string | null): stri
   return name;
 }
 
-export default function ConsultationSummaryPdfView({ summary, request }: ConsultationSummaryPdfViewProps) {
-  const [downloading, setDownloading] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
+function emptyPreview(): DocPreviewState {
+  return { url: null, loading: false, error: null, isPdf: true, isImage: false };
+}
+
+function fileKindFromName(fileName: string): Pick<DocPreviewState, 'isPdf' | 'isImage'> {
+  const lower = fileName.toLowerCase();
+  return {
+    isPdf: lower.endsWith('.pdf'),
+    isImage: isImageFileName(fileName)
+  };
+}
+
+function isUploadedFilePlaceholder(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /^\[uploaded file:\s*.+\]$/i.test(value.trim());
+}
+
+function uploadedFileNameFromPlaceholder(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = value.trim().match(/^\[uploaded file:\s*(.+)\]$/i);
+  return match?.[1]?.trim() || null;
+}
+
+function resolveOrderUploadFallback(
+  request: OpinionRequest,
+  recordCategory: 'prescriptions' | 'lab_results',
+  preferredName?: string | null
+): OrderUploadFallback {
+  const records = request.records ?? [];
+  if (!records.length) return { path: null, fileName: null };
+
+  const isPrescriptionCategory = recordCategory === 'prescriptions';
+  const categoryKeywords = isPrescriptionCategory
+    ? ['prescription', 'prescriptions']
+    : ['lab_order', 'lab-order', 'lab order', 'lab_results', 'lab-results', 'lab results'];
+
+  const byCategory = records.filter((record) => {
+    const path = record.storage_path?.toLowerCase() ?? '';
+    const summary = record.summary?.toLowerCase() ?? '';
+    if (!path && !summary) return false;
+    if (path.includes(`/consultation-orders/${request.id}/${recordCategory}/`)) return true;
+    if (path.includes(`/consultation-orders/${request.id}/`) && categoryKeywords.some((k) => path.includes(k))) {
+      return true;
+    }
+    return categoryKeywords.some((k) => summary.includes(k));
+  });
+  if (!byCategory.length) return { path: null, fileName: null };
+
+  const preferred = preferredName?.trim().toLowerCase();
+  const exact = preferred
+    ? byCategory.find((record) => record.file_name?.trim().toLowerCase() === preferred)
+    : null;
+  const pick = exact ?? byCategory[byCategory.length - 1]!;
+
+  return {
+    path: pick.storage_path?.trim() || null,
+    fileName: pick.file_name?.trim() || null
+  };
+}
+
+export default function ConsultationSummaryPdfView({
+  summary,
+  request
+}: ConsultationSummaryPdfViewProps) {
+  const [summaryPreview, setSummaryPreview] = useState<DocPreviewState>(emptyPreview);
+  const [prescriptionPreview, setPrescriptionPreview] =
+    useState<DocPreviewState>(emptyPreview);
+  const [labPreview, setLabPreview] = useState<DocPreviewState>(emptyPreview);
+  const [summaryDownloading, setSummaryDownloading] = useState(false);
   const [prescriptionDownloading, setPrescriptionDownloading] = useState(false);
   const [labOrderDownloading, setLabOrderDownloading] = useState(false);
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [clinicId, setClinicId] = useState<string | null>(request.clinic_id?.trim() || null);
   const [clinicName, setClinicName] = useState<string | null>(request.clinic_name ?? null);
   const [clinicReady, setClinicReady] = useState(false);
-  const objectUrlRef = useRef<string | null>(null);
+
+  const summaryUrlRef = useRef<string | null>(null);
+  const prescriptionUrlRef = useRef<string | null>(null);
+  const labUrlRef = useRef<string | null>(null);
+
   const sections = getConsultationSummarySections(summary);
   const storedPath = summary.pdf_storage_path?.trim() ?? '';
-  const hasStoredPdf = Boolean(storedPath);
   const storedFileName = storedPath.split('/').pop() ?? 'consultation-notes';
-  const storedIsPdf = storedFileName.toLowerCase().endsWith('.pdf');
-  const storedIsImage = isImageFileName(storedFileName);
-  const hasStructuredPreview =
-    sections.length > 0 ||
-    Boolean(summary.prescription_file_name?.trim()) ||
-    Boolean(summary.lab_order_file_name?.trim());
+  const hasClinicalSummary =
+    sections.length > 0 || Boolean(storedPath);
+  const prescriptionPlaceholderName = uploadedFileNameFromPlaceholder(summary.prescription);
+  const labPlaceholderName = uploadedFileNameFromPlaceholder(summary.labs_diagnostics);
+  const hasPrescriptionPlaceholder = isUploadedFilePlaceholder(summary.prescription);
+  const hasLabOrderPlaceholder = isUploadedFilePlaceholder(summary.labs_diagnostics);
+  const prescriptionFallback = resolveOrderUploadFallback(
+    request,
+    'prescriptions',
+    prescriptionPlaceholderName ?? summary.prescription_file_name
+  );
+  const labFallback = resolveOrderUploadFallback(
+    request,
+    'lab_results',
+    labPlaceholderName ?? summary.lab_order_file_name
+  );
+  const prescriptionStoragePath =
+    summary.prescription_file_path?.trim() || prescriptionFallback.path || '';
+  const labStoragePath = summary.lab_order_file_path?.trim() || labFallback.path || '';
+  const prescriptionDisplayFileName =
+    summary.prescription_file_name?.trim() ||
+    prescriptionFallback.fileName ||
+    prescriptionPlaceholderName;
+  const labDisplayFileName =
+    summary.lab_order_file_name?.trim() || labFallback.fileName || labPlaceholderName;
   const hasPrescriptionOrder = Boolean(
-    summary.prescription?.trim() || summary.prescription_file_path?.trim()
+    summary.prescription_file_path?.trim() ||
+      prescriptionFallback.path ||
+      (!hasPrescriptionPlaceholder && summary.prescription?.trim()) ||
+      prescriptionPlaceholderName
   );
   const hasLabOrder = Boolean(
-    summary.labs_diagnostics?.trim() || summary.lab_order_file_path?.trim()
+    summary.lab_order_file_path?.trim() ||
+      labFallback.path ||
+      (!hasLabOrderPlaceholder && summary.labs_diagnostics?.trim()) ||
+      labPlaceholderName
   );
+
+  const resolveOrderUploadPathCandidates = async (
+    category: 'prescriptions' | 'lab_results',
+    currentPaths: Array<string | null | undefined>,
+    currentFileName: string | null | undefined
+  ): Promise<{ paths: string[]; fileName: string | null }> => {
+    const trimmedCurrent = currentPaths
+      .map((value) => value?.trim() || '')
+      .filter(Boolean);
+    const latest = await fetchLatestConsultationOrderFile(request.id, category);
+    const latestPath = latest.data?.storagePath?.trim() || '';
+
+    const unique = new Set<string>();
+    for (const path of [...trimmedCurrent, latestPath]) {
+      if (!path) continue;
+      unique.add(path);
+    }
+
+    return {
+      paths: [...unique],
+      fileName: latest.data?.fileName?.trim() || currentFileName?.trim() || null
+    };
+  };
+
+  const getDownloadUrlForPath = async (storagePath: string) => {
+    // Primary path: scoped to request for stricter access checks.
+    const scoped = await getMedicalRecordDownloadUrl(storagePath, {
+      requestId: request.id
+    });
+    if (scoped.data?.signedUrl && !scoped.error) return scoped;
+
+    // Fallback: some consultation order records are resolvable from vault context
+    // even when request-scoped lookup fails.
+    const unscoped = await getMedicalRecordDownloadUrl(storagePath);
+    if (unscoped.data?.signedUrl && !unscoped.error) return unscoped;
+
+    return scoped.error ? scoped : unscoped;
+  };
+
+  const resolveFirstAccessibleOrderFile = async (
+    category: 'prescriptions' | 'lab_results',
+    candidatePaths: Array<string | null | undefined>,
+    currentFileName: string | null | undefined
+  ): Promise<{ path: string | null; fileName: string | null; url: string | null; errorMessage: string | null }> => {
+    const resolved = await resolveOrderUploadPathCandidates(category, candidatePaths, currentFileName);
+    let lastErrorMessage: string | null = null;
+
+    for (const path of resolved.paths) {
+      const { data, error } = await getDownloadUrlForPath(path);
+      if (data?.signedUrl && !error) {
+        return {
+          path,
+          fileName: resolved.fileName || path.split('/').pop() || null,
+          url: data.signedUrl,
+          errorMessage: null
+        };
+      }
+      lastErrorMessage = normalizeStorageAuthError(error?.message ?? 'Could not load order file.');
+    }
+
+    return {
+      path: null,
+      fileName: resolved.fileName,
+      url: null,
+      errorMessage: lastErrorMessage
+    };
+  };
   const patientDisplayName = withPatientHonorific(request.patient_name, request.patient_gender);
   const doctorDisplayName = withDoctorHonorific(request.doctor_name);
   const doctorId =
@@ -78,6 +256,31 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
     request.selected_doctor_id?.trim() ||
     summary.doctor_id?.trim() ||
     null;
+
+  const revokeUrl = (ref: { current: string | null }) => {
+    if (ref.current?.startsWith('blob:')) {
+      URL.revokeObjectURL(ref.current);
+    }
+    ref.current = null;
+  };
+
+  const setPreviewUrl = (
+    ref: { current: string | null },
+    setter: (state: DocPreviewState | ((prev: DocPreviewState) => DocPreviewState)) => void,
+    url: string | null,
+    kind: Pick<DocPreviewState, 'isPdf' | 'isImage'>
+  ) => {
+    revokeUrl(ref);
+    ref.current = url;
+    setter((prev) => ({
+      ...prev,
+      url,
+      loading: false,
+      error: null,
+      isPdf: kind.isPdf,
+      isImage: kind.isImage
+    }));
+  };
 
   useEffect(() => {
     if (!doctorId) {
@@ -133,131 +336,285 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
     issuedAt: new Date(summary.updated_at || summary.created_at)
   };
 
+  // Consultation summary PDF
   useEffect(() => {
-    // Prefer a live-generated PDF so clinic branding matches the invoice.
-    if (!hasStructuredPreview) {
-      if (!storedPath) {
-        setPdfUrl(null);
-        setPdfError(null);
-        setPdfLoading(false);
-        return;
-      }
-
-      let cancelled = false;
-      const loadStored = async () => {
-        setPdfLoading(true);
-        setPdfError(null);
-        const { data, error } = await getMedicalRecordDownloadUrl(storedPath, {
-          requestId: request.id
-        });
-        if (cancelled) return;
-        if (error || !data?.signedUrl) {
-          setPdfUrl(null);
-          setPdfError(
-            normalizeStorageAuthError(error?.message ?? 'Could not load consultation notes file.')
-          );
-          setPdfLoading(false);
-          return;
-        }
-        if (objectUrlRef.current?.startsWith('blob:')) {
-          URL.revokeObjectURL(objectUrlRef.current);
-        }
-        objectUrlRef.current = data.signedUrl;
-        setPdfUrl(data.signedUrl);
-        setPdfLoading(false);
-      };
-      void loadStored();
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!clinicReady) {
-      setPdfLoading(true);
+    if (!hasClinicalSummary) {
+      revokeUrl(summaryUrlRef);
+      setSummaryPreview(emptyPreview());
       return;
     }
 
     let cancelled = false;
-    const loadGenerated = async () => {
-      setPdfLoading(true);
-      setPdfError(null);
-      try {
-        const blob = await generateConsultationSummaryPdfBlob(summary, meta);
-        if (cancelled) return;
-        if (objectUrlRef.current?.startsWith('blob:')) {
-          URL.revokeObjectURL(objectUrlRef.current);
+
+    const load = async () => {
+      setSummaryPreview((prev) => ({ ...prev, loading: true, error: null }));
+
+      // Prefer live-generated clinical notes PDF when structured clinical fields exist.
+      if (sections.length > 0) {
+        if (!clinicReady) return;
+        try {
+          const blob = await generateConsultationSummaryPdfBlob(summary, meta);
+          if (cancelled) return;
+          const url = URL.createObjectURL(blob);
+          setPreviewUrl(summaryUrlRef, setSummaryPreview, url, { isPdf: true, isImage: false });
+        } catch (err) {
+          if (cancelled) return;
+          setSummaryPreview({
+            url: null,
+            loading: false,
+            error:
+              err instanceof Error ? err.message : 'Could not generate consultation notes PDF.',
+            isPdf: true,
+            isImage: false
+          });
         }
-        const url = URL.createObjectURL(blob);
-        objectUrlRef.current = url;
-        setPdfUrl(url);
-      } catch (err) {
-        if (cancelled) return;
-        setPdfUrl(null);
-        setPdfError(err instanceof Error ? err.message : 'Could not generate consultation notes PDF.');
-      } finally {
-        if (!cancelled) setPdfLoading(false);
+        return;
       }
+
+      // File-only uploaded notes
+      if (!storedPath) {
+        setSummaryPreview(emptyPreview());
+        return;
+      }
+
+      const { data, error } = await getDownloadUrlForPath(storedPath);
+      if (cancelled) return;
+      if (error || !data?.signedUrl) {
+        setSummaryPreview({
+          url: null,
+          loading: false,
+          error: normalizeStorageAuthError(
+            error?.message ?? 'Could not load consultation notes file.'
+          ),
+          isPdf: true,
+          isImage: false
+        });
+        return;
+      }
+      revokeUrl(summaryUrlRef);
+      summaryUrlRef.current = data.signedUrl;
+      const kind = fileKindFromName(storedFileName);
+      setSummaryPreview({
+        url: data.signedUrl,
+        loading: false,
+        error: null,
+        ...kind
+      });
     };
-    void loadGenerated();
+
+    void load();
     return () => {
       cancelled = true;
     };
+    // meta/orderMeta are rebuilt each render; depend on stable clinic + summary fields
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
   }, [
-    hasStructuredPreview,
+    hasClinicalSummary,
+    sections.length,
     storedPath,
+    storedFileName,
     request.id,
     summary,
     clinicReady,
     clinicId,
     clinicName,
-    doctor?.id,
-    doctor?.clinic_id,
-    doctor?.clinic_street,
-    doctor?.clinic_city,
-    doctor?.clinic_name
+    doctor?.id
+  ]);
+
+  // Prescription PDF
+  useEffect(() => {
+    if (!hasPrescriptionOrder) {
+      revokeUrl(prescriptionUrlRef);
+      setPrescriptionPreview(emptyPreview());
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setPrescriptionPreview((prev) => ({ ...prev, loading: true, error: null }));
+
+      // Prefer the doctor-uploaded file when present (text + upload are both collected).
+      const resolved = await resolveFirstAccessibleOrderFile(
+        'prescriptions',
+        [summary.prescription_file_path, prescriptionFallback.path, prescriptionStoragePath],
+        prescriptionDisplayFileName
+      );
+      if (resolved.path && resolved.url) {
+        if (cancelled) return;
+        revokeUrl(prescriptionUrlRef);
+        prescriptionUrlRef.current = resolved.url;
+        const fileName = resolved.fileName || resolved.path.split('/').pop() || '';
+        setPrescriptionPreview({
+          url: resolved.url,
+          loading: false,
+          error: null,
+          ...fileKindFromName(fileName)
+        });
+        return;
+      }
+
+      const typed = summary.prescription?.trim();
+      if (typed && !isUploadedFilePlaceholder(typed)) {
+        if (!clinicReady) return;
+        try {
+          const blob = await generatePrescriptionOrderPdfBlob(typed, orderMeta);
+          if (cancelled) return;
+          const url = URL.createObjectURL(blob);
+          setPreviewUrl(prescriptionUrlRef, setPrescriptionPreview, url, {
+            isPdf: true,
+            isImage: false
+          });
+        } catch (err) {
+          if (cancelled) return;
+          setPrescriptionPreview({
+            url: null,
+            loading: false,
+            error: err instanceof Error ? err.message : 'Could not generate prescription PDF.',
+            isPdf: true,
+            isImage: false
+          });
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        if (typed && isUploadedFilePlaceholder(typed)) {
+          setPrescriptionPreview({
+            url: null,
+            loading: false,
+            error:
+              resolved.errorMessage || 'Uploaded prescription file was not found for this consultation.',
+            isPdf: true,
+            isImage: false
+          });
+          return;
+        }
+        setPrescriptionPreview(emptyPreview());
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
+  }, [
+    hasPrescriptionOrder,
+    summary.prescription,
+    summary.prescription_file_path,
+    summary.prescription_file_name,
+    request.records,
+    request.id,
+    prescriptionStoragePath,
+    prescriptionDisplayFileName,
+    clinicReady,
+    clinicId,
+    clinicName,
+    doctor?.id
+  ]);
+
+  // Lab order PDF
+  useEffect(() => {
+    if (!hasLabOrder) {
+      revokeUrl(labUrlRef);
+      setLabPreview(emptyPreview());
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setLabPreview((prev) => ({ ...prev, loading: true, error: null }));
+
+      // Prefer the doctor-uploaded file when present (text + upload are both collected).
+      const resolved = await resolveFirstAccessibleOrderFile(
+        'lab_results',
+        [summary.lab_order_file_path, labFallback.path, labStoragePath],
+        labDisplayFileName
+      );
+      if (resolved.path && resolved.url) {
+        if (cancelled) return;
+        revokeUrl(labUrlRef);
+        labUrlRef.current = resolved.url;
+        const fileName = resolved.fileName || resolved.path.split('/').pop() || '';
+        setLabPreview({
+          url: resolved.url,
+          loading: false,
+          error: null,
+          ...fileKindFromName(fileName)
+        });
+        return;
+      }
+
+      const typed = summary.labs_diagnostics?.trim();
+      if (typed && !isUploadedFilePlaceholder(typed)) {
+        if (!clinicReady) return;
+        try {
+          const blob = await generateLabOrderPdfBlob(typed, orderMeta);
+          if (cancelled) return;
+          const url = URL.createObjectURL(blob);
+          setPreviewUrl(labUrlRef, setLabPreview, url, { isPdf: true, isImage: false });
+        } catch (err) {
+          if (cancelled) return;
+          setLabPreview({
+            url: null,
+            loading: false,
+            error: err instanceof Error ? err.message : 'Could not generate lab order PDF.',
+            isPdf: true,
+            isImage: false
+          });
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        if (typed && isUploadedFilePlaceholder(typed)) {
+          setLabPreview({
+            url: null,
+            loading: false,
+            error: resolved.errorMessage || 'Uploaded lab order file was not found for this consultation.',
+            isPdf: true,
+            isImage: false
+          });
+          return;
+        }
+        setLabPreview(emptyPreview());
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
+  }, [
+    hasLabOrder,
+    summary.labs_diagnostics,
+    summary.lab_order_file_path,
+    summary.lab_order_file_name,
+    request.records,
+    request.id,
+    labStoragePath,
+    labDisplayFileName,
+    clinicReady,
+    clinicId,
+    clinicName,
+    doctor?.id
   ]);
 
   useEffect(() => {
     return () => {
-      if (objectUrlRef.current?.startsWith('blob:')) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-      objectUrlRef.current = null;
+      revokeUrl(summaryUrlRef);
+      revokeUrl(prescriptionUrlRef);
+      revokeUrl(labUrlRef);
     };
   }, []);
-
-  const handleDownload = async () => {
-    setDownloading(true);
-    try {
-      if (hasStructuredPreview) {
-        await downloadConsultationSummaryPdf(summary, meta);
-        return;
-      }
-      if (storedPath && pdfUrl) {
-        const anchor = document.createElement('a');
-        anchor.href = pdfUrl;
-        anchor.download = storedFileName || `consultation-summary-${request.patient_name ?? request.id}`;
-        anchor.click();
-        return;
-      }
-      await downloadConsultationSummaryPdf(summary, meta);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  const handleOpenInNewTab = () => {
-    if (pdfUrl) window.open(pdfUrl, '_blank', 'noopener,noreferrer');
-  };
 
   const downloadStoredOrderFile = async (
     storagePath: string,
     fileName: string | null | undefined,
     fallbackName: string
   ) => {
-    const { data, error } = await getMedicalRecordDownloadUrl(storagePath, {
-      requestId: request.id
-    });
+    const { data, error } = await getDownloadUrlForPath(storagePath);
     if (error || !data?.signedUrl) {
       throw new Error(
         normalizeStorageAuthError(error?.message ?? 'Could not download order file.')
@@ -267,28 +624,55 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
     anchor.href = data.signedUrl;
     anchor.download = fileName?.trim() || fallbackName;
     anchor.click();
-    // Signed URL is a blob: URL from getMedicalRecordDownloadUrl — release after click
     window.setTimeout(() => URL.revokeObjectURL(data.signedUrl), 60_000);
+  };
+
+  const handleSummaryDownload = async () => {
+    setSummaryDownloading(true);
+    try {
+      if (sections.length > 0) {
+        await downloadConsultationSummaryPdf(summary, meta);
+        return;
+      }
+      if (storedPath && summaryPreview.url) {
+        const anchor = document.createElement('a');
+        anchor.href = summaryPreview.url;
+        anchor.download =
+          storedFileName || `consultation-summary-${request.patient_name ?? request.id}`;
+        anchor.click();
+        return;
+      }
+      await downloadConsultationSummaryPdf(summary, meta);
+    } finally {
+      setSummaryDownloading(false);
+    }
   };
 
   const handlePrescriptionDownload = async () => {
     setPrescriptionDownloading(true);
     try {
-      const typed = summary.prescription?.trim();
-      if (typed) {
-        await downloadPrescriptionOrderPdf(typed, orderMeta);
-        return;
-      }
-      const path = summary.prescription_file_path?.trim();
-      if (path) {
+      const resolved = await resolveFirstAccessibleOrderFile(
+        'prescriptions',
+        [summary.prescription_file_path, prescriptionFallback.path, prescriptionStoragePath],
+        prescriptionDisplayFileName
+      );
+      if (resolved.path) {
         await downloadStoredOrderFile(
-          path,
-          summary.prescription_file_name,
+          resolved.path,
+          resolved.fileName ?? prescriptionDisplayFileName,
           'Prescription'
         );
+        return;
+      }
+      const typed = summary.prescription?.trim();
+      if (typed && !isUploadedFilePlaceholder(typed)) {
+        await downloadPrescriptionOrderPdf(typed, orderMeta);
       }
     } catch (err) {
-      setPdfError(err instanceof Error ? err.message : 'Could not download prescription.');
+      setPrescriptionPreview((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : 'Could not download prescription.'
+      }));
     } finally {
       setPrescriptionDownloading(false);
     }
@@ -297,120 +681,158 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
   const handleLabOrderDownload = async () => {
     setLabOrderDownloading(true);
     try {
-      const typed = summary.labs_diagnostics?.trim();
-      if (typed) {
-        await downloadLabOrderPdf(typed, orderMeta);
+      const resolved = await resolveFirstAccessibleOrderFile(
+        'lab_results',
+        [summary.lab_order_file_path, labFallback.path, labStoragePath],
+        labDisplayFileName
+      );
+      if (resolved.path) {
+        await downloadStoredOrderFile(
+          resolved.path,
+          resolved.fileName ?? labDisplayFileName,
+          'Lab-Order'
+        );
         return;
       }
-      const path = summary.lab_order_file_path?.trim();
-      if (path) {
-        await downloadStoredOrderFile(path, summary.lab_order_file_name, 'Lab-Order');
+      const typed = summary.labs_diagnostics?.trim();
+      if (typed && !isUploadedFilePlaceholder(typed)) {
+        await downloadLabOrderPdf(typed, orderMeta);
       }
     } catch (err) {
-      setPdfError(err instanceof Error ? err.message : 'Could not download lab order.');
+      setLabPreview((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : 'Could not download lab order.'
+      }));
     } finally {
       setLabOrderDownloading(false);
     }
   };
 
-  return (
-    <div className='consultation-summary-pdf'>
-      <div className='consultation-summary-pdf__toolbar'>
-        <span className='consultation-summary-pdf__toolbar-label'>
-          <FileText size={18} aria-hidden />
-          Consultation notes{storedIsPdf ? ' (PDF)' : ''}
-        </span>
-        <div className='consultation-summary-pdf__toolbar-actions'>
-          {pdfUrl ? (
-            <button
-              type='button'
-              className='secondary-btn consultation-summary-pdf__download'
-              onClick={handleOpenInNewTab}
-            >
-              <ExternalLink size={16} aria-hidden />
-              Open file
-            </button>
-          ) : null}
-          <button
-            type='button'
-            className='secondary-btn consultation-summary-pdf__download'
-            disabled={downloading || (hasStoredPdf && pdfLoading)}
-            onClick={() => void handleDownload()}
-          >
-            <Download size={16} aria-hidden />
-            {downloading ? 'Preparing…' : 'Download'}
-          </button>
-        </div>
-      </div>
-
-      {hasPrescriptionOrder || hasLabOrder ? (
+  const renderDocument = (opts: {
+    kind: DocKind;
+    title: string;
+    preview: DocPreviewState;
+    downloading: boolean;
+    onDownload: () => void;
+    emptyMessage: string;
+    visible: boolean;
+  }) => {
+    if (!opts.visible) return null;
+    const { preview, title } = opts;
+    const imageItems: LightboxImageItem[] =
+      preview.url && preview.isImage
+        ? [
+            {
+              id: `${opts.kind}-upload`,
+              src: preview.url,
+              alt: `${title} uploaded image`,
+              caption: title
+            }
+          ]
+        : [];
+    return (
+      <section className='consultation-summary-pdf__doc' aria-label={title}>
         <div className='consultation-summary-pdf__toolbar'>
           <span className='consultation-summary-pdf__toolbar-label'>
             <FileText size={18} aria-hidden />
-            Patient orders
+            {title}
           </span>
           <div className='consultation-summary-pdf__toolbar-actions'>
-            {hasPrescriptionOrder ? (
+            {preview.url ? (
               <button
                 type='button'
                 className='secondary-btn consultation-summary-pdf__download'
-                disabled={prescriptionDownloading}
-                onClick={() => void handlePrescriptionDownload()}
+                onClick={() => window.open(preview.url!, '_blank', 'noopener,noreferrer')}
               >
-                <Download size={16} aria-hidden />
-                {prescriptionDownloading ? 'Preparing…' : 'Prescription'}
+                <ExternalLink size={16} aria-hidden />
+                {preview.isImage ? 'Open image' : preview.isPdf ? 'View file' : 'Open file'}
               </button>
             ) : null}
-            {hasLabOrder ? (
-              <button
-                type='button'
-                className='secondary-btn consultation-summary-pdf__download'
-                disabled={labOrderDownloading}
-                onClick={() => void handleLabOrderDownload()}
-              >
-                <Download size={16} aria-hidden />
-                {labOrderDownloading ? 'Preparing…' : 'Lab Order'}
-              </button>
-            ) : null}
+            <button
+              type='button'
+              className='secondary-btn consultation-summary-pdf__download'
+              disabled={opts.downloading || preview.loading}
+              onClick={() => void opts.onDownload()}
+            >
+              <Download size={16} aria-hidden />
+              {opts.downloading ? 'Preparing…' : 'Download'}
+            </button>
           </div>
         </div>
-      ) : null}
 
-      {hasStoredPdf ? (
-        <div className='consultation-summary-pdf__viewer' aria-label='Stored consultation notes file'>
-          {pdfLoading ? (
+        <div className='consultation-summary-pdf__viewer' aria-label={`${title} preview`}>
+          {preview.loading ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
-              <Loader2 size={16} className='spin' aria-hidden /> Loading file…
+              <Loader2 size={16} className='spin' aria-hidden /> Preparing file…
             </p>
           ) : null}
-          {pdfError ? (
+          {preview.error ? (
             <p className='auth-error consultation-summary-pdf__viewer-status' role='alert'>
-              {pdfError}
+              {preview.error}
             </p>
           ) : null}
-          {pdfUrl && storedIsPdf ? (
+          {preview.url && preview.isPdf ? (
             <iframe
               className='consultation-summary-pdf__iframe'
-              src={pdfUrl}
-              title='Consultation summary PDF'
+              src={preview.url}
+              title={title}
             />
           ) : null}
-          {pdfUrl && storedIsImage ? (
-            <img
-              className='consultation-summary-pdf__image'
-              src={pdfUrl}
-              alt='Uploaded consultation notes'
-            />
+          {preview.url && !preview.isPdf && preview.isImage ? (
+            <div className='consultation-summary-pdf__lightbox'>
+              <ImageLightboxGallery images={imageItems} modalZIndex={600} />
+            </div>
           ) : null}
-          {pdfUrl && !storedIsPdf && !storedIsImage ? (
+          {preview.url && !preview.isPdf && !preview.isImage ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
               Preview is not available for this file type. Use Open file or Download.
             </p>
           ) : null}
+          {!preview.loading && !preview.error && !preview.url ? (
+            <p className='muted consultation-summary-pdf__viewer-status'>{opts.emptyMessage}</p>
+          ) : null}
         </div>
-      ) : null}
+      </section>
+    );
+  };
 
-      {hasStructuredPreview ? (
+  return (
+    <div className='consultation-summary-pdf consultation-summary-pdf--stack'>
+      {renderDocument({
+        kind: 'summary',
+        title: 'Consultation summary (PDF)',
+        preview: summaryPreview,
+        downloading: summaryDownloading,
+        onDownload: handleSummaryDownload,
+        emptyMessage: 'Consultation summary PDF will appear here when available.',
+        visible: hasClinicalSummary || (!hasPrescriptionOrder && !hasLabOrder)
+      })}
+
+      {renderDocument({
+        kind: 'prescription',
+        title: 'Prescription',
+        preview: prescriptionPreview,
+        downloading: prescriptionDownloading,
+        onDownload: handlePrescriptionDownload,
+        emptyMessage: 'Prescription will appear here when available.',
+        visible: hasPrescriptionOrder
+      })}
+
+      {renderDocument({
+        kind: 'lab',
+        title: 'Lab Order',
+        preview: labPreview,
+        downloading: labOrderDownloading,
+        onDownload: handleLabOrderDownload,
+        emptyMessage: 'Lab order will appear here when available.',
+        visible: hasLabOrder
+      })}
+
+      {/* Text fallback when summary generation fails */}
+      {!summaryPreview.url &&
+      !summaryPreview.loading &&
+      sections.length > 0 &&
+      summaryPreview.error ? (
         <div className='consultation-summary-pdf__page' aria-label='Consultation summary preview'>
           <header className='consultation-summary-pdf__header'>
             <p className='consultation-summary-pdf__brand'>ElixClinix</p>
@@ -437,19 +859,6 @@ export default function ConsultationSummaryPdfView({ summary, request }: Consult
               <p>{section.value}</p>
             </section>
           ))}
-
-          {!summary.prescription?.trim() && summary.prescription_file_name?.trim() ? (
-            <section className='consultation-summary-pdf__section'>
-              <h6>Prescription (uploaded)</h6>
-              <p>{summary.prescription_file_name.trim()}</p>
-            </section>
-          ) : null}
-          {!summary.labs_diagnostics?.trim() && summary.lab_order_file_name?.trim() ? (
-            <section className='consultation-summary-pdf__section'>
-              <h6>Lab Order (uploaded)</h6>
-              <p>{summary.lab_order_file_name.trim()}</p>
-            </section>
-          ) : null}
         </div>
       ) : null}
     </div>

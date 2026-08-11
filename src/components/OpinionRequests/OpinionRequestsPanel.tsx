@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Button, Group } from '@mantine/core';
+import { Button, TextInput } from '@mantine/core';
+import { IconSearch } from '@tabler/icons-react';
 import { ClipboardList, Loader2, RefreshCw } from 'lucide-react';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorIncomingRequestsCardList from './DoctorIncomingRequestsCardList';
-import DoctorIncomingRequestsTable from './DoctorIncomingRequestsTable';
 import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
 import {
   fetchDoctorOpinionRequests,
@@ -203,27 +203,48 @@ export default function OpinionRequestsPanel({
           : 'screen-grid doctors-screen'
       }
     >
-      <section className={isElixHealthWorkspace ? 'section-card doctor-cases-workspace__card' : 'section-card'}>
+      <section
+        className={
+          isElixHealthWorkspace
+            ? 'section-card doctor-cases-workspace__card elixhealth-datatable-card'
+            : 'section-card'
+        }
+      >
         <div className='section-head doctor-cases-workspace__head'>
           <div className='doctor-cases-workspace__head-copy'>
             <h3>
-              <ClipboardList size={22} className='inline-icon' aria-hidden /> {title}
+              <ClipboardList size={isElixHealthWorkspace ? 18 : 22} className='inline-icon' aria-hidden />{' '}
+              {title}
             </h3>
             <p>{subtitle}</p>
           </div>
           {view === 'doctor' && canLoad ? (
-            <Group gap='xs' className='doctor-cases-workspace__head-actions'>
+            <div className='doctor-cases-workspace__head-actions'>
+              {isElixHealthWorkspace ? (
+                <TextInput
+                  className='doctor-cases-workspace__search'
+                  placeholder='Search patients…'
+                  value={doctorSearch}
+                  onChange={(event) => setDoctorSearch(event.currentTarget.value)}
+                  leftSection={<IconSearch size={14} stroke={1.5} aria-hidden />}
+                  leftSectionPointerEvents='none'
+                  leftSectionWidth={30}
+                  radius='md'
+                  size='xs'
+                  aria-label='Search patient requests'
+                />
+              ) : null}
               <Button
                 variant='default'
                 radius='md'
-                size='sm'
-                leftSection={<RefreshCw size={16} className={refreshing ? 'spin' : undefined} />}
+                size={isElixHealthWorkspace ? 'xs' : 'sm'}
+                leftSection={<RefreshCw size={14} className={refreshing ? 'spin' : undefined} />}
                 loading={refreshing}
                 onClick={handleRefresh}
               >
                 Refresh
               </Button>
-            </Group>
+            </div>
           ) : null}
         </div>
 
@@ -278,20 +299,21 @@ export default function OpinionRequestsPanel({
         ) : null}
 
         {!loading && !error && canLoad && view === 'doctor' && isElixHealthWorkspace ? (
-          <DoctorIncomingRequestsTable
-            data={visibleRequests}
-            isLoading={loading}
-            search={doctorSearch}
-            onSearchChange={setDoctorSearch}
-            hasActiveFilters={Boolean(doctorSearch.trim())}
-            onClearFilters={() => setDoctorSearch('')}
-            onNavigate={onNavigate}
-            returnScreen={doctorReturnScreen}
-            onOpenError={showOpenRecordError}
-            onRequestUpdated={patchDoctorRequest}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-          />
+          <div className='doctor-cases-cards doctor-cases-workspace__cards-area'>
+            <DoctorIncomingRequestsCardList
+              data={visibleRequests}
+              search={doctorSearch}
+              onSearchChange={setDoctorSearch}
+              hasActiveFilters={Boolean(doctorSearch.trim())}
+              onClearFilters={() => setDoctorSearch('')}
+              onNavigate={onNavigate}
+              returnScreen={doctorReturnScreen}
+              onOpenError={showOpenRecordError}
+              onRequestUpdated={patchDoctorRequest}
+              layout='workspace'
+              hideSearch
+            />
+          </div>
         ) : null}
 
         {!loading && !error && canLoad && requests.length === 0 && !(view === 'doctor' && isElixHealthWorkspace) ? (

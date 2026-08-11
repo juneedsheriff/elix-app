@@ -2354,13 +2354,30 @@ async function enrichRequestsWithConsultationSummaries(
   if (!requests.length) return requests;
 
   const requestIds = requests.map((request) => request.id);
-  const { data, error } = await supabase
-    .from('consultation_summaries')
-    .select(CONSULTATION_SUMMARY_SELECT)
-    .in('request_id', requestIds)
-    .returns<ConsultationSummaryRow[]>();
+  const selects = [
+    CONSULTATION_SUMMARY_SELECT,
+    CONSULTATION_SUMMARY_SELECT.replace(
+      /,\s*prescription_file_path,\s*prescription_file_name,\s*lab_order_file_path,\s*lab_order_file_name/,
+      ''
+    )
+  ];
 
-  if (error || !data?.length) return requests;
+  let data: ConsultationSummaryRow[] | null = null;
+
+  for (const select of selects) {
+    const result = await supabase
+      .from('consultation_summaries')
+      .select(select)
+      .in('request_id', requestIds)
+      .returns<ConsultationSummaryRow[]>();
+
+    if (!result.error) {
+      data = result.data;
+      break;
+    }
+  }
+
+  if (!data?.length) return requests;
 
   const summaryByRequestId = new Map(
     data.map((summary) => [summary.request_id, mapConsultationSummaryRow(summary)])
@@ -2394,7 +2411,8 @@ export async function fetchPatientOpinionRequests(patientAuthUserId: string): Pr
 
   const mapped = (rows ?? []).map((row) => mapRequestRow(row, new Map()));
   const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
-  const data = await attachRequestRecords(withWorkflow);
+  const withRecords = await attachRequestRecords(withWorkflow);
+  const data = await enrichRequestsWithConsultationSummaries(withRecords);
   return {
     data,
     error: null,
@@ -2405,7 +2423,8 @@ export async function fetchPatientOpinionRequests(patientAuthUserId: string): Pr
 async function mapPatientOpinionRequestRows(rows: RequestListRow[]): Promise<OpinionRequest[]> {
   const mapped = rows.map((row) => mapRequestRow(row, new Map()));
   const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
-  return attachRequestRecords(withWorkflow);
+  const withRecords = await attachRequestRecords(withWorkflow);
+  return enrichRequestsWithConsultationSummaries(withRecords);
 }
 
 export async function fetchPatientOpinionRequestById(
@@ -2483,8 +2502,11 @@ async function mapStaffOpinionRequestRow(row: RequestListRow): Promise<OpinionRe
   const mapped = mapRequestRow(row, patientMap);
   const [withWorkflow] = await enrichRequestsWithWorkflowFields([mapped]);
   const [withRecords] = await attachRequestRecords([withWorkflow]);
-  const [enriched] = await enrichRequestsWithAssigneeNames(withRecords);
-  return enriched ?? null;
+  const [withAssignee] = await enrichRequestsWithAssigneeNames(withRecords);
+  const [enriched] = await enrichRequestsWithConsultationSummaries(
+    withAssignee ? [withAssignee] : []
+  );
+  return enriched ?? withAssignee ?? null;
 }
 
 /** Loads one staff-visible request with records and workflow fields (for live drawer refresh). */
@@ -4531,14 +4553,162 @@ function mapConsultationSummaryRow(row: ConsultationSummaryRow): ConsultationSum
 }
 
 export async function fetchConsultationSummary(requestId: string) {
-  const { data, error } = await supabase
-    .from('consultation_summaries')
-    .select(CONSULTATION_SUMMARY_SELECT)
-    .eq('request_id', requestId)
-    .maybeSingle<ConsultationSummaryRow>();
+  // Keep trying schema-compatible variants, but prefer ones that retain
+  // prescription/lab attachment columns so consultation modals can show files.
+  const withoutFollowup = CONSULTATION_SUMMARY_SELECT.replace(/,\s*followup_date/, '');
+  const withoutPastHistory = CONSULTATION_SUMMARY_SELECT.replace(
+    /,\s*past_medical_history/,
+    ''
+  );
+  const withoutFollowupAndPast = withoutFollowup.replace(/,\s*past_medical_history/, '');
+  const stripAttachmentCols = (value: string) =>
+    value.replace(
+      /,\s*prescription_file_path,\s*prescription_file_name,\s*lab_order_file_path,\s*lab_order_file_name/,
+      ''
+    );
 
-  if (error) return { data: null, error };
-  return { data: data ? mapConsultationSummaryRow(data) : null, error: null };
+  const selects = [
+    CONSULTATION_SUMMARY_SELECT,
+    withoutFollowup,
+    withoutPastHistory,
+    withoutFollowupAndPast,
+    stripAttachmentCols(CONSULTATION_SUMMARY_SELECT),
+    stripAttachmentCols(withoutFollowup),
+    stripAttachmentCols(withoutPastHistory),
+    stripAttachmentCols(withoutFollowupAndPast)
+  ];
+
+  let lastError: { message: string; code?: string } | null = null;
+
+  for (const select of selects) {
+    const { data, error } = await supabase
+      .from('consultation_summaries')
+      .select(select)
+      .eq('request_id', requestId)
+      .maybeSingle<ConsultationSummaryRow>();
+
+    if (!error) {
+      return { data: data ? mapConsultationSummaryRow(data) : null, error: null };
+    }
+
+    lastError = error;
+    const msg = error.message?.toLowerCase() ?? '';
+    const missingColumn =
+      msg.includes('column') ||
+      error.code === '42703' ||
+      msg.includes('prescription_file') ||
+      msg.includes('lab_order_file') ||
+      msg.includes('followup_date') ||
+      msg.includes('past_medical_history');
+    if (!missingColumn) break;
+  }
+
+  return { data: null, error: lastError };
+}
+
+/** Build a viewable summary PDF payload from legacy free-text `doctor_response`. */
+const LEGACY_RESPONSE_SECTION_TO_FIELD: Record<string, keyof ConsultationSummary> = {
+  'Chief Complaint': 'chief_complaint',
+  'History of Present Illness': 'history_present_illness',
+  'Past Medical History': 'past_medical_history',
+  'Current Medications': 'current_medications',
+  'Vital Signs': 'vital_signs',
+  'Lab Order': 'labs_diagnostics',
+  'Assessment & Plan': 'assessment_plan',
+  'Follow-up Date': 'followup_date',
+  Prescription: 'prescription'
+};
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parseDoctorResponseSections(doctorResponse: string): Partial<ConsultationSummary> {
+  const parsed: Partial<ConsultationSummary> = {};
+  const labels = Object.keys(LEGACY_RESPONSE_SECTION_TO_FIELD);
+  const labelPattern = labels.map(escapeRegex).join('|');
+  const sectionRegex = new RegExp(
+    `(?:^|\\n\\n)(${labelPattern}):\\n([\\s\\S]*?)(?=\\n\\n(?:${labelPattern}):\\n|$)`,
+    'g'
+  );
+
+  let match: RegExpExecArray | null = sectionRegex.exec(doctorResponse);
+  while (match) {
+    const label = match[1]?.trim();
+    const value = match[2]?.trim();
+    if (label && value) {
+      const field = LEGACY_RESPONSE_SECTION_TO_FIELD[label];
+      if (field) parsed[field] = value;
+    }
+    match = sectionRegex.exec(doctorResponse);
+  }
+
+  return parsed;
+}
+
+export function consultationSummaryFromDoctorResponse(
+  request: OpinionRequest,
+  doctorResponse: string
+): ConsultationSummary {
+  const trimmed = doctorResponse.trim();
+  const parsed = parseDoctorResponseSections(trimmed);
+  const hasParsedSections = Object.values(parsed).some(
+    (value) => typeof value === 'string' && value.trim().length > 0
+  );
+  return {
+    id: `legacy-${request.id}`,
+    request_id: request.id,
+    doctor_id: request.doctor_id?.trim() || request.selected_doctor_id?.trim() || '',
+    patient_auth_user_id: request.patient_id ?? null,
+    doctor_name: request.doctor_name ?? null,
+    doctor_specialty: request.doctor_specialty ?? null,
+    chief_complaint: parsed.chief_complaint ?? null,
+    history_present_illness: parsed.history_present_illness ?? null,
+    vital_signs: parsed.vital_signs ?? null,
+    current_medications: parsed.current_medications ?? null,
+    past_medical_history: parsed.past_medical_history ?? null,
+    labs_diagnostics: parsed.labs_diagnostics ?? null,
+    assessment_plan: parsed.assessment_plan ?? (hasParsedSections ? null : trimmed),
+    followup_date: parsed.followup_date ?? null,
+    prescription: parsed.prescription ?? null,
+    prescription_file_path: null,
+    prescription_file_name: null,
+    lab_order_file_path: null,
+    lab_order_file_name: null,
+    pdf_storage_path: null,
+    created_at: request.responded_at ?? request.created_at,
+    updated_at: request.responded_at ?? request.created_at,
+    scheduled_at: request.scheduled_at ?? null
+  };
+}
+
+/** Fill missing structured fields from legacy doctor_response sections when available. */
+export function mergeConsultationSummaryWithDoctorResponse(
+  request: OpinionRequest,
+  summary: ConsultationSummary | null | undefined,
+  doctorResponse: string | null | undefined
+): ConsultationSummary | null {
+  const trimmed = doctorResponse?.trim();
+  if (!trimmed) return summary ?? null;
+
+  const parsed = consultationSummaryFromDoctorResponse(request, trimmed);
+  if (!summary) return parsed;
+
+  const fill = (value: string | null | undefined, fallback: string | null | undefined) =>
+    value?.trim() ? value : fallback ?? value ?? null;
+
+  return {
+    ...summary,
+    chief_complaint: fill(summary.chief_complaint, parsed.chief_complaint),
+    history_present_illness: fill(summary.history_present_illness, parsed.history_present_illness),
+    vital_signs: fill(summary.vital_signs, parsed.vital_signs),
+    current_medications: fill(summary.current_medications, parsed.current_medications),
+    past_medical_history: fill(summary.past_medical_history, parsed.past_medical_history),
+    labs_diagnostics: fill(summary.labs_diagnostics, parsed.labs_diagnostics),
+    assessment_plan: fill(summary.assessment_plan, parsed.assessment_plan),
+    followup_date: fill(summary.followup_date, parsed.followup_date),
+    prescription: fill(summary.prescription, parsed.prescription)
+  };
 }
 
 function shouldCloseRequestAfterConsultation(request: OpinionRequest): boolean {
@@ -4809,7 +4979,8 @@ const CONSULTATION_NOTES_EXTENSION_MIME: Record<string, string> = {
 };
 
 const CONSULTATION_NOTES_ALLOWED_EXTENSIONS = new Set(Object.keys(CONSULTATION_NOTES_EXTENSION_MIME));
-const PRESCRIPTION_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif']);
+/** Prescription and lab order attachments — same document / image set. */
+const CONSULTATION_ORDER_FILE_EXTENSIONS = CONSULTATION_NOTES_ALLOWED_EXTENSIONS;
 
 function isMissingPrescriptionLabOrderColumnsError(error: { message?: string; code?: string } | null) {
   const msg = error?.message?.toLowerCase() ?? '';
@@ -4903,11 +5074,11 @@ export function consultationNotesFileValidationError(file: File): string | null 
 
 export function prescriptionImageValidationError(file: File): string | null {
   if (file.size < 1 || file.size > CONSULTATION_NOTES_MAX_BYTES) {
-    return 'Prescription image must be between 1 byte and 10 MB.';
+    return 'Prescription file must be between 1 byte and 10 MB.';
   }
   const ext = consultationNotesFileExtension(file);
-  if (!PRESCRIPTION_IMAGE_EXTENSIONS.has(ext)) {
-    return 'Prescription image must be JPG, PNG, WebP, HEIC, or GIF.';
+  if (!CONSULTATION_ORDER_FILE_EXTENSIONS.has(ext)) {
+    return 'Prescription file must be PDF, JPG, PNG, DOC, or DOCX.';
   }
   return null;
 }
@@ -4917,7 +5088,7 @@ export function labOrderFileValidationError(file: File): string | null {
     return 'Lab order file must be between 1 byte and 10 MB.';
   }
   const ext = consultationNotesFileExtension(file);
-  if (!CONSULTATION_NOTES_ALLOWED_EXTENSIONS.has(ext)) {
+  if (!CONSULTATION_ORDER_FILE_EXTENSIONS.has(ext)) {
     return 'Lab order file must be PDF, JPG, PNG, DOC, or DOCX.';
   }
   return null;

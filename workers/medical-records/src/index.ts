@@ -30,21 +30,37 @@ function jsonResponse(body: unknown, status: number, origin: string | null, env:
   });
 }
 
-async function getAuthUser(request: Request, env: Env): Promise<AuthUser | null> {
+type AuthLookup = { user: AuthUser | null; reason?: string };
+
+async function getAuthUser(request: Request, env: Env): Promise<AuthLookup> {
   const auth = request.headers.get('Authorization');
-  if (!auth?.startsWith('Bearer ')) return null;
-  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return null;
+  if (!auth?.startsWith('Bearer ')) {
+    return { user: null, reason: 'missing_bearer' };
+  }
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    return { user: null, reason: 'worker_missing_supabase_env' };
+  }
 
-  const res = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`, {
-    headers: {
-      Authorization: auth,
-      apikey: env.SUPABASE_ANON_KEY
-    }
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`, {
+      headers: {
+        Authorization: auth,
+        apikey: env.SUPABASE_ANON_KEY
+      }
+    });
+  } catch {
+    return { user: null, reason: 'auth_upstream_unreachable' };
+  }
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    return { user: null, reason: `auth_user_${res.status}` };
+  }
   const user = (await res.json()) as { id?: string; email?: string | null };
-  return user.id ? { id: user.id, email: user.email ?? null } : null;
+  if (!user.id) {
+    return { user: null, reason: 'auth_user_empty' };
+  }
+  return { user: { id: user.id, email: user.email ?? null } };
 }
 
 function assertOwnsPath(allowedPrefixes: string[], storagePath: string): void {
@@ -174,10 +190,14 @@ async function canAccessConsultationSummaryPdfForRequest(
 
   const base = env.SUPABASE_URL.replace(/\/$/, '');
   const normalizedPath = storagePath.trim();
+  const rid = requestId.trim();
+  const expectedPrefix = `consultation-summaries/${rid}/`;
+  if (!normalizedPath.startsWith(expectedPrefix)) return false;
+
   const select = 'id,request_id,pdf_storage_path,patient_auth_user_id,doctor_id';
 
   const fetchSummary = async (useServiceRole: boolean) => {
-    const url = `${base}/rest/v1/consultation_summaries?request_id=eq.${encodeURIComponent(requestId.trim())}&select=${select}&limit=1`;
+    const url = `${base}/rest/v1/consultation_summaries?request_id=eq.${encodeURIComponent(rid)}&select=${select}&limit=1`;
     const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, useServiceRole) });
     if (!res.ok) return null;
     const rows = (await res.json()) as {
@@ -188,27 +208,56 @@ async function canAccessConsultationSummaryPdfForRequest(
     return rows[0] ?? null;
   };
 
+  const fetchRequestPatientId = async (useServiceRole: boolean) => {
+    const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(rid)}&select=id,patient_id&limit=1`;
+    const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, useServiceRole) });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as { patient_id?: string | null }[];
+    return rows[0]?.patient_id?.trim() || null;
+  };
+
   let summary = await fetchSummary(false);
   const staff = await isStaffMember(userId, authHeader, env);
 
   if (!summary && staff && env.SUPABASE_SERVICE_ROLE_KEY) {
     summary = await fetchSummary(true);
-    if (summary) {
-      const visibleToStaff = await fetchSummary(false);
-      if (!visibleToStaff) return false;
-    }
   }
 
-  if (!summary?.pdf_storage_path?.trim()) return false;
-  if (summary.pdf_storage_path.trim() !== normalizedPath) return false;
+  // Prefer exact DB path when known; still allow same-request folder for re-uploaded files.
+  if (summary?.pdf_storage_path?.trim() && summary.pdf_storage_path.trim() !== normalizedPath) {
+    // Allow if path is still under this request's consultation-summaries prefix (retries / rename).
+    if (!normalizedPath.startsWith(expectedPrefix)) return false;
+  }
 
-  if (summary.patient_auth_user_id === userId) return true;
+  if (summary?.patient_auth_user_id === userId) return true;
   if (staff) return true;
 
-  if (await canDoctorAccessRequest(userId, authHeader, requestId, env, email)) return true;
+  let patientId = await fetchRequestPatientId(false);
+  if (!patientId && staff && env.SUPABASE_SERVICE_ROLE_KEY) {
+    patientId = await fetchRequestPatientId(true);
+  }
+  if (patientId && patientId === userId) return true;
 
-  const doctorIds = await getDoctorIdsForAuthUser(userId, authHeader, env, email);
-  return doctorIds.some((id) => summary.doctor_id === id);
+  // RLS-visible request ⇒ doctor (or coordinated access) may download.
+  if (await canDoctorAccessRequest(userId, authHeader, rid, env, email)) return true;
+
+  if (summary?.doctor_id) {
+    const doctorIds = await getDoctorIdsForAuthUser(userId, authHeader, env, email);
+    if (doctorIds.some((id) => summary!.doctor_id === id)) return true;
+  }
+
+  // Patient / staff can SELECT the summary under RLS (migration 080+) even without
+  // patient_auth_user_id set — allow download when the row is visible and path matches.
+  if (summary && (await canAccessStoragePathViaRls(authHeader, normalizedPath, env))) {
+    return true;
+  }
+
+  // Staff coordinating this request may open notes even if path row filters lag behind.
+  if (staff && (await canStaffCoordinateRequest(userId, authHeader, rid, env))) {
+    return true;
+  }
+
+  return false;
 }
 
 const REQUEST_RECORD_CATEGORIES = new Set([
@@ -224,6 +273,20 @@ const REQUEST_RECORD_CATEGORIES = new Set([
 
 const REQUEST_RECORD_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'doc', 'docx']);
 
+/** Doctor prescription / lab-order uploads (typed PDFs or photo/scan attachments). */
+const CONSULTATION_ORDER_EXTENSIONS = new Set([
+  'pdf',
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'heic',
+  'heif',
+  'gif',
+  'doc',
+  'docx'
+]);
+
 function requestRecordStoragePrefix(folder: string, requestId: string): string {
   return `${folder}/request-records/${requestId.trim()}/`;
 }
@@ -231,6 +294,11 @@ function requestRecordStoragePrefix(folder: string, requestId: string): string {
 function isAllowedRequestRecordFileName(fileName: string): boolean {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   return REQUEST_RECORD_EXTENSIONS.has(ext);
+}
+
+function isAllowedConsultationOrderFileName(fileName: string): boolean {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return CONSULTATION_ORDER_EXTENSIONS.has(ext);
 }
 
 async function canStaffCoordinateRequest(
@@ -596,12 +664,101 @@ async function canAccessStoragePathViaRls(
     if (Array.isArray(summaryRows) && summaryRows.length > 0) return true;
   }
 
+  const prescriptionUrl = `${base}/rest/v1/consultation_summaries?prescription_file_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const prescriptionRes = await fetch(prescriptionUrl, { headers });
+  if (prescriptionRes.ok) {
+    const rows = (await prescriptionRes.json()) as unknown[];
+    if (Array.isArray(rows) && rows.length > 0) return true;
+  }
+
+  const labOrderUrl = `${base}/rest/v1/consultation_summaries?lab_order_file_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
+  const labOrderRes = await fetch(labOrderUrl, { headers });
+  if (labOrderRes.ok) {
+    const rows = (await labOrderRes.json()) as unknown[];
+    if (Array.isArray(rows) && rows.length > 0) return true;
+  }
+
   const invoiceUrl = `${base}/rest/v1/opinion_requests?invoice_pdf_storage_path=eq.${encodeURIComponent(storagePath)}&select=id&limit=1`;
   const invoiceRes = await fetch(invoiceUrl, { headers });
   if (!invoiceRes.ok) return false;
 
   const invoiceRows = (await invoiceRes.json()) as unknown[];
   return Array.isArray(invoiceRows) && invoiceRows.length > 0;
+}
+
+async function canAccessConsultationOrderPath(
+  authHeader: string,
+  userId: string,
+  requestId: string,
+  storagePath: string,
+  env: Env,
+  email?: string | null
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+
+  const rid = requestId.trim();
+  const path = storagePath.trim();
+  const orderMatch = path.match(
+    /^([^/]+)\/consultation-orders\/([^/]+)\/(prescriptions|lab_results)\//
+  );
+
+  // Path under consultation-orders must match this request id.
+  if (orderMatch && orderMatch[2] !== rid) return false;
+  if (orderMatch && (await canDoctorAccessRequest(userId, authHeader, rid, env, email))) {
+    return true;
+  }
+
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const select = 'id,request_id,prescription_file_path,lab_order_file_path,patient_auth_user_id,doctor_id';
+  const fetchSummary = async (useServiceRole: boolean) => {
+    const url = `${base}/rest/v1/consultation_summaries?request_id=eq.${encodeURIComponent(rid)}&select=${select}&limit=1`;
+    const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, useServiceRole) });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as {
+      prescription_file_path?: string | null;
+      lab_order_file_path?: string | null;
+      patient_auth_user_id?: string | null;
+      doctor_id?: string | null;
+    }[];
+    return rows[0] ?? null;
+  };
+
+  let summary = await fetchSummary(false);
+  const staff = await isStaffMember(userId, authHeader, env);
+  if (!summary && staff && env.SUPABASE_SERVICE_ROLE_KEY) {
+    summary = await fetchSummary(true);
+  }
+
+  const listedPath =
+    summary != null &&
+    (summary.prescription_file_path?.trim() === path ||
+      summary.lab_order_file_path?.trim() === path);
+
+  // Uploaded order file listed on the summary, or any file under this request's order folder.
+  if (!listedPath && !orderMatch) return false;
+
+  if (summary?.patient_auth_user_id === userId) return true;
+  if (staff) return true;
+  if (await canDoctorAccessRequest(userId, authHeader, rid, env, email)) return true;
+
+  if (summary?.doctor_id) {
+    const doctorIds = await getDoctorIdsForAuthUser(userId, authHeader, env, email);
+    if (doctorIds.some((id) => summary!.doctor_id === id)) return true;
+  }
+
+  const reqUrl = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(rid)}&select=patient_id&limit=1`;
+  const reqRes = await fetch(reqUrl, {
+    headers: supabaseRestHeaders(authHeader, env, false)
+  });
+  if (reqRes.ok) {
+    const rows = (await reqRes.json()) as { patient_id?: string | null }[];
+    if (rows[0]?.patient_id === userId) return true;
+  }
+
+  if (staff && (await canStaffCoordinateRequest(userId, authHeader, rid, env))) return true;
+  if (await canAccessStoragePathViaRls(authHeader, path, env)) return true;
+
+  return false;
 }
 
 async function assertCanAccessPath(
@@ -619,8 +776,18 @@ async function assertCanAccessPath(
     return;
   }
 
-  if (options?.requestId?.trim() && options.userId) {
-    const requestId = options.requestId.trim();
+  const orderRequestId =
+    storagePath.match(/^[^/]+\/consultation-orders\/([^/]+)\//)?.[1] ?? null;
+
+  const pathRequestId =
+    options?.requestId?.trim() ||
+    storagePath.match(/^consultation-summaries\/([^/]+)\//)?.[1] ||
+    storagePath.match(/^consultation-invoices\/([^/]+)\//)?.[1] ||
+    orderRequestId ||
+    null;
+
+  if (pathRequestId && options?.userId) {
+    const requestId = pathRequestId;
     const proofAllowed = await canAccessPaymentProofForRequest(
       authHeader,
       options.userId,
@@ -648,6 +815,16 @@ async function assertCanAccessPath(
       env
     );
     if (invoiceAllowed) return;
+
+    const orderAllowed = await canAccessConsultationOrderPath(
+      authHeader,
+      options.userId,
+      requestId,
+      storagePath,
+      env,
+      options.email
+    );
+    if (orderAllowed) return;
   }
 
   const allowed = await canAccessStoragePathViaRls(authHeader, storagePath, env);
@@ -857,6 +1034,54 @@ async function canDoctorUploadConsultationOrderPath(
   return true;
 }
 
+async function canPatientAccessRequest(
+  userId: string,
+  authHeader: string,
+  requestId: string,
+  env: Env
+): Promise<boolean> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return false;
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url = `${base}/rest/v1/opinion_requests?id=eq.${encodeURIComponent(requestId)}&select=patient_id&limit=1`;
+  const res = await fetch(url, { headers: supabaseRestHeaders(authHeader, env, false) });
+  if (!res.ok) return false;
+  const rows = (await res.json()) as { patient_id?: string | null }[];
+  return rows[0]?.patient_id?.trim() === userId;
+}
+
+async function fetchLatestConsultationOrderFile(
+  user: AuthUser,
+  authHeader: string,
+  requestId: string,
+  recordCategory: 'prescriptions' | 'lab_results',
+  env: Env
+): Promise<{ storagePath: string; fileName: string | null } | null> {
+  const canDoctor = await canDoctorAccessRequest(user.id, authHeader, requestId, env, user.email);
+  const staff = await isStaffMember(user.id, authHeader, env);
+  const canStaff = staff && (await canStaffCoordinateRequest(user.id, authHeader, requestId, env));
+  const canPatient = await canPatientAccessRequest(user.id, authHeader, requestId, env);
+
+  if (!canDoctor && !canStaff && !canPatient) return null;
+
+  const patientContext = await getPatientVaultContextForRequest(requestId, authHeader, env);
+  if (!patientContext) return null;
+
+  const prefix = consultationOrderStoragePrefix(patientContext.folder, requestId, recordCategory);
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  const url =
+    `${base}/rest/v1/uploaded_files?storage_path=like.${encodeURIComponent(prefix + '%')}` +
+    '&select=storage_path,file_name,uploaded_at,id&order=uploaded_at.desc,id.desc&limit=1';
+  const res = await fetch(url, {
+    headers: supabaseRestHeaders(authHeader, env, Boolean(env.SUPABASE_SERVICE_ROLE_KEY))
+  });
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Array<{ storage_path?: string | null; file_name?: string | null }>;
+  const row = rows[0];
+  const storagePath = row?.storage_path?.trim();
+  if (!storagePath) return null;
+  return { storagePath, fileName: row.file_name?.trim() || null };
+}
+
 async function removePreviousConsultationOrderRecords(
   folder: string,
   requestId: string,
@@ -975,12 +1200,27 @@ export default {
     }
 
     try {
-      const user = await getAuthUser(request, env);
+      const { user, reason: authReason } = await getAuthUser(request, env);
       if (!user) {
+        const hintByReason: Record<string, string> = {
+          missing_bearer:
+            'Send Authorization: Bearer <supabase_access_token> from a signed-in ElixClinix Health session (patient, doctor, or staff).',
+          worker_missing_supabase_env:
+            'Medical-records worker is missing SUPABASE_URL or SUPABASE_ANON_KEY (must match the frontend project). Set secrets with wrangler secret put.',
+          auth_upstream_unreachable:
+            'Worker could not reach Supabase auth. Check SUPABASE_URL on the medical-records worker.',
+          auth_user_401:
+            'Access token was rejected by Supabase (401). Sign out and sign in again; confirm worker SUPABASE_ANON_KEY matches VITE_SUPABASE_ANON_KEY.',
+          auth_user_403:
+            'Access token was forbidden by Supabase (403). Confirm worker SUPABASE_ANON_KEY matches VITE_SUPABASE_ANON_KEY for the same project.',
+          auth_user_empty: 'Supabase returned no user for this token. Sign out and sign in again.'
+        };
         return jsonResponse(
           {
             error: 'Unauthorized',
-            hint: 'Send Authorization: Bearer <supabase_access_token> from a signed-in ElixClinix Health session (patient, doctor, or staff).'
+            hint:
+              (authReason && hintByReason[authReason]) ||
+              `Authentication failed (${authReason ?? 'unknown'}). Sign out and sign in again; confirm VITE_R2_API_URL targets this worker and SUPABASE_URL/ANON_KEY match the app.`
           },
           401,
           origin,
@@ -1150,8 +1390,16 @@ export default {
         }
 
         const rawFileName = body.fileName?.trim() || 'consultation-order.pdf';
-        if (!rawFileName.toLowerCase().endsWith('.pdf')) {
-          return jsonResponse({ error: 'Consultation order files must be PDF.' }, 400, origin, env);
+        if (!isAllowedConsultationOrderFileName(rawFileName)) {
+          return jsonResponse(
+            {
+              error:
+                'Consultation order files must be PDF, JPG, PNG, DOC, or DOCX (WebP, HEIC, and GIF images are also allowed).'
+            },
+            400,
+            origin,
+            env
+          );
         }
 
         const requestId = body.requestId.trim();
@@ -1256,6 +1504,47 @@ export default {
         }
 
         return jsonResponse({ ok: true }, 200, origin, env);
+      }
+
+      if (pathname === '/v1/consultation-order/latest' && request.method === 'POST') {
+        const body = (await request.json()) as {
+          requestId?: string;
+          recordCategory?: string;
+        };
+        const requestId = body.requestId?.trim() ?? '';
+        const recordCategory = body.recordCategory?.trim() ?? '';
+        if (!requestId) {
+          return jsonResponse({ error: 'requestId is required' }, 400, origin, env);
+        }
+        if (!CONSULTATION_ORDER_CATEGORIES.has(recordCategory)) {
+          return jsonResponse(
+            { error: 'recordCategory must be prescriptions or lab_results' },
+            400,
+            origin,
+            env
+          );
+        }
+
+        const latest = await fetchLatestConsultationOrderFile(
+          user,
+          authHeader,
+          requestId,
+          recordCategory as 'prescriptions' | 'lab_results',
+          env
+        );
+        if (!latest) {
+          return jsonResponse({ error: 'No consultation order file found.' }, 404, origin, env);
+        }
+
+        return jsonResponse(
+          {
+            storagePath: latest.storagePath,
+            fileName: latest.fileName
+          },
+          200,
+          origin,
+          env
+        );
       }
 
       if (pathname === '/v1/request-records/upload-url' && request.method === 'POST') {

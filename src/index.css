@@ -825,6 +825,80 @@ select {
   overflow-y: auto;
 }
 
+.sidebar-clinic-doctors {
+  margin-top: 0.55rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-clinic-doctors__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.sidebar-clinic-doctors__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sidebar-clinic-doctors__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.sidebar-clinic-doctors__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.sidebar-clinic-doctors__avatar--photo {
+  background: #fff;
+}
+
+.sidebar-clinic-doctors__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sidebar-clinic-doctors__avatar--initials {
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sidebar-clinic-doctors__name {
+  font-size: 0.84rem;
+  line-height: 1.2;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-clinic-doctors__empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
 .sidebar-footer {
   flex-shrink: 0;
   margin-top: auto;
@@ -2718,8 +2792,35 @@ select {
 .doctor-consultation-page__main {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
   min-width: 0;
+}
+
+.doctor-consultation-page__submitted-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.95rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--border, #d1d5db) 90%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface, #fff) 92%, #f0f9fb);
+}
+
+.doctor-consultation-page__submitted-notes-head h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.doctor-consultation-page__submitted-notes-hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.doctor-consultation-page__submitted-notes .consultation-summary-pdf__iframe {
+  min-height: min(42vh, 24rem);
+  height: 24rem;
 }
 
 .doctor-consultation-page__case-context-action {
@@ -4005,6 +4106,85 @@ body:has(.elixhealth-app),
   gap: 0.2rem;
 }
 
+.elixhealth-sidebar-section--doctors {
+  margin-top: 1rem;
+}
+
+.elixhealth-sidebar-doctors-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0 0 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.elixhealth-sidebar-doctors-menu {
+  margin-top: 0.45rem;
+}
+
+.elixhealth-sidebar-link--doctors-menu {
+  cursor: default;
+}
+
+.elixhealth-sidebar-doctors-count {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.78rem;
+}
+
+.elixhealth-sidebar-doctors-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.3rem 0.35rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.elixhealth-sidebar-doctors-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: grid;
+  place-content: center;
+  overflow: hidden;
+}
+
+.elixhealth-sidebar-doctors-avatar--photo {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.elixhealth-sidebar-doctors-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.elixhealth-sidebar-doctors-avatar--initials {
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.elixhealth-sidebar-doctors-name {
+  min-width: 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elixhealth-sidebar-doctors-empty {
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
 .elixhealth-sidebar-link {
   position: relative;
   display: flex;
@@ -4184,14 +4364,46 @@ body:has(.elixhealth-app),
 
 /* Admin data tables (Mantine React Table) */
 .elixhealth-content:has(.elixhealth-datatable-page),
-.elixhealth-content:has(.doctor-cases-workspace) {
+.elixhealth-content:has(.doctor-cases-workspace),
+.elixhealth-content:has(.elixhealth-doctor-dashboard) {
   overflow: hidden;
   padding-bottom: 1rem;
+}
+
+/* Doctor workspace: page fills viewport so the patient table can use remaining height */
+.elixhealth-content > .elixhealth-doctor-dashboard,
+.elixhealth-content > .doctor-dashboard-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.elixhealth-content:has(.elixhealth-doctor-dashboard),
+.elixhealth-content:has(.doctor-dashboard-page.elixhealth-doctor-dashboard) {
+  padding-top: 0.9rem;
+  padding-bottom: 0.75rem;
+}
+
+.elixhealth-content > .elixhealth-doctor-dashboard > .doctor-dashboard-welcome,
+.elixhealth-content > .doctor-dashboard-page > .doctor-dashboard-welcome {
+  flex: 0 0 auto;
+}
+
+.elixhealth-content > .elixhealth-doctor-dashboard > .doctor-cases-workspace,
+.elixhealth-content > .doctor-dashboard-page > .doctor-cases-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .elixhealth-datatable-page {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -4199,6 +4411,7 @@ body:has(.elixhealth-app),
 .elixhealth-datatable-card {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -4211,6 +4424,7 @@ body:has(.elixhealth-app),
 .elixhealth-datatable-card > * {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -4218,10 +4432,18 @@ body:has(.elixhealth-app),
 /* Tablet / phone: page scrolls so the requests table is not crushed to 0 height */
 @media (max-width: 1024px) {
   .elixhealth-content:has(.elixhealth-datatable-page),
-  .elixhealth-content:has(.doctor-cases-workspace) {
+  .elixhealth-content:has(.doctor-cases-workspace),
+  .elixhealth-content:has(.elixhealth-doctor-dashboard) {
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .elixhealth-content > .elixhealth-doctor-dashboard,
+  .elixhealth-content > .doctor-dashboard-page {
+    flex: 1 0 auto;
+    height: auto;
+    min-height: min(100%, 100dvh - 8rem);
   }
 
   .elixhealth-datatable-page,

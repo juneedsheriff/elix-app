@@ -439,6 +439,23 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
       const key = `${summary.id}:${type}`;
       setDownloadingOrderKey(key);
       try {
+        // Prefer doctor-uploaded attachment when both text and file were captured.
+        if (storagePath) {
+          const { data, error } = await getMedicalRecordDownloadUrl(storagePath, {
+            requestId: summary.request_id
+          });
+          if (error || !data?.signedUrl) {
+            setStatusMessage(error?.message ?? 'Could not download order file.');
+            return;
+          }
+          const anchor = document.createElement('a');
+          anchor.href = data.signedUrl;
+          anchor.download = fileName || (type === 'prescription' ? 'Prescription' : 'Lab-Order');
+          anchor.click();
+          window.setTimeout(() => URL.revokeObjectURL(data.signedUrl), 60_000);
+          return;
+        }
+
         if (text) {
           const meta = {
             patientName: summary.patient_name,
@@ -457,21 +474,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
           } else {
             await downloadLabOrderPdf(text, meta);
           }
-          return;
         }
-
-        const { data, error } = await getMedicalRecordDownloadUrl(storagePath, {
-          requestId: summary.request_id
-        });
-        if (error || !data?.signedUrl) {
-          setStatusMessage(error?.message ?? 'Could not download order file.');
-          return;
-        }
-        const anchor = document.createElement('a');
-        anchor.href = data.signedUrl;
-        anchor.download = fileName || (type === 'prescription' ? 'Prescription' : 'Lab-Order');
-        anchor.click();
-        window.setTimeout(() => URL.revokeObjectURL(data.signedUrl), 60_000);
       } finally {
         setDownloadingOrderKey(null);
       }

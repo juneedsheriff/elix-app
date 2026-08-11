@@ -26,6 +26,8 @@ import {
 } from '../../lib/navigation/doctorConsultationNav';
 import {
   consultationNotesFileValidationError,
+  mergeConsultationSummaryWithDoctorResponse,
+  consultationSummaryFromDoctorResponse,
   fetchConsultationSummary,
   fetchDoctorOpinionRequests,
   fetchStaffOpinionRequestById,
@@ -44,8 +46,7 @@ import type { ScreenPageProps } from '../types';
 const CONSULTATION_NOTES_ACCEPT =
   '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.doc,.docx,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-const PRESCRIPTION_IMAGE_ACCEPT =
-  '.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif';
+const PRESCRIPTION_FILE_ACCEPT = CONSULTATION_NOTES_ACCEPT;
 
 const LAB_ORDER_FILE_ACCEPT = CONSULTATION_NOTES_ACCEPT;
 
@@ -353,18 +354,22 @@ export default function DoctorConsultationPage({
     const labOrderText = values.labs_diagnostics.trim();
     const hasExistingPrescriptionFile = Boolean(summary?.prescription_file_path?.trim());
     const hasExistingLabOrderFile = Boolean(summary?.lab_order_file_path?.trim());
-    const hasPrescription =
-      Boolean(prescriptionText) || Boolean(prescriptionFile) || hasExistingPrescriptionFile;
-    const hasLabOrder =
-      Boolean(labOrderText) || Boolean(labOrderFile) || hasExistingLabOrderFile;
 
-    // Type and/or upload — at least one for prescription and one for lab order.
-    if (!hasPrescription) {
-      setError('Add a prescription by typing it or uploading an image.');
+    // Typed text and file upload are both required for Prescription and Lab Order.
+    if (!prescriptionText) {
+      setError('Prescription text is required.');
       return;
     }
-    if (!hasLabOrder) {
-      setError('Add a lab order by typing it or uploading a file.');
+    if (!prescriptionFile && !hasExistingPrescriptionFile) {
+      setError('Upload a prescription image or file (PDF, JPG, PNG, DOC, or DOCX).');
+      return;
+    }
+    if (!labOrderText) {
+      setError('Lab Order text is required.');
+      return;
+    }
+    if (!labOrderFile && !hasExistingLabOrderFile) {
+      setError('Upload a lab order file (PDF, JPG, PNG, DOC, or DOCX).');
       return;
     }
 
@@ -406,38 +411,17 @@ export default function DoctorConsultationPage({
       vital_signs: values.vital_signs.trim() || null,
       current_medications: values.current_medications.trim() || null,
       past_medical_history: values.past_medical_history.trim() || null,
-      labs_diagnostics: labOrderText || null,
+      labs_diagnostics: labOrderText,
       assessment_plan: values.assessment_plan.trim(),
       followup_date: values.followup_date.trim() || null,
-      prescription: prescriptionText || null
+      prescription: prescriptionText
     };
-
-    const orderNoteParts: string[] = [];
-    if (!prescriptionText && (prescriptionFile || hasExistingPrescriptionFile)) {
-      orderNoteParts.push(
-        `Prescription:\n[Uploaded file: ${
-          prescriptionFile?.name ||
-          summary?.prescription_file_name?.trim() ||
-          'prescription image'
-        }]`
-      );
-    }
-    if (!labOrderText && (labOrderFile || hasExistingLabOrderFile)) {
-      orderNoteParts.push(
-        `Lab Order:\n[Uploaded file: ${
-          labOrderFile?.name || summary?.lab_order_file_name?.trim() || 'lab order file'
-        }]`
-      );
-    }
-    const responseText = [formatConsultationResponse(values), ...orderNoteParts]
-      .filter(Boolean)
-      .join('\n\n');
 
     const { error: submitError } = await saveDoctorConsultation(
       request.id,
       request,
       payload,
-      responseText,
+      formatConsultationResponse(values),
       doctorProfile,
       {
         prescriptionFile,
@@ -554,6 +538,11 @@ export default function DoctorConsultationPage({
     );
   }
 
+  const displaySummary =
+    request != null
+      ? mergeConsultationSummaryWithDoctorResponse(request, summary, request.doctor_response)
+      : summary;
+
   return (
     <div className='doctor-consultation-page'>
       <header className='doctor-consultation-page__header'>
@@ -627,8 +616,35 @@ export default function DoctorConsultationPage({
           </aside>
 
           <div className='doctor-consultation-page__main'>
-          {hasConsultationSummary(summary) && summary ? (
-            <ConsultationSummaryPdfView summary={summary} request={request} />
+          {hasConsultationSummary(displaySummary) && displaySummary ? (
+            <section
+              className='doctor-consultation-page__submitted-notes'
+              aria-labelledby='doctor-consultation-submitted-notes-title'
+            >
+              <div className='doctor-consultation-page__submitted-notes-head'>
+                <h4 id='doctor-consultation-submitted-notes-title'>Consultation notes</h4>
+                <p className='muted doctor-consultation-page__submitted-notes-hint'>
+                  Consultation summary, prescription, and lab order PDFs for this visit.
+                </p>
+              </div>
+              <ConsultationSummaryPdfView summary={displaySummary} request={request} />
+            </section>
+          ) : request.doctor_response?.trim() ? (
+            <section
+              className='doctor-consultation-page__submitted-notes'
+              aria-labelledby='doctor-consultation-submitted-notes-title'
+            >
+              <div className='doctor-consultation-page__submitted-notes-head'>
+                <h4 id='doctor-consultation-submitted-notes-title'>Consultation notes</h4>
+                <p className='muted doctor-consultation-page__submitted-notes-hint'>
+                  Consultation summary PDF for this visit.
+                </p>
+              </div>
+              <ConsultationSummaryPdfView
+                summary={consultationSummaryFromDoctorResponse(request, request.doctor_response)}
+                request={request}
+              />
+            </section>
           ) : null}
 
           <div className='doctor-consultation-page__tabs' role='tablist' aria-label='Consultation notes mode'>
@@ -783,7 +799,7 @@ export default function DoctorConsultationPage({
                     const attachmentFile = isPrescription ? prescriptionFile : isLabOrder ? labOrderFile : null;
                     const existingAttachmentName = isPrescription
                       ? summary?.prescription_file_name?.trim() ||
-                        (summary?.prescription_file_path ? 'Uploaded prescription image' : null)
+                        (summary?.prescription_file_path ? 'Uploaded prescription file' : null)
                       : isLabOrder
                         ? summary?.lab_order_file_name?.trim() ||
                           (summary?.lab_order_file_path ? 'Uploaded lab order file' : null)
@@ -794,12 +810,12 @@ export default function DoctorConsultationPage({
                         ? labOrderFileInputRef
                         : null;
                     const attachmentAccept = isPrescription
-                      ? PRESCRIPTION_IMAGE_ACCEPT
+                      ? PRESCRIPTION_FILE_ACCEPT
                       : LAB_ORDER_FILE_ACCEPT;
                     const attachmentHint = isPrescription
-                      ? 'Type the prescription above and/or upload an image (JPG, PNG, WebP, HEIC, or GIF, max 10 MB). Stored separately as a prescription PDF or file.'
+                      ? 'Required: type the prescription above and upload an image or file (PDF, JPG, PNG, DOC, or DOCX, max 10 MB).'
                       : isLabOrder
-                        ? 'Type the lab order above and/or upload a file (PDF, JPG, PNG, DOC, or DOCX, max 10 MB). Stored separately as a lab order PDF or file.'
+                        ? 'Required: type the lab order above and upload a file (PDF, JPG, PNG, DOC, or DOCX, max 10 MB).'
                         : null;
                     const onAttachmentChange = isPrescription
                       ? handlePrescriptionFileChange
@@ -870,11 +886,12 @@ export default function DoctorConsultationPage({
                           disabled={submitting || isRecording}
                           placeholder={
                             isPrescription
-                              ? 'Type prescription, or leave blank and upload an image below…'
+                              ? 'Type prescription…'
                               : isLabOrder
-                                ? 'Type lab order, or leave blank and upload a file below…'
+                                ? 'Type lab order…'
                                 : `Enter ${label.toLowerCase()}…`
                           }
+                          required={showOrderAttachment}
                         />
                         {isRecording ? (
                           <span className='doctor-respond-voice-status' role='status'>
@@ -904,9 +921,7 @@ export default function DoctorConsultationPage({
                                 <FileUp size={16} aria-hidden />
                                 {attachmentFile || existingAttachmentName
                                   ? 'Replace file'
-                                  : isPrescription
-                                    ? 'Upload image'
-                                    : 'Upload file'}
+                                  : 'Upload file'}
                               </button>
                               {attachmentFile ? (
                                 <button

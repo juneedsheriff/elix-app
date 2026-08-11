@@ -25,6 +25,7 @@ import {
 import { homeCareServicesFromRequest } from '../../../lib/homeCareServices';
 import {
   fetchConsultationSummary,
+  consultationSummaryFromDoctorResponse,
   fetchOpinionRequestRecommendations,
   fetchStaffOpinionRequestById,
   pseConfirmPayment,
@@ -1214,17 +1215,10 @@ export default function RequestWorkflowWizard({
             {hasConsultationSummary(summary) && summary ? (
               <ConsultationSummaryPdfView summary={summary} request={request} />
             ) : request.doctor_response?.trim() ? (
-              <>
-                <Text fw={600} size='sm'>
-                  Doctor response
-                </Text>
-                <Text size='sm'>{request.doctor_response}</Text>
-                {request.responded_at ? (
-                  <Text size='xs' c='dimmed'>
-                    Submitted {new Date(request.responded_at).toLocaleString()}
-                  </Text>
-                ) : null}
-              </>
+              <ConsultationSummaryPdfView
+                summary={consultationSummaryFromDoctorResponse(request, request.doctor_response)}
+                request={request}
+              />
             ) : (
               <Text size='sm' c='dimmed'>
                 No consultation summary yet. The doctor submits notes after the appointment is

@@ -1316,9 +1316,41 @@
 .consultation-summary-pdf__iframe {
   display: block;
   width: 100%;
-  min-height: 22rem;
+  min-height: min(70vh, 36rem);
+  height: 36rem;
   border: 0;
   background: #fff;
+}
+
+.consultation-summary-pdf {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.consultation-summary-pdf--stack {
+  gap: 1.25rem;
+}
+
+.consultation-summary-pdf__doc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.consultation-summary-pdf__doc + .consultation-summary-pdf__doc {
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border, #d1d5db) 80%, transparent);
+}
+
+.doctor-response-block.patient-view .consultation-summary-pdf__iframe,
+.request-workflow-step .consultation-summary-pdf__iframe,
+.doctor-consultation-notes-modal__body .consultation-summary-pdf__iframe,
+.doctor-consultation-page__main .consultation-summary-pdf__iframe {
+  min-height: min(50vh, 28rem);
+  height: 28rem;
 }
 
 .consultation-summary-pdf__image {
@@ -1327,6 +1359,19 @@
   max-height: 28rem;
   object-fit: contain;
   background: #fff;
+}
+
+.consultation-summary-pdf__lightbox {
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.consultation-summary-pdf__lightbox .image-lightbox-gallery__grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.consultation-summary-pdf__lightbox .image-lightbox-gallery__thumb {
+  min-height: 12rem;
 }
 
 .consultation-summary-pdf__page {

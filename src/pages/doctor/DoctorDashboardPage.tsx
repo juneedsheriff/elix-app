@@ -22,7 +22,7 @@ export default function DoctorDashboardPage({
   const avatarBg = avatarColorFromName(doctorProfile?.full_name);
 
   return (
-    <div className='screen-grid doctor-dashboard-page'>
+    <div className='screen-grid doctor-dashboard-page elixhealth-doctor-dashboard'>
       <header className='doctor-dashboard-welcome' aria-label='Welcome'>
         <div className='doctor-dashboard-welcome__avatar' aria-hidden>
           {photoUrl ? (

@@ -23,12 +23,36 @@ type DoctorIncomingRequestsCardListProps = {
   returnScreen?: string;
   onOpenError?: (message: string) => void;
   onRequestUpdated: (request: OpinionRequest) => void;
+  /** Workspace layout uses a two-column card grid with labeled fields. */
+  layout?: 'default' | 'workspace';
+  /** Hide the local search toolbar when search lives in the page header. */
+  hideSearch?: boolean;
 };
 
 function doctorStatusLabel(status: string): string {
   if (status === 'in_review') return 'In review';
   if (status === 'closed') return 'Completed';
   return 'Submitted';
+}
+
+function CardField({
+  label,
+  value,
+  compact = false
+}: {
+  label: string;
+  value: string | null | undefined;
+  compact?: boolean;
+}) {
+  const display = value?.trim() || '—';
+  return (
+    <div className={`doctor-incoming-card__field${compact ? ' doctor-incoming-card__field--compact' : ''}`}>
+      <span className='doctor-incoming-card__field-label'>{label}</span>
+      <span className='doctor-incoming-card__field-value' title={display !== '—' ? display : undefined}>
+        {display}
+      </span>
+    </div>
+  );
 }
 
 export default function DoctorIncomingRequestsCardList({
@@ -40,10 +64,14 @@ export default function DoctorIncomingRequestsCardList({
   onNavigate,
   returnScreen,
   onOpenError,
-  onRequestUpdated
+  onRequestUpdated,
+  layout = 'default',
+  hideSearch = false
 }: DoctorIncomingRequestsCardListProps) {
   const [caseDetailsRequest, setCaseDetailsRequest] = useState<OpinionRequest | null>(null);
   const [consultationNotesRequest, setConsultationNotesRequest] = useState<OpinionRequest | null>(null);
+  const isWorkspace = layout === 'workspace';
+  const showSearchToolbar = !hideSearch;
 
   useEffect(() => {
     if (!caseDetailsRequest) return;
@@ -75,21 +103,29 @@ export default function DoctorIncomingRequestsCardList({
 
   return (
     <>
-      <div className='doctor-cases-cards-toolbar'>
-        <label className='doctor-cases-cards-search'>
-          <IconSearch size={18} stroke={1.5} aria-hidden />
-          <input
-            type='search'
-            value={search}
-            onChange={(event) => onSearchChange(event.currentTarget.value)}
-            placeholder='Search by patient, email, or message…'
-            aria-label='Search patient requests'
-          />
-        </label>
-        <p className='doctor-cases-cards-count muted'>
+      {showSearchToolbar ? (
+        <div
+          className={`doctor-cases-cards-toolbar${isWorkspace ? ' doctor-cases-cards-toolbar--workspace' : ''}`}
+        >
+          <label className='doctor-cases-cards-search'>
+            <IconSearch size={18} stroke={1.5} aria-hidden />
+            <input
+              type='search'
+              value={search}
+              onChange={(event) => onSearchChange(event.currentTarget.value)}
+              placeholder='Search by patient, email, or message…'
+              aria-label='Search patient requests'
+            />
+          </label>
+          <p className='doctor-cases-cards-count muted'>
+            {data.length} case{data.length === 1 ? '' : 's'}
+          </p>
+        </div>
+      ) : isWorkspace ? (
+        <p className='doctor-cases-cards-count doctor-cases-cards-count--workspace muted'>
           {data.length} case{data.length === 1 ? '' : 's'}
         </p>
-      </div>
+      ) : null}
 
       {data.length === 0 ? (
         <div className='doctor-cases-cards-empty'>
@@ -105,47 +141,100 @@ export default function DoctorIncomingRequestsCardList({
           ) : null}
         </div>
       ) : (
-        <ul className='doctor-request-list doctor-incoming-cards-grid'>
+        <ul
+          className={`doctor-request-list doctor-incoming-cards-grid${
+            isWorkspace ? ' doctor-incoming-cards-grid--workspace' : ''
+          }`}
+        >
           {data.map((request) => {
             const meetingLink = request.meeting_link?.trim();
+            const scheduledAt = request.scheduled_at?.trim();
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);
             const followupDate =
               formatConsultationFollowupDate(request.consultation_summary?.followup_date) ||
               formatConsultationFollowupDate(request.home_care_followup_date);
+            const consultationLabel = meetingLink
+              ? scheduledAt
+                ? `Video · ${new Date(scheduledAt).toLocaleString()}`
+                : 'Video consultation'
+              : scheduledAt
+                ? `Scheduled · ${new Date(scheduledAt).toLocaleString()}`
+                : null;
 
             return (
-              <li key={request.id} className='doctor-request-card doctor-incoming-card'>
+              <li
+                key={request.id}
+                className={`doctor-request-card doctor-incoming-card${
+                  isWorkspace ? ' doctor-incoming-card--workspace' : ''
+                }`}
+              >
                 <div className='doctor-request-head'>
                   <strong>{request.patient_name ?? 'Patient'}</strong>
-                  <span className={`tag status-${request.status}`}>{doctorStatusLabel(request.status)}</span>
+                  <span className={`tag status-${request.status}`}>
+                    {doctorStatusLabel(request.status)}
+                  </span>
                 </div>
 
-                {request.patient_email ? (
-                  <p className='doctor-request-meta'>{request.patient_email}</p>
-                ) : null}
+                {isWorkspace ? (
+                  <div className='doctor-incoming-card__fields doctor-incoming-card__fields--workspace'>
+                    <CardField compact label='Email' value={request.patient_email} />
+                    <CardField compact label='Submitted' value={formatRequestDate(request.created_at)} />
+                    <CardField compact label='Follow-up' value={followupDate} />
+                    <div className='doctor-incoming-card__field doctor-incoming-card__field--compact'>
+                      <span className='doctor-incoming-card__field-label'>Consultation</span>
+                      <span className='doctor-incoming-card__field-value'>
+                        {consultationLabel?.trim() || '—'}
+                        {meetingLink ? (
+                          <>
+                            {' · '}
+                            <a
+                              href={meetingLink}
+                              target='_blank'
+                              rel='noreferrer'
+                              className='doctor-incoming-card__inline-join'
+                            >
+                              Join meeting
+                            </a>
+                          </>
+                        ) : null}
+                      </span>
+                    </div>
+                    <CardField
+                      compact
+                      label='Message'
+                      value={request.message?.trim() || null}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {request.patient_email ? (
+                      <p className='doctor-request-meta'>{request.patient_email}</p>
+                    ) : null}
 
-                <p className='doctor-request-meta'>
-                  Submitted {formatRequestDate(request.created_at)}
-                </p>
+                    <p className='doctor-request-meta'>
+                      Submitted {formatRequestDate(request.created_at)}
+                    </p>
 
-                {followupDate ? (
-                  <p className='doctor-request-meta'>Patient follow-up: {followupDate}</p>
-                ) : null}
+                    {followupDate ? (
+                      <p className='doctor-request-meta'>Patient follow-up: {followupDate}</p>
+                    ) : null}
 
-                {request.message?.trim() ? (
-                  <p className='doctor-request-message'>{request.message.trim()}</p>
-                ) : null}
+                    {request.message?.trim() ? (
+                      <p className='doctor-request-message'>{request.message.trim()}</p>
+                    ) : null}
+                  </>
+                )}
 
-                {meetingLink ? (
+                {!isWorkspace && meetingLink ? (
                   <div className='doctor-incoming-card__meeting'>
                     <p className='doctor-incoming-card__meeting-label'>
                       <Video size={15} aria-hidden /> Video consultation
                     </p>
-                    {request.scheduled_at ? (
+                    {scheduledAt ? (
                       <p className='doctor-request-meta'>
                         <Calendar size={14} aria-hidden />{' '}
-                        {new Date(request.scheduled_at).toLocaleString()}
+                        {new Date(scheduledAt).toLocaleString()}
                       </p>
                     ) : null}
                     <a
@@ -176,7 +265,7 @@ export default function DoctorIncomingRequestsCardList({
                       onClick={() => setConsultationNotesRequest(request)}
                     >
                       <FileText size={16} aria-hidden />
-                      View Previous Consultation
+                      {isWorkspace ? 'Previous notes' : 'View Previous Consultation'}
                     </button>
                   ) : null}
 
@@ -187,7 +276,9 @@ export default function DoctorIncomingRequestsCardList({
                       returnScreen={returnScreen}
                     />
                   ) : request.doctor_response?.trim() ? (
-                    <span className='tag status-closed doctor-incoming-card__responded'>Responded</span>
+                    <span className='tag status-closed doctor-incoming-card__responded'>
+                      Responded
+                    </span>
                   ) : null}
                 </div>
               </li>

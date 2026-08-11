@@ -43,6 +43,7 @@ import PatientConsultationRetainCard, {
   hasRetainedPaymentDetails
 } from './PatientConsultationRetainCard';
 import {
+  consultationSummaryFromDoctorResponse,
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
   isRecommendationOpinionRequest,
@@ -1122,8 +1123,15 @@ export default function PatientConsultationWizard({
           <div className='doctor-response-block patient-view'>
             {hasConsultationSummary(summary) && summary ? (
               <ConsultationSummaryPdfView summary={summary} request={request} />
+            ) : request.doctor_response?.trim() ? (
+              <ConsultationSummaryPdfView
+                summary={consultationSummaryFromDoctorResponse(request, request.doctor_response)}
+                request={request}
+              />
             ) : (
-              <p className='muted'>Your doctor&apos;s consultation summary will appear here as a PDF after your visit.</p>
+              <p className='muted'>
+                Your doctor&apos;s consultation summary will appear here as a PDF after your visit.
+              </p>
             )}
           </div>
         );

@@ -1,4 +1,5 @@
 import type { ConsultationCurrency, ConsultationTier, Doctor } from '../types/doctor';
+import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
 import { formatConsultationFee } from './consultationCurrency';
 import { normalizeConsultationTiersInput } from './consultationTiers';
 import { DOCTOR_PROFILE_COLUMNS, normalizeDoctorProfile } from './doctorProfile';
@@ -147,6 +148,145 @@ export async function fetchDoctorByAuthUserId(authUserId: string) {
 
   return {
     data: result.data ? normalizeDoctor(result.data as Doctor) : null,
+    error: null
+  };
+}
+
+/** Doctors linked to a clinic workspace (owned + granted). */
+export async function fetchClinicLinkedDoctors(clinicId: string) {
+  const normalizedClinicId = clinicId.trim();
+  if (!normalizedClinicId) {
+    return { data: [] as Doctor[], error: null };
+  }
+
+  const [ownedDoctorsRes, grantedIdsRes] = await Promise.all([
+    supabase
+      .from('doctors')
+      .select(doctorColumns)
+      .is('deleted_at', null)
+      .eq('clinic_id', normalizedClinicId)
+      .order('full_name', { ascending: true }),
+    supabase.from('clinic_doctor_grants').select('doctor_id').eq('clinic_id', normalizedClinicId)
+  ]);
+
+  if (ownedDoctorsRes.error || grantedIdsRes.error) {
+    const browseDoctorsRes = await fetchDoctors(250, { patientClinicId: normalizedClinicId });
+    if (browseDoctorsRes.error) {
+      return { data: null, error: ownedDoctorsRes.error ?? grantedIdsRes.error ?? browseDoctorsRes.error };
+    }
+
+    const candidateDoctors = browseDoctorsRes.data ?? [];
+    const availabilityChecks = await Promise.all(
+      candidateDoctors.map(async (doctor) => {
+        const availableRes = await isDoctorAvailableToClinic(doctor.id, normalizedClinicId);
+        return {
+          doctor,
+          available: availableRes.available && !availableRes.error
+        };
+      })
+    );
+
+    const linkedDoctors = availabilityChecks
+      .filter((entry) => entry.available)
+      .map((entry) => entry.doctor)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+    return { data: linkedDoctors, error: null };
+  }
+
+  const ownedDoctors = (ownedDoctorsRes.data ?? []).map((row) => normalizeDoctor(row as Doctor));
+  const ownedDoctorIds = new Set(ownedDoctors.map((doctor) => doctor.id));
+  const grantedDoctorIds = [...new Set((grantedIdsRes.data ?? []).map((row) => row.doctor_id as string))]
+    .filter((doctorId) => doctorId && !ownedDoctorIds.has(doctorId));
+
+  let grantedDoctors: Doctor[] = [];
+  if (grantedDoctorIds.length) {
+    const grantedDoctorsRes = await supabase
+      .from('doctors')
+      .select(doctorColumns)
+      .is('deleted_at', null)
+      .in('id', grantedDoctorIds)
+      .order('full_name', { ascending: true });
+
+    if (grantedDoctorsRes.error) {
+      return { data: null, error: grantedDoctorsRes.error };
+    }
+
+    grantedDoctors = (grantedDoctorsRes.data ?? []).map((row) => normalizeDoctor(row as Doctor));
+  }
+
+  const deduped = new Map<string, Doctor>();
+  for (const doctor of [...ownedDoctors, ...grantedDoctors]) {
+    deduped.set(doctor.id, doctor);
+  }
+
+  return {
+    data: [...deduped.values()].sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    error: null
+  };
+}
+
+/** Doctors that belong to the same clinic roster (not grants-based). */
+export async function fetchDoctorsInClinicRoster(options: {
+  clinicId?: string | null;
+  clinicName?: string | null;
+  pseClinicName?: string | null;
+}) {
+  const clinicId = options.clinicId?.trim() || '';
+  const clinicName = options.clinicName?.trim() || '';
+  const pseClinicName = options.pseClinicName?.trim() || '';
+
+  const byIdQuery = clinicId
+    ? supabase
+        .from('doctors')
+        .select(doctorColumns)
+        .is('deleted_at', null)
+        .eq('clinic_id', clinicId)
+        .order('full_name', { ascending: true })
+    : null;
+
+  const byClinicNameQuery = clinicName
+    ? supabase
+        .from('doctors')
+        .select(doctorColumns)
+        .is('deleted_at', null)
+        .ilike('clinic_name', `%${clinicName}%`)
+        .order('full_name', { ascending: true })
+    : null;
+
+  const byPseClinicNameQuery = pseClinicName
+    ? supabase
+        .from('doctors')
+        .select(doctorColumns)
+        .is('deleted_at', null)
+        .ilike('pse_clinic_name', `%${pseClinicName}%`)
+        .order('full_name', { ascending: true })
+    : null;
+
+  const [byIdRes, byClinicNameRes, byPseClinicNameRes] = await Promise.all([
+    byIdQuery ?? Promise.resolve({ data: [], error: null }),
+    byClinicNameQuery ?? Promise.resolve({ data: [], error: null }),
+    byPseClinicNameQuery ?? Promise.resolve({ data: [], error: null })
+  ]);
+
+  const rows = [
+    ...(byIdRes.data ?? []),
+    ...(byClinicNameRes.data ?? []),
+    ...(byPseClinicNameRes.data ?? [])
+  ] as Doctor[];
+
+  if (!rows.length && (byIdRes.error || byClinicNameRes.error || byPseClinicNameRes.error)) {
+    return { data: null, error: byIdRes.error ?? byClinicNameRes.error ?? byPseClinicNameRes.error };
+  }
+
+  const deduped = new Map<string, Doctor>();
+  for (const row of rows) {
+    const normalized = normalizeDoctor(row);
+    deduped.set(normalized.id, normalized);
+  }
+
+  return {
+    data: [...deduped.values()].sort((a, b) => a.full_name.localeCompare(b.full_name)),
     error: null
   };
 }

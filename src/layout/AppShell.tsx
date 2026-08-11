@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { CheckCircle2, LogOut } from 'lucide-react';
 import ElixLogo from '../components/ui/ElixLogo';
 import NavIcon from '../components/navigation/NavIcon';
@@ -6,6 +7,13 @@ import LanguagePickerModal from '../components/Language/LanguagePickerModal';
 import ScreenRouter from '../pages/ScreenRouter';
 import { isDashboardScreen } from '../lib/dashboardTitle';
 import { getNavItems, roleLabel, type Language, type Role } from '../i18n/appTranslations';
+import {
+  avatarColorFromName,
+  displayInitials,
+  resolveProfilePhotoUrl
+} from '../lib/avatarDisplay';
+import { fetchClinicLinkedDoctors } from '../lib/doctors';
+import { fetchDoctorWorkspaceGrantsForDoctor } from '../lib/clinicDoctorRequests';
 import type { BottomTab } from '../lib/navigation/bottomTabs';
 import type { Doctor } from '../types/doctor';
 import type { Patient } from '../types/patient';
@@ -68,6 +76,44 @@ export default function AppShell({
   const navItems = getNavItems(role, language);
   const activeNavItem = navItems.find((item) => item.id === activeScreen);
   const hideBottomNav = activeScreen === 'doctor-consultation' || activeScreen === 'my-requests';
+  const [clinicDoctors, setClinicDoctors] = useState<Doctor[]>([]);
+  const [doctorClinicId, setDoctorClinicId] = useState<string | null>(doctorProfile?.clinic_id?.trim() || null);
+
+  useEffect(() => {
+    if (role !== 'doctor' || !dbConnected || !doctorProfile?.id) {
+      setClinicDoctors([]);
+      setDoctorClinicId(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      let clinicId = doctorProfile.clinic_id?.trim() || '';
+
+      if (!clinicId) {
+        const grantsRes = await fetchDoctorWorkspaceGrantsForDoctor(doctorProfile.id);
+        clinicId = grantsRes.data?.[0]?.clinicId?.trim() || '';
+      }
+
+      if (!clinicId) {
+        if (!cancelled) {
+          setDoctorClinicId(null);
+          setClinicDoctors([]);
+        }
+        return;
+      }
+
+      const { data } = await fetchClinicLinkedDoctors(clinicId);
+      if (!cancelled) {
+        setDoctorClinicId(clinicId);
+        setClinicDoctors(data ?? []);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dbConnected, doctorProfile?.clinic_id, doctorProfile?.id, role]);
 
   return (
     <div className='mobile-shell'>
@@ -144,6 +190,42 @@ export default function AppShell({
                 <span>{item.label}</span>
               </button>
             ))}
+            {role === 'doctor' ? (
+              <section className='sidebar-clinic-doctors' aria-label='Clinic doctors'>
+                <p className='sidebar-clinic-doctors__title'>Doctors</p>
+                {clinicDoctors.length ? (
+                  <ul className='sidebar-clinic-doctors__list'>
+                    {clinicDoctors.map((doctor) => {
+                      const photoUrl = resolveProfilePhotoUrl(doctor.image_url);
+                      const initials = displayInitials(doctor.full_name);
+                      const avatarBg = avatarColorFromName(doctor.full_name);
+                      return (
+                        <li key={doctor.id} className='sidebar-clinic-doctors__item'>
+                          {photoUrl ? (
+                            <span className='sidebar-clinic-doctors__avatar sidebar-clinic-doctors__avatar--photo'>
+                              <img src={photoUrl} alt='' className='sidebar-clinic-doctors__avatar-img' />
+                            </span>
+                          ) : (
+                            <span
+                              className='sidebar-clinic-doctors__avatar sidebar-clinic-doctors__avatar--initials'
+                              style={{ background: avatarBg }}
+                              aria-hidden
+                            >
+                              {initials}
+                            </span>
+                          )}
+                          <span className='sidebar-clinic-doctors__name'>{doctor.full_name}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className='sidebar-clinic-doctors__empty'>
+                    {doctorClinicId ? 'No linked doctors yet.' : 'No clinic workspace linked.'}
+                  </p>
+                )}
+              </section>
+            ) : null}
           </div>
           {onSignOut && userEmail ? (
             <div className='sidebar-footer'>
