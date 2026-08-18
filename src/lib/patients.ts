@@ -407,13 +407,49 @@ export async function updatePatientProfileForUser(
 }
 
 /** Upload a profile document (govt ID photo or latest prescription) to R2. */
-export async function uploadPatientAttachedDocument(file: File): Promise<{
+export async function uploadPatientAttachedDocument(
+  file: File,
+  options?: { kind?: 'govt_id' | 'default' }
+): Promise<{
   data: PatientAttachedDocument | null;
   error: { message: string } | null;
 }> {
-  const validationError = medicalFileValidationError(file);
-  if (validationError) {
-    return { data: null, error: { message: validationError } };
+  if (options?.kind === 'govt_id') {
+    const imageExts = new Set([
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+      'heic',
+      'heif',
+      'bmp',
+      'tif',
+      'tiff',
+      'svg'
+    ]);
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    const type = file.type ?? '';
+    const isImage = (type && type.startsWith('image/')) || imageExts.has(ext);
+    const maxBytes = 10 * 1024 * 1024;
+
+    if (!isImage) {
+      return {
+        data: null,
+        error: {
+          message:
+            'Govt ID documents must be images (PNG, JPG/JPEG, GIF, or other image formats).'
+        }
+      };
+    }
+    if (file.size > maxBytes) {
+      return { data: null, error: { message: 'The image exceeds the 10 MB limit.' } };
+    }
+  } else {
+    const validationError = medicalFileValidationError(file);
+    if (validationError) {
+      return { data: null, error: { message: validationError } };
+    }
   }
   if (!isR2StorageConfigured()) {
     return {
@@ -462,6 +498,36 @@ export async function updatePatientAvatarForUser(authUserId: string, avatar_url:
 
   if (updateError) return { data: null, error: updateError };
   return fetchPatientByAuthUserId(authUserId);
+}
+
+/** Staff (admin / PSE) updates a patient photo by profile id. */
+export async function updatePatientAvatarByPatientId(patientId: string, avatar_url: string | null) {
+  const rpc = await supabase.rpc('staff_set_patient_avatar', {
+    p_patient_id: patientId,
+    p_avatar_url: avatar_url
+  });
+
+  if (!rpc.error) {
+    return fetchPatientById(patientId);
+  }
+
+  const missingRpc =
+    rpc.error.code === '42883' || rpc.error.message.includes('staff_set_patient_avatar');
+
+  if (!missingRpc) {
+    return { data: null, error: rpc.error };
+  }
+
+  const { error: updateError } = await supabase
+    .from('patients')
+    .update({
+      avatar_url,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', patientId);
+
+  if (updateError) return { data: null, error: updateError };
+  return fetchPatientById(patientId);
 }
 
 /** Save post-verification onboarding answers from the chat wizard. */

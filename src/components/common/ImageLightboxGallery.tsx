@@ -16,6 +16,10 @@ type ImageLightboxGalleryProps = {
   error?: string | null;
   className?: string;
   modalZIndex?: number;
+  /** When false, only the lightbox modal is rendered (thumbnails live elsewhere). */
+  showGrid?: boolean;
+  openedIndex?: number | null;
+  onOpenedIndexChange?: (index: number | null) => void;
 };
 
 export default function ImageLightboxGallery({
@@ -23,23 +27,35 @@ export default function ImageLightboxGallery({
   loading = false,
   error = null,
   className = '',
-  modalZIndex = 500
+  modalZIndex = 500,
+  showGrid = true,
+  openedIndex,
+  onOpenedIndexChange
 }: ImageLightboxGalleryProps) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [uncontrolledIndex, setUncontrolledIndex] = useState<number | null>(null);
+  const isControlled = openedIndex !== undefined;
+  const activeIndex = isControlled ? openedIndex : uncontrolledIndex;
+  const setActiveIndex = useCallback(
+    (index: number | null) => {
+      if (!isControlled) setUncontrolledIndex(index);
+      onOpenedIndexChange?.(index);
+    },
+    [isControlled, onOpenedIndexChange]
+  );
   const active = activeIndex !== null ? images[activeIndex] : null;
   const hasMultiple = images.length > 1;
 
-  const close = useCallback(() => setActiveIndex(null), []);
+  const close = useCallback(() => setActiveIndex(null), [setActiveIndex]);
 
   const goPrev = useCallback(() => {
     if (activeIndex === null || images.length < 2) return;
     setActiveIndex((activeIndex - 1 + images.length) % images.length);
-  }, [activeIndex, images.length]);
+  }, [activeIndex, images.length, setActiveIndex]);
 
   const goNext = useCallback(() => {
     if (activeIndex === null || images.length < 2) return;
     setActiveIndex((activeIndex + 1) % images.length);
-  }, [activeIndex, images.length]);
+  }, [activeIndex, images.length, setActiveIndex]);
 
   useEffect(() => {
     if (activeIndex === null) return;
@@ -58,25 +74,35 @@ export default function ImageLightboxGallery({
     }
   }, [activeIndex, images.length]);
 
-  if (!loading && !error && images.length === 0) {
+  if (showGrid && !loading && !error && images.length === 0) {
     return null;
+  }
+
+  if (!showGrid && activeIndex === null) {
+    return error ? (
+      <Text size='sm' c='red' mb='xs'>
+        {error}
+      </Text>
+    ) : null;
   }
 
   return (
     <div className={`image-lightbox-gallery ${className}`.trim()}>
-      {error ? (
+      {showGrid && error ? (
         <Text size='sm' c='red' mb='xs'>
           {error}
         </Text>
       ) : null}
 
-      {loading ? (
+      {showGrid && loading ? (
         <div className='image-lightbox-gallery__grid' aria-busy='true'>
           {[0, 1, 2].slice(0, Math.max(1, images.length || 2)).map((i) => (
             <Skeleton key={i} className='image-lightbox-gallery__skeleton' radius='md' />
           ))}
         </div>
-      ) : (
+      ) : null}
+
+      {showGrid && !loading ? (
         <div className='image-lightbox-gallery__grid' role='list'>
           {images.map((image, index) => (
             <button
@@ -86,14 +112,14 @@ export default function ImageLightboxGallery({
               onClick={() => setActiveIndex(index)}
               aria-label={`View ${image.alt}`}
             >
-              <img src={image.src} alt='' loading='lazy' />
               {image.caption ? (
                 <span className='image-lightbox-gallery__thumb-label'>{image.caption}</span>
               ) : null}
+              <img src={image.src} alt='' loading='lazy' />
             </button>
           ))}
         </div>
-      )}
+      ) : null}
 
       <Modal
         opened={activeIndex !== null && Boolean(active)}

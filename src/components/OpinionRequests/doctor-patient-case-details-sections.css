@@ -36,6 +36,48 @@
   line-height: 1.4;
 }
 
+.doctor-patient-case-details-sections__patient {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.85rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-soft) 70%, var(--surface));
+  text-align: center;
+}
+
+.doctor-patient-case-details-sections__patient-photo,
+.doctor-patient-case-details-sections__patient-initials {
+  width: 100px;
+  height: 100px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.doctor-patient-case-details-sections__patient-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.doctor-patient-case-details-sections__patient-name {
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .doctor-patient-case-details-sections__reviewed-badge {
   font-size: 0.72rem;
   font-weight: 600;

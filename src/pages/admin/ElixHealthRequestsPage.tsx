@@ -27,7 +27,6 @@ import type { Patient } from '../../types/patient';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
 import WorkspaceTabs from './WorkspaceTabs';
 import RequestDetailDrawer from './requests/RequestDetailDrawer';
-import RequestsAnalyticsCards from './requests/RequestsAnalyticsCards';
 import RequestsDataTable from './requests/RequestsDataTable';
 import RequestsFilterDrawer from './requests/RequestsFilterDrawer';
 import RequestsPageHeader from './requests/RequestsPageHeader';
@@ -72,8 +71,8 @@ export default function ElixHealthRequestsPage() {
   const isPse = isAnyPatientServiceExecutive(staff);
   const isClinicPse = isClinicPatientServiceExecutive(staff);
   const canAddRequest = canCreateRequests(staff);
-  const showHomeCareTab = canAccessHomeCareRequests(staff);
-  const canCreateHomeCare = canAddRequest && showHomeCareTab;
+  const canUseHomeCare = canAccessHomeCareRequests(staff);
+  const canCreateHomeCare = canAddRequest && canUseHomeCare;
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -89,7 +88,7 @@ export default function ElixHealthRequestsPage() {
   const [addRequestModalOpen, setAddRequestModalOpen] = useState(false);
   const [homeCareModalOpen, setHomeCareModalOpen] = useState(false);
   const initialKind =
-    showHomeCareTab && searchParams.get('tab') === 'homecare' ? 'homecare' : 'consultations';
+    canUseHomeCare && searchParams.get('tab') === 'homecare' ? 'homecare' : 'consultations';
   const [requestKindTab, setRequestKindTab] = useState<'consultations' | 'homecare'>(initialKind);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -249,7 +248,8 @@ export default function ElixHealthRequestsPage() {
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (showHomeCareTab && requestKindTab === 'homecare') {
+    const homeCareVisible = canUseHomeCare && !(isAdmin && filters.workspace === 'global');
+    if (homeCareVisible && requestKindTab === 'homecare') {
       next.set('tab', 'homecare');
     } else {
       next.delete('tab');
@@ -257,7 +257,26 @@ export default function ElixHealthRequestsPage() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [requestKindTab, searchParams, setSearchParams, showHomeCareTab]);
+  }, [requestKindTab, searchParams, setSearchParams, canUseHomeCare, isAdmin, filters.workspace]);
+
+  const workspaceScopedRequests = useMemo(
+    () =>
+      applyRequestQuickFilters(
+        requests,
+        {
+          queue: 'all',
+          status: 'all',
+          workspace: filters.workspace,
+          specialty: null,
+          assignee: null
+        },
+        isAdmin
+      ),
+    [filters.workspace, isAdmin, requests]
+  );
+
+  const showHomeCareTab =
+    canUseHomeCare && !(isAdmin && filters.workspace === 'global');
 
   useEffect(() => {
     if (!showHomeCareTab && requestKindTab === 'homecare') {
@@ -274,18 +293,18 @@ export default function ElixHealthRequestsPage() {
 
   const kindScopedRequests = useMemo(() => {
     if (showHomeCareTab && requestKindTab === 'homecare') {
-      return requests.filter(isHomeCareOpinionRequest);
+      return workspaceScopedRequests.filter(isHomeCareOpinionRequest);
     }
-    return requests.filter((request) => !isHomeCareOpinionRequest(request));
-  }, [requestKindTab, requests, showHomeCareTab]);
+    return workspaceScopedRequests.filter((request) => !isHomeCareOpinionRequest(request));
+  }, [requestKindTab, showHomeCareTab, workspaceScopedRequests]);
 
   const consultationCount = useMemo(
-    () => requests.filter((request) => !isHomeCareOpinionRequest(request)).length,
-    [requests]
+    () => workspaceScopedRequests.filter((request) => !isHomeCareOpinionRequest(request)).length,
+    [workspaceScopedRequests]
   );
   const homeCareCount = useMemo(
-    () => requests.filter(isHomeCareOpinionRequest).length,
-    [requests]
+    () => workspaceScopedRequests.filter(isHomeCareOpinionRequest).length,
+    [workspaceScopedRequests]
   );
 
   const requestKindTabs = useMemo(() => {
@@ -300,25 +319,9 @@ export default function ElixHealthRequestsPage() {
     ];
   }, [consultationCount, homeCareCount, showHomeCareTab]);
 
-  const workspaceScopedRequests = useMemo(
-    () =>
-      applyRequestQuickFilters(
-        kindScopedRequests,
-        {
-          queue: 'all',
-          status: 'all',
-          workspace: filters.workspace,
-          specialty: null,
-          assignee: null
-        },
-        isAdmin
-      ),
-    [filters.workspace, isAdmin, kindScopedRequests]
-  );
-
   const analytics = useMemo(
-    () => computeRequestAnalytics(workspaceScopedRequests, isAdmin),
-    [workspaceScopedRequests, isAdmin]
+    () => computeRequestAnalytics(kindScopedRequests, isAdmin),
+    [kindScopedRequests, isAdmin]
   );
 
   const specialtyOptions = useMemo(
@@ -336,9 +339,10 @@ export default function ElixHealthRequestsPage() {
     const clinics = new Map<string, { name: string; count: number }>();
     let globalCount = 0;
 
-    for (const request of kindScopedRequests) {
+    for (const request of requests) {
+      // Home care belongs to clinic workspaces only — never count it on Global.
       if (!request.clinic_id) {
-        globalCount += 1;
+        if (!isHomeCareOpinionRequest(request)) globalCount += 1;
         continue;
       }
 
@@ -373,15 +377,19 @@ export default function ElixHealthRequestsPage() {
       };
     });
 
+    const allCount = requests.filter(
+      (request) => request.clinic_id || !isHomeCareOpinionRequest(request)
+    ).length;
+
     return [
       {
         value: 'all' as const,
-        label: `All (${kindScopedRequests.length})`
+        label: `All (${allCount})`
       },
       { value: 'global' as const, label: `Global (${globalCount})` },
       ...clinicOptions
     ];
-  }, [isAdmin, kindScopedRequests]);
+  }, [isAdmin, requests]);
 
   const workspaceTabs = workspaceOptions;
 
@@ -521,8 +529,18 @@ export default function ElixHealthRequestsPage() {
     const found = requests.find((request) => request.id === requestId);
     if (!found) return;
 
-    if (showHomeCareTab && isHomeCareOpinionRequest(found)) {
-      setRequestKindTab('homecare');
+    if (isHomeCareOpinionRequest(found)) {
+      if (isAdmin && found.clinic_id) {
+        setFilters((current) => ({
+          ...current,
+          workspace: `clinic:${found.clinic_id}` as RequestWorkspaceFilter
+        }));
+      }
+      if (canUseHomeCare && (!isAdmin || Boolean(found.clinic_id))) {
+        setRequestKindTab('homecare');
+      } else {
+        setRequestKindTab('consultations');
+      }
     } else {
       setRequestKindTab('consultations');
     }
@@ -543,7 +561,7 @@ export default function ElixHealthRequestsPage() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
-  }, [loading, requests, searchParams, openRequest, setSearchParams, showHomeCareTab]);
+  }, [loading, requests, searchParams, openRequest, setSearchParams, canUseHomeCare, isAdmin]);
 
   const handleDeleteRequest = useCallback(
     async (request: OpinionRequest) => {
@@ -586,8 +604,11 @@ export default function ElixHealthRequestsPage() {
     onDelete: canDeleteRequest ? (request) => void handleDeleteRequest(request) : undefined
   });
 
-  const openRecord = async (storagePath: string) => {
-    const { error } = await openMedicalRecordByPath(storagePath);
+  const openRecord = async (storagePath: string, requestId?: string) => {
+    const { error } = await openMedicalRecordByPath(
+      storagePath,
+      requestId ? { requestId } : undefined
+    );
     if (error) {
       setActionMessage(error.message);
     }
@@ -667,7 +688,6 @@ export default function ElixHealthRequestsPage() {
       : isAdmin
         ? `${analytics.pendingQueue} pending assignment · ${analytics.assignedQueue} assigned · ${analytics.total} total`
         : `${analytics.pendingQueue} awaiting coordination · ${analytics.total} assigned to you`;
-  const pendingCardLabel = isAdmin ? 'Pending Assignment' : 'Awaiting Coordination';
 
   if (error && !loading && requests.length === 0) {
     return (
@@ -692,6 +712,7 @@ export default function ElixHealthRequestsPage() {
         onExport={handleExport}
         onRefresh={() => void refresh()}
         refreshing={refreshing}
+        useSettingsMenu
         canAddRequest={canAddRequest}
         onAddRequest={
           requestKindTab === 'consultations' ? () => setAddRequestModalOpen(true) : undefined
@@ -715,14 +736,6 @@ export default function ElixHealthRequestsPage() {
         </Alert>
       ) : null}
 
-      {requestKindTabs.length > 1 ? (
-        <WorkspaceTabs
-          tabs={requestKindTabs}
-          value={requestKindTab}
-          onChange={(value) => setRequestKindTab(value as 'consultations' | 'homecare')}
-        />
-      ) : null}
-
       {isAdmin && workspaceTabs.length ? (
         <WorkspaceTabs
           tabs={workspaceTabs}
@@ -736,13 +749,13 @@ export default function ElixHealthRequestsPage() {
         />
       ) : null}
 
-      <RequestsAnalyticsCards
-        analytics={analytics}
-        pendingLabel={pendingCardLabel}
-        showPatientSelections={isPse}
-        showAssigned={isAdmin}
-        loading={loading}
-      />
+      {requestKindTabs.length > 1 ? (
+        <WorkspaceTabs
+          tabs={requestKindTabs}
+          value={requestKindTab}
+          onChange={(value) => setRequestKindTab(value as 'consultations' | 'homecare')}
+        />
+      ) : null}
 
       <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
         <RequestsDataTable
@@ -761,7 +774,6 @@ export default function ElixHealthRequestsPage() {
               search={search}
               onSearchChange={setSearch}
               filters={filters}
-              specialtyOptions={specialtyOptions}
               pendingCount={analytics.pendingQueue}
               assignedCount={analytics.assignedQueue}
               completedCount={analytics.closed}

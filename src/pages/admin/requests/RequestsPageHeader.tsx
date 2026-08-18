@@ -1,6 +1,13 @@
 import { memo } from 'react';
-import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconDownload, IconFilter, IconHomeHeart, IconPlus, IconRefresh } from '@tabler/icons-react';
+import { ActionIcon, Button, Group, Menu, Stack, Text, Title } from '@mantine/core';
+import {
+  IconDownload,
+  IconFilter,
+  IconHomeHeart,
+  IconPlus,
+  IconRefresh,
+  IconSettings
+} from '@tabler/icons-react';
 
 type RequestsPageHeaderProps = {
   title: string;
@@ -12,6 +19,8 @@ type RequestsPageHeaderProps = {
   canAddRequest?: boolean;
   onAddRequest?: () => void;
   onAddHomeCareRequest?: () => void;
+  /** Filters, Export, and Refresh live under a settings menu. */
+  useSettingsMenu?: boolean;
 };
 
 function RequestsPageHeader({
@@ -23,8 +32,73 @@ function RequestsPageHeader({
   refreshing,
   canAddRequest,
   onAddRequest,
-  onAddHomeCareRequest
+  onAddHomeCareRequest,
+  useSettingsMenu = false
 }: RequestsPageHeaderProps) {
+  const actionButtons = useSettingsMenu ? (
+    <Menu position='bottom-end' withinPortal shadow='md' radius='md'>
+      <Menu.Target>
+        <ActionIcon
+          variant='default'
+          radius='md'
+          size='input-md'
+          className='doctors-mgmt-header__ghost'
+          aria-label='Page settings'
+        >
+          <IconSettings size={18} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconFilter size={16} />} onClick={onOpenFilters}>
+          Filters
+        </Menu.Item>
+        <Menu.Item leftSection={<IconDownload size={16} />} onClick={onExport}>
+          Export
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconRefresh size={16} />}
+          onClick={onRefresh}
+          disabled={refreshing}
+        >
+          Refresh
+        </Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  ) : (
+    <>
+      <Button
+        variant='default'
+        radius='md'
+        className='doctors-mgmt-header__ghost'
+        leftSection={<IconFilter size={18} />}
+        onClick={onOpenFilters}
+      >
+        Filters
+      </Button>
+
+      <Button
+        variant='default'
+        radius='md'
+        className='doctors-mgmt-header__ghost'
+        leftSection={<IconDownload size={18} />}
+        onClick={onExport}
+      >
+        Export
+      </Button>
+
+      <Button
+        variant='default'
+        radius='md'
+        className='doctors-mgmt-header__ghost'
+        leftSection={<IconRefresh size={18} />}
+        onClick={onRefresh}
+        loading={refreshing}
+      >
+        Refresh
+      </Button>
+    </>
+  );
+
   return (
     <header className='doctors-mgmt-header'>
       <Stack gap={4} className='doctors-mgmt-header__copy'>
@@ -37,36 +111,7 @@ function RequestsPageHeader({
       </Stack>
 
       <Group gap='sm' className='doctors-mgmt-header__actions' wrap='wrap'>
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconFilter size={18} />}
-          onClick={onOpenFilters}
-        >
-          Filters
-        </Button>
-
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconDownload size={18} />}
-          onClick={onExport}
-        >
-          Export
-        </Button>
-
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconRefresh size={18} />}
-          onClick={onRefresh}
-          loading={refreshing}
-        >
-          Refresh
-        </Button>
+        {actionButtons}
 
         {canAddRequest && onAddHomeCareRequest ? (
           <Button

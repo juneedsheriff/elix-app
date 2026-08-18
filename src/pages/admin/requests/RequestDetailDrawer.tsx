@@ -30,6 +30,7 @@ import {
 
 } from '@tabler/icons-react';
 
+import { avatarColorFromName, displayInitials, resolveProfilePhotoUrl } from '../../../lib/avatarDisplay';
 import { hasPseCoordinationStarted, staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import OpinionRequestActivityPage from '../../../components/OpinionRequests/OpinionRequestActivityPage';
 import OpinionRequestAuditLink from '../../../components/OpinionRequests/OpinionRequestAuditLink';
@@ -75,7 +76,7 @@ type RequestDetailDrawerProps = {
 
   onAssign: () => void;
 
-  onOpenRecord: (storagePath: string) => void;
+  onOpenRecord: (storagePath: string, requestId?: string) => void;
 
   onWorkflowUpdated: () => void;
 
@@ -261,6 +262,10 @@ export default function RequestDetailDrawer({
     !showWorkflowWizard;
 
   const statusColor = requestStatusColor(request);
+  const patientName = request.patient_name?.trim() || 'Patient';
+  const patientPhotoUrl = resolveProfilePhotoUrl(request.patient_avatar_url);
+  const patientInitials = displayInitials(patientName);
+  const patientAvatarBg = avatarColorFromName(patientName);
 
   return (
 
@@ -313,9 +318,25 @@ export default function RequestDetailDrawer({
           <div className='request-detail-drawer__hero-inner'>
 
             <div className='request-detail-drawer__patient'>
- 
-
+              {patientPhotoUrl ? (
+                <img
+                  src={patientPhotoUrl}
+                  alt=''
+                  className='request-detail-drawer__avatar request-detail-drawer__avatar--photo'
+                  width={72}
+                  height={72}
+                />
+              ) : (
+                <span
+                  className='request-detail-drawer__avatar request-detail-drawer__avatar--initials'
+                  style={{ background: patientAvatarBg }}
+                  aria-hidden
+                >
+                  {patientInitials}
+                </span>
+              )}
               <div className='request-detail-drawer__patient-meta'>
+                <p className='request-detail-drawer__patient-name'>{patientName}</p>
                 <ul className='request-detail-drawer__facts'>
                   {request.patient_email ? (
                     <li className='request-detail-drawer__fact'>

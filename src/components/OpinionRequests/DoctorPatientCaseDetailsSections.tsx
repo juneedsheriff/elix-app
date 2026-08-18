@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  avatarColorFromName,
+  displayInitials,
+  resolveProfilePhotoUrl
+} from '../../lib/avatarDisplay';
 import { openMedicalRecordByPath } from '../../lib/records';
 import { fetchPatientByAuthUserId } from '../../lib/patients';
 import type { OpinionRequest } from '../../types/opinionRequest';
@@ -52,6 +57,10 @@ export default function DoctorPatientCaseDetailsSections({
     profile?.latest_prescription_documents ?? [];
 
   const recordsKey = request.records.map((record) => record.id).join(',');
+  const patientName = profile?.full_name?.trim() || request.patient_name?.trim() || 'Patient';
+  const patientPhotoUrl = resolveProfilePhotoUrl(profile?.avatar_url ?? request.patient_avatar_url);
+  const patientInitials = displayInitials(patientName);
+  const patientAvatarBg = avatarColorFromName(patientName);
 
   return (
     <div className={`doctor-patient-case-details-sections${className ? ` ${className}` : ''}`}>
@@ -63,6 +72,26 @@ export default function DoctorPatientCaseDetailsSections({
               Reviewed {new Date(request.case_details_reviewed_at).toLocaleString()}
             </span>
           ) : null}
+        </div>
+        <div className='doctor-patient-case-details-sections__patient'>
+          {patientPhotoUrl ? (
+            <img
+              src={patientPhotoUrl}
+              alt=''
+              className='doctor-patient-case-details-sections__patient-photo'
+              width={100}
+              height={100}
+            />
+          ) : (
+            <span
+              className='doctor-patient-case-details-sections__patient-initials'
+              style={{ background: patientAvatarBg }}
+              aria-hidden
+            >
+              {patientInitials}
+            </span>
+          )}
+          <strong className='doctor-patient-case-details-sections__patient-name'>{patientName}</strong>
         </div>
         <p className='doctor-patient-case-details-sections__intro muted'>
           Case information submitted for this request (same details the care team reviews).

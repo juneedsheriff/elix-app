@@ -1,3 +1,4 @@
+import { isHomeCareOpinionRequest } from '../../../lib/homeCareServices';
 import {
   hasPseCoordinationStarted,
   isAssignedToPatientService,
@@ -24,10 +25,10 @@ export type RequestQuickFilters = {
   assignee: string | null;
 };
 
-/** PSE sees all assigned requests by default; admins start on the pending assignment queue. */
-export function getDefaultRequestFilters(isAdmin: boolean): RequestQuickFilters {
+/** Default table view: pending queue (unassigned for admins, active PSE coordination for PSE). */
+export function getDefaultRequestFilters(_isAdmin: boolean): RequestQuickFilters {
   return {
-    queue: isAdmin ? 'pending' : 'all',
+    queue: 'pending',
     status: 'all',
     // Admins see every workspace merged; clinic tabs still filter when selected.
     workspace: 'all',
@@ -144,7 +145,10 @@ export function applyRequestQuickFilters(
     }
 
     if (isAdmin && filters.workspace !== 'all') {
-      if (filters.workspace === 'global' && request.clinic_id) return false;
+      if (filters.workspace === 'global') {
+        // Home care is clinic-only — never show it on the Global workspace.
+        if (request.clinic_id || isHomeCareOpinionRequest(request)) return false;
+      }
       if (
         filters.workspace.startsWith('clinic:') &&
         request.clinic_id !== filters.workspace.slice('clinic:'.length)

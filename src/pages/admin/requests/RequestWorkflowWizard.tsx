@@ -122,7 +122,7 @@ type RequestWorkflowWizardProps = {
   request: OpinionRequest;
   doctors: Doctor[];
   canCoordinate: boolean;
-  onOpenRecord: (storagePath: string) => void;
+  onOpenRecord: (storagePath: string, requestId?: string) => void;
   onUpdated: () => void;
   onRequestPatch?: (patch: Partial<OpinionRequest> & { id: string }) => void;
   onError: (message: string) => void;
@@ -461,14 +461,18 @@ export default function RequestWorkflowWizard({
     setBusy(true);
     const { error } = await pseScheduleAppointment(request.id, {
       scheduledAt: scheduledAt.toISOString(),
-      meetingLink
+      meetingLink: meetingLink.trim() || null
     });
     setBusy(false);
     if (error) {
       onError(error.message);
       return;
     }
-    onSuccess('Appointment scheduled. The patient will see the meeting link after payment is confirmed.');
+    onSuccess(
+      meetingLink.trim()
+        ? 'Appointment scheduled. The patient will see the meeting link after payment is confirmed.'
+        : 'Appointment scheduled.'
+    );
     onUpdated();
   };
 
@@ -1016,9 +1020,10 @@ export default function RequestWorkflowWizard({
             <PseRequestRecordsGallery
               records={request.records}
               requestId={request.id}
-              onOpenRecord={onOpenRecord}
+              onOpenDocument={(path, requestId) => onOpenRecord(path, requestId)}
               onDeleteRecord={canUploadRecords ? (record) => void deleteRequestRecord(record) : undefined}
               deletingRecordId={deletingRecordId}
+              lightboxModalZIndex={1100}
             />
             {request.records_verified_at ? (
               <Text size='sm' c='green'>
@@ -1165,6 +1170,7 @@ export default function RequestWorkflowWizard({
             <AppointmentDateTimePicker value={scheduledAt} onChange={setScheduledAt} />
             <TextInput
               label='Meeting link'
+              description='Optional — leave blank if this consultation has no video meeting.'
               placeholder='https://meet.google.com/...'
               value={meetingLink}
               onChange={(e) => setMeetingLink(e.currentTarget.value)}
@@ -1175,7 +1181,7 @@ export default function RequestWorkflowWizard({
               loading={busy}
               onClick={() => void handleSchedule()}
             >
-              Save schedule & meeting link
+              {meetingLink.trim() ? 'Save schedule & meeting link' : 'Save schedule'}
             </Button>
             {request.scheduled_at ? (
               <Text size='sm' c='dimmed'>

@@ -493,6 +493,7 @@ export default function PatientProfileEditSection({
                 hint='Optional — upload or take a photo of the ID'
                 documents={form.govtIdDocuments}
                 onChange={(next) => setField('govtIdDocuments', next)}
+                uploadKind='govt_id'
                 disabled={busy}
               />
             </div>

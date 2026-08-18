@@ -117,7 +117,6 @@ export default function DoctorConsultationNotesModal({
             <h2 id='doctor-consultation-notes-modal-title'>Consultation notes</h2>
             <p className='muted'>
               {patientLabel}
-              {request.patient_email ? ` · ${request.patient_email}` : ''}
               {' · '}
               Submitted {formatRequestDate(request.created_at)}
             </p>

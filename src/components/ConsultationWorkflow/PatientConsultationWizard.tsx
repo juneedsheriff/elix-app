@@ -611,6 +611,8 @@ export default function PatientConsultationWizard({
               sectionsThrough={8}
               showPreferences
               showConsent
+              showCurrentHealthcareProvider={false}
+              showConsultationQuestions={false}
               onSaved={(patch) => {
                 onRequestPatch?.(patch);
                 onUpdated();
@@ -930,7 +932,7 @@ export default function PatientConsultationWizard({
               <>
                 {renderPaymentRetain()}
                 <p className='muted'>
-                  Payment confirmed. Appointment and meeting details are on{' '}
+                  Payment confirmed. Appointment details are on{' '}
                   <button type='button' className='text-btn' onClick={() => goToStep(4)}>
                     Scheduled appointment
                   </button>
@@ -951,7 +953,7 @@ export default function PatientConsultationWizard({
                   </p>
                 ) : null}
                 <p className='muted patient-payment-step__hint'>
-                  Complete payment to unlock your scheduled appointment and meeting link.
+                  Complete payment to unlock your scheduled appointment.
                 </p>
                 <a
                   href={request.payment_link!}
@@ -1000,7 +1002,7 @@ export default function PatientConsultationWizard({
       case 4:
         return (
           <div className='doctor-response-block patient-view patient-appointment-step'>
-            {onAppointmentStep && request.scheduled_at && request.meeting_link ? (
+            {onAppointmentStep && request.scheduled_at ? (
               <div className='patient-appointment-detail-card'>
                 {request.scheduled_at ? (
                   <div className='patient-appointment-detail-card__row'>
@@ -1016,7 +1018,7 @@ export default function PatientConsultationWizard({
                   </div>
                 ) : null}
 
-                {request.meeting_link ? (
+                {request.meeting_link?.trim() ? (
                   <div className='patient-appointment-detail-card__row'>
                     <span className='patient-appointment-detail-card__icon' aria-hidden>
                       <Link2 size={18} />
@@ -1049,7 +1051,7 @@ export default function PatientConsultationWizard({
                       downloadAppointmentIcs({
                         scheduledAt: request.scheduled_at!,
                         title: `Consultation with ${request.doctor_name ?? 'your doctor'}`,
-                        meetingLink: request.meeting_link
+                        meetingLink: request.meeting_link?.trim() || null
                       })
                     }
                   >
@@ -1058,7 +1060,7 @@ export default function PatientConsultationWizard({
                   </button>
                 ) : null}
 
-                {request.payment_status === 'paid' && request.meeting_link && request.scheduled_at ? (
+                {request.payment_status === 'paid' && request.meeting_link?.trim() && request.scheduled_at ? (
                   joinMeetingAvailable ? (
                     <a
                       href={request.meeting_link}
@@ -1089,7 +1091,7 @@ export default function PatientConsultationWizard({
             ) : (
               <>
                 <p className='muted patient-appointment-step__intro'>
-                  Our PSE team will share your appointment link shortly. Please wait while we connect you
+                  Our PSE team will share your appointment details shortly. Please wait while we connect you
                   with the doctor.
                 </p>
                 {request.scheduled_at ? (
@@ -1110,7 +1112,7 @@ export default function PatientConsultationWizard({
               </>
             )}
 
-            {request.meeting_link?.trim() && !hasConsultationSummary(summary) ? (
+            {request.scheduled_at && !hasConsultationSummary(summary) ? (
               <p className='muted patient-appointment-step__footer'>
                 After your consultation, your doctor&apos;s notes will appear under Consultation notes as
                 a PDF.

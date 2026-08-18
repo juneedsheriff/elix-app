@@ -957,22 +957,26 @@ body.doctors-mgmt-table-fullscreen-open .mantine-Tooltip-tooltip {
 
 .request-detail-drawer__avatar {
   flex-shrink: 0;
-  width: 2.65rem;
-  height: 2.65rem;
-  border-radius: 10px;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: var(--brand-cyan);
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--brand-cyan) 22%, var(--surface)),
-    color-mix(in srgb, var(--brand-cyan) 8%, var(--surface-soft))
-  );
+  overflow: hidden;
+}
+
+.request-detail-drawer__avatar--photo {
+  object-fit: cover;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.request-detail-drawer__avatar--initials {
+  color: #fff;
   border: 1px solid color-mix(in srgb, var(--brand-cyan) 28%, var(--border));
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-cyan) 14%, transparent);
 }
 
 .request-detail-drawer__patient-meta {

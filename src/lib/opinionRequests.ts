@@ -1546,7 +1546,10 @@ export function isRecommendationOpinionRequest(
 
 function mapRequestRow(
   row: RequestListRow,
-  patientMap: Map<string, { full_name: string; email: string; gender: string | null }>
+  patientMap: Map<
+    string,
+    { full_name: string; email: string; gender: string | null; avatar_url: string | null }
+  >
 ): OpinionRequest {
   const patient = row.patient_id ? patientMap.get(row.patient_id) : undefined;
   const records: OpinionRequestFile[] = [];
@@ -1564,6 +1567,7 @@ function mapRequestRow(
     patient_id: row.patient_id,
     patient_name: row.patient_name ?? patient?.full_name ?? null,
     patient_gender: patient?.gender ?? null,
+    patient_avatar_url: patient?.avatar_url ?? null,
     doctor_id: row.doctor_id,
     doctor_name: row.doctor_name ?? row.doctors?.full_name ?? null,
     doctor_specialty: row.doctors?.specialty ?? null,
@@ -1659,22 +1663,45 @@ export async function submitDoctorOpinionResponse(requestId: string, responseTex
 }
 
 async function loadPatientEmailMap(authUserIds: string[]) {
-  const patientMap = new Map<string, { full_name: string; email: string; gender: string | null }>();
+  const patientMap = new Map<
+    string,
+    { full_name: string; email: string; gender: string | null; avatar_url: string | null }
+  >();
   if (!authUserIds.length) return patientMap;
 
-  const { data: patients, error: patientsError } = await supabase
+  let patients:
+    | Array<{
+        auth_user_id: string | null;
+        full_name: string;
+        email: string;
+        gender: string | null;
+        avatar_url?: string | null;
+      }>
+    | null = null;
+
+  const withAvatar = await supabase
     .from('patients')
-    .select('auth_user_id, full_name, email, gender')
+    .select('auth_user_id, full_name, email, gender, avatar_url')
     .in('auth_user_id', authUserIds);
 
-  if (patientsError) throw patientsError;
+  if (withAvatar.error) {
+    const withoutAvatar = await supabase
+      .from('patients')
+      .select('auth_user_id, full_name, email, gender')
+      .in('auth_user_id', authUserIds);
+    if (withoutAvatar.error) throw withoutAvatar.error;
+    patients = withoutAvatar.data;
+  } else {
+    patients = withAvatar.data;
+  }
 
   for (const p of patients ?? []) {
     if (p.auth_user_id) {
       patientMap.set(p.auth_user_id, {
         full_name: p.full_name,
         email: p.email,
-        gender: p.gender ?? null
+        gender: p.gender ?? null,
+        avatar_url: p.avatar_url ?? null
       });
     }
   }
@@ -2315,10 +2342,19 @@ async function attachRequestRecords(requests: OpinionRequest[]): Promise<Opinion
   }
 
   const recordIds = [...new Set(links.map((link) => link.record_id))];
-  const { data: files, error: filesError } = await supabase
+  let { data: files, error: filesError } = await supabase
     .from('uploaded_files')
-    .select('id, file_name, summary, storage_path')
+    .select('id, file_name, summary, storage_path, record_category')
     .in('id', recordIds);
+
+  if (filesError && (filesError.message?.toLowerCase().includes('record_category') ?? false)) {
+    const fallback = await supabase
+      .from('uploaded_files')
+      .select('id, file_name, summary, storage_path')
+      .in('id', recordIds);
+    files = fallback.data;
+    filesError = fallback.error;
+  }
 
   if (filesError || !files?.length) {
     return requests;
@@ -4979,8 +5015,8 @@ const CONSULTATION_NOTES_EXTENSION_MIME: Record<string, string> = {
 };
 
 const CONSULTATION_NOTES_ALLOWED_EXTENSIONS = new Set(Object.keys(CONSULTATION_NOTES_EXTENSION_MIME));
-/** Prescription and lab order attachments — same document / image set. */
-const CONSULTATION_ORDER_FILE_EXTENSIONS = CONSULTATION_NOTES_ALLOWED_EXTENSIONS;
+/** Prescription and lab order attachments — PDF, JPG, and PNG only. */
+const CONSULTATION_ORDER_FILE_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'png']);
 
 function isMissingPrescriptionLabOrderColumnsError(error: { message?: string; code?: string } | null) {
   const msg = error?.message?.toLowerCase() ?? '';
@@ -4998,6 +5034,14 @@ async function uploadConsultationAttachmentFile(
   recordCategory: 'prescriptions' | 'lab_results',
   summary: string
 ): Promise<{ storagePath: string | null; error: { message: string } | null }> {
+  const validationError =
+    recordCategory === 'prescriptions'
+      ? prescriptionImageValidationError(file)
+      : labOrderFileValidationError(file);
+  if (validationError) {
+    return { storagePath: null, error: { message: validationError } };
+  }
+
   const { data: uploadTarget, error: presignError } = await createConsultationOrderUploadUrl(
     requestId,
     file.size,
@@ -5078,7 +5122,7 @@ export function prescriptionImageValidationError(file: File): string | null {
   }
   const ext = consultationNotesFileExtension(file);
   if (!CONSULTATION_ORDER_FILE_EXTENSIONS.has(ext)) {
-    return 'Prescription file must be PDF, JPG, PNG, DOC, or DOCX.';
+    return 'Prescription file must be PDF, JPG, or PNG.';
   }
   return null;
 }
@@ -5089,7 +5133,7 @@ export function labOrderFileValidationError(file: File): string | null {
   }
   const ext = consultationNotesFileExtension(file);
   if (!CONSULTATION_ORDER_FILE_EXTENSIONS.has(ext)) {
-    return 'Lab order file must be PDF, JPG, PNG, DOC, or DOCX.';
+    return 'Lab order file must be PDF, JPG, or PNG.';
   }
   return null;
 }

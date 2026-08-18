@@ -34,7 +34,7 @@ export const PSE_WIZARD_STEPS: WizardStepDef[] = [
     subtitle: 'Share doctors, review patient choice, confirm availability'
   },
   { id: 5, title: 'Send payment link', subtitle: 'After patient confirms schedule' },
-  { id: 6, title: 'Schedule appointment', subtitle: 'Set date, time, and meeting link' },
+  { id: 6, title: 'Schedule appointment', subtitle: 'Set date and time (meeting link optional)' },
   { id: 7, title: 'Consultation notes', subtitle: 'View doctor consultation summary' }
 ];
 
@@ -65,7 +65,7 @@ export const PATIENT_WIZARD_STEPS: WizardStepDef[] = [
   { id: 2, title: 'Document verification', subtitle: 'We verify your uploaded records' },
   { id: 3, title: 'Recommended doctors', subtitle: 'Choose from doctors curated for you' },
   { id: 4, title: 'Payment', subtitle: 'Complete payment to continue' },
-  { id: 5, title: 'Scheduled appointment', subtitle: 'Your consultation date and meeting link' },
+  { id: 5, title: 'Scheduled appointment', subtitle: 'Your consultation date and time' },
   { id: 6, title: 'Consultation notes', subtitle: 'Summary from your doctor after the visit' }
 ];
 
@@ -232,8 +232,8 @@ function isPaymentConfirmed(request: OpinionRequest) {
   return request.payment_status === 'paid';
 }
 
-function isScheduledWithLink(request: OpinionRequest) {
-  return Boolean(request.scheduled_at?.trim() && request.meeting_link?.trim());
+function isAppointmentScheduled(request: OpinionRequest) {
+  return Boolean(request.scheduled_at?.trim());
 }
 
 export function isPatientPaymentConfirmed(request: OpinionRequest) {
@@ -312,7 +312,7 @@ function isStepComplete(index: number, ctx: WizardProgressContext, audience: Wiz
       case 4:
         return isPaymentConfirmed(request);
       case 5:
-        return isScheduledWithLink(request);
+        return isAppointmentScheduled(request);
       case 6:
         return isConsultationNotesComplete(ctx);
       default:
@@ -333,7 +333,7 @@ function isStepComplete(index: number, ctx: WizardProgressContext, audience: Wiz
       return (
         hasSummary ||
         request.consultation_stage === 'completed' ||
-        (isPaymentConfirmed(request) && isScheduledWithLink(request))
+        (isPaymentConfirmed(request) && isAppointmentScheduled(request))
       );
     case 5:
       return isPatientConsultationNotesComplete(ctx);

@@ -46,9 +46,10 @@ import type { ScreenPageProps } from '../types';
 const CONSULTATION_NOTES_ACCEPT =
   '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.doc,.docx,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-const PRESCRIPTION_FILE_ACCEPT = CONSULTATION_NOTES_ACCEPT;
+const PRESCRIPTION_FILE_ACCEPT =
+  '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
 
-const LAB_ORDER_FILE_ACCEPT = CONSULTATION_NOTES_ACCEPT;
+const LAB_ORDER_FILE_ACCEPT = PRESCRIPTION_FILE_ACCEPT;
 
 type ConsultationMode = 'fill' | 'upload';
 
@@ -370,7 +371,7 @@ export default function DoctorConsultationPage({
         return;
       }
     } else if (!prescriptionFile && !hasExistingPrescriptionFile) {
-      setError('Upload a prescription file (PDF, JPG, PNG, DOC, or DOCX), or switch to Type text.');
+      setError('Upload a prescription file (PDF, JPG, or PNG), or switch to Type text.');
       return;
     }
 
@@ -380,7 +381,7 @@ export default function DoctorConsultationPage({
         return;
       }
     } else if (!labOrderFile && !hasExistingLabOrderFile) {
-      setError('Upload a lab order file (PDF, JPG, PNG, DOC, or DOCX), or switch to Type text.');
+      setError('Upload a lab order file (PDF, JPG, or PNG), or switch to Type text.');
       return;
     }
 
@@ -985,8 +986,8 @@ export default function DoctorConsultationPage({
                         {showUploadInput && attachmentInputRef && onAttachmentChange ? (
                           <div className='doctor-consultation-field-upload'>
                             <p className='muted doctor-consultation-field-upload__hint'>
-                              Upload {isPrescription ? 'a prescription' : 'a lab order'} as PDF, JPG, PNG,
-                              DOC, or DOCX (max 10 MB). The uploaded file is used as the order document.
+                              Upload {isPrescription ? 'a prescription' : 'a lab order'} as PDF, JPG, or
+                              PNG (max 10 MB). The uploaded file is used as the order document.
                             </p>
                             <input
                               ref={attachmentInputRef}

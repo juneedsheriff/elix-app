@@ -2,14 +2,18 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Camera, ImagePlus, Loader2, Trash2, User } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
 import { isAcceptedProfileImageFile, resizeImageFileToSquareDataUrl } from '../../lib/imageFiles';
-import { updatePatientAvatarForUser } from '../../lib/patients';
+import { updatePatientAvatarByPatientId, updatePatientAvatarForUser } from '../../lib/patients';
 import PatientCameraCaptureModal from './PatientCameraCaptureModal';
 
 type PatientProfileImageSectionProps = {
-  userId: string;
+  userId?: string;
+  /** Staff console: save by patients.id instead of auth_user_id. */
+  patientId?: string;
   avatarUrl: string | null;
   displayName?: string;
   disabled?: boolean;
+  hint?: string;
+  onSaved?: (avatarUrl: string | null) => void;
 };
 
 function initialsFromName(name: string): string {
@@ -21,11 +25,15 @@ function initialsFromName(name: string): string {
 
 export default function PatientProfileImageSection({
   userId,
+  patientId,
   avatarUrl,
   displayName = '',
-  disabled = false
+  disabled = false,
+  hint,
+  onSaved
 }: PatientProfileImageSectionProps) {
   const { refreshPatientProfile } = useSupabase();
+  const isStaffEditor = Boolean(patientId);
   const inputId = useId();
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(avatarUrl);
@@ -44,12 +52,22 @@ export default function PatientProfileImageSection({
   const showPreview = Boolean(trimmed) && !previewBroken;
   const initials = initialsFromName(displayName);
 
+  const persistAvatar = async (nextUrl: string | null) => {
+    if (patientId) {
+      return updatePatientAvatarByPatientId(patientId, nextUrl);
+    }
+    if (!userId) {
+      return { data: null, error: { message: 'Patient login is not linked yet.' } };
+    }
+    return updatePatientAvatarForUser(userId, nextUrl);
+  };
+
   const saveAvatar = async (nextUrl: string | null) => {
     setBusy(true);
     setFileError(null);
     setSuccess(null);
 
-    const { data, error } = await updatePatientAvatarForUser(userId, nextUrl);
+    const { data, error } = await persistAvatar(nextUrl);
     setBusy(false);
 
     if (error) {
@@ -58,11 +76,14 @@ export default function PatientProfileImageSection({
       return;
     }
 
-    await refreshPatientProfile();
-    const saved = data?.avatar_url ?? null;
+    if (!isStaffEditor) {
+      await refreshPatientProfile();
+    }
+    const saved = data?.avatar_url ?? nextUrl;
     setPreviewUrl(saved);
     setPreviewBroken(false);
     setSuccess(nextUrl ? 'Profile photo updated.' : 'Profile photo removed.');
+    onSaved?.(saved);
   };
 
   const processAndSaveDataUrl = async (dataUrl: string) => {
@@ -73,7 +94,7 @@ export default function PatientProfileImageSection({
     setSuccess(null);
     setPreviewUrl(dataUrl);
 
-    const { data, error } = await updatePatientAvatarForUser(userId, dataUrl);
+    const { data, error } = await persistAvatar(dataUrl);
     if (error) {
       setPreviewUrl(avatarUrl);
       setFileError(error.message);
@@ -81,11 +102,14 @@ export default function PatientProfileImageSection({
       return;
     }
 
-    await refreshPatientProfile();
-    const saved = data?.avatar_url ?? null;
+    if (!isStaffEditor) {
+      await refreshPatientProfile();
+    }
+    const saved = data?.avatar_url ?? dataUrl;
     setPreviewUrl(saved);
     setPreviewBroken(false);
     setSuccess('Profile photo updated.');
+    onSaved?.(saved);
     setBusy(false);
   };
 
@@ -134,7 +158,7 @@ export default function PatientProfileImageSection({
           {showPreview ? (
             <img
               src={trimmed}
-              alt='Your profile photo'
+              alt={isStaffEditor ? 'Patient profile photo' : 'Your profile photo'}
               className='patient-profile-image__preview'
               onError={() => setPreviewBroken(true)}
               onLoad={() => setPreviewBroken(false)}
@@ -152,7 +176,10 @@ export default function PatientProfileImageSection({
 
         <div className='patient-profile-image__controls'>
           <p className='muted patient-profile-image__hint'>
-            Add a photo so doctors can recognize you. Large images are automatically resized to 512×512.
+            {hint ??
+              (isStaffEditor
+                ? 'Upload an image or take a photo with the camera. Large images are automatically resized to 512×512.'
+                : 'Add a photo so doctors can recognize you. Large images are automatically resized to 512×512.')}
           </p>
 
           {previewBroken && trimmed ? (

@@ -96,7 +96,6 @@ export default function DoctorCaseDetailsModal({
             <h2 id='doctor-case-details-modal-title'>Patient Case Details</h2>
             <p className='muted'>
               {patientLabel}
-              {request.patient_email ? ` · ${request.patient_email}` : ''}
               {' · '}
               Submitted {formatRequestDate(request.created_at)}
             </p>

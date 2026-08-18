@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { IconSearch } from '@tabler/icons-react';
 import { Calendar, ClipboardList, FileText, Video } from 'lucide-react';
 import {
+  avatarColorFromName,
+  displayInitials,
+  resolveProfilePhotoUrl
+} from '../../lib/avatarDisplay';
+import {
   canDoctorGiveConsultation,
   hasPatientConsultationNotes
 } from '../../lib/doctorConsultation';
@@ -27,12 +32,17 @@ type DoctorIncomingRequestsCardListProps = {
   layout?: 'default' | 'workspace';
   /** Hide the local search toolbar when search lives in the page header. */
   hideSearch?: boolean;
+  emptyHint?: string;
 };
 
 function doctorStatusLabel(status: string): string {
   if (status === 'in_review') return 'In review';
   if (status === 'closed') return 'Completed';
   return 'Submitted';
+}
+
+function isHttpsMeetingLink(link: string | null | undefined): boolean {
+  return /^https:\/\//i.test(link?.trim() ?? '');
 }
 
 function CardField({
@@ -66,7 +76,8 @@ export default function DoctorIncomingRequestsCardList({
   onOpenError,
   onRequestUpdated,
   layout = 'default',
-  hideSearch = false
+  hideSearch = false,
+  emptyHint
 }: DoctorIncomingRequestsCardListProps) {
   const [caseDetailsRequest, setCaseDetailsRequest] = useState<OpinionRequest | null>(null);
   const [consultationNotesRequest, setConsultationNotesRequest] = useState<OpinionRequest | null>(null);
@@ -132,7 +143,8 @@ export default function DoctorIncomingRequestsCardList({
           <p className='muted'>
             {hasActiveFilters
               ? 'No cases match your search.'
-              : 'No patient requests yet. Patients can send cases from a doctor profile → Get opinion.'}
+              : emptyHint ??
+                'No patient requests yet. Patients can send cases from a doctor profile → Get opinion.'}
           </p>
           {hasActiveFilters ? (
             <button type='button' className='secondary-btn' onClick={onClearFilters}>
@@ -147,7 +159,8 @@ export default function DoctorIncomingRequestsCardList({
           }`}
         >
           {data.map((request) => {
-            const meetingLink = request.meeting_link?.trim();
+            const meetingLink = request.meeting_link?.trim() || null;
+            const canJoinMeeting = isHttpsMeetingLink(meetingLink);
             const scheduledAt = request.scheduled_at?.trim();
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);
@@ -161,6 +174,10 @@ export default function DoctorIncomingRequestsCardList({
               : scheduledAt
                 ? `Scheduled · ${new Date(scheduledAt).toLocaleString()}`
                 : null;
+            const patientName = request.patient_name ?? 'Patient';
+            const patientPhotoUrl = resolveProfilePhotoUrl(request.patient_avatar_url);
+            const patientInitials = displayInitials(patientName);
+            const patientAvatarBg = avatarColorFromName(patientName);
 
             return (
               <li
@@ -170,7 +187,26 @@ export default function DoctorIncomingRequestsCardList({
                 }`}
               >
                 <div className='doctor-request-head'>
-                  <strong>{request.patient_name ?? 'Patient'}</strong>
+                  <div className='doctor-incoming-card__patient'>
+                    {patientPhotoUrl ? (
+                      <img
+                        src={patientPhotoUrl}
+                        alt=''
+                        className='doctor-incoming-card__patient-photo'
+                        width={40}
+                        height={40}
+                      />
+                    ) : (
+                      <span
+                        className='doctor-incoming-card__patient-initials'
+                        style={{ background: patientAvatarBg }}
+                        aria-hidden
+                      >
+                        {patientInitials}
+                      </span>
+                    )}
+                    <strong>{patientName}</strong>
+                  </div>
                   <span className={`tag status-${request.status}`}>
                     {doctorStatusLabel(request.status)}
                   </span>
@@ -178,14 +214,13 @@ export default function DoctorIncomingRequestsCardList({
 
                 {isWorkspace ? (
                   <div className='doctor-incoming-card__fields doctor-incoming-card__fields--workspace'>
-                    <CardField compact label='Email' value={request.patient_email} />
                     <CardField compact label='Submitted' value={formatRequestDate(request.created_at)} />
                     <CardField compact label='Follow-up' value={followupDate} />
                     <div className='doctor-incoming-card__field doctor-incoming-card__field--compact'>
                       <span className='doctor-incoming-card__field-label'>Consultation</span>
                       <span className='doctor-incoming-card__field-value'>
                         {consultationLabel?.trim() || '—'}
-                        {meetingLink ? (
+                        {canJoinMeeting && meetingLink ? (
                           <>
                             {' · '}
                             <a
@@ -226,7 +261,7 @@ export default function DoctorIncomingRequestsCardList({
                   </>
                 )}
 
-                {!isWorkspace && meetingLink ? (
+                {!isWorkspace && canJoinMeeting && meetingLink ? (
                   <div className='doctor-incoming-card__meeting'>
                     <p className='doctor-incoming-card__meeting-label'>
                       <Video size={15} aria-hidden /> Video consultation

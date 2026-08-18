@@ -8,6 +8,7 @@ import {
 import type { Patient } from '../../../types/patient';
 import { PATIENT_GOVT_ID_TYPES } from '../../../types/patient';
 import PatientDocumentList from '../../../components/patient/PatientDocumentList';
+import PatientProfileImageSection from '../../../components/patient/PatientProfileImageSection';
 import AdminAccountAccessPanel from './AdminAccountAccessPanel';
 import { FieldLabel } from './adminDoctorFormUi';
 
@@ -103,6 +104,14 @@ export default function AdminPatientEditForm({
 
   return (
     <form className='elixhealth-form' onSubmit={(e) => void handleSubmit(e)}>
+      <PatientProfileImageSection
+        patientId={patient.id}
+        avatarUrl={patient.avatar_url}
+        displayName={form.full_name || patient.full_name}
+        disabled={busy}
+        hint='Upload an image or take a photo with the camera. Large images are automatically resized to 512×512.'
+      />
+
       <fieldset disabled={readOnly || busy} className='elixhealth-form-fieldset'>
         {error ? (
           <p className='auth-error' role='alert'>
@@ -242,6 +251,7 @@ export default function AdminPatientEditForm({
               hint='Optional — upload or take a photo of the ID'
               documents={form.govt_id_documents}
               onChange={(next) => setField('govt_id_documents', next)}
+              uploadKind='govt_id'
               disabled={readOnly || busy}
             />
           </div>

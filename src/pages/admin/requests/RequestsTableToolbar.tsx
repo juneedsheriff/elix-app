@@ -15,7 +15,6 @@ type RequestsTableToolbarProps = {
   search: string;
   onSearchChange: (value: string) => void;
   filters: RequestQuickFilters;
-  specialtyOptions: string[];
   pendingCount: number;
   assignedCount: number;
   completedCount: number;
@@ -38,7 +37,6 @@ function RequestsTableToolbar({
   search,
   onSearchChange,
   filters,
-  specialtyOptions,
   pendingCount,
   assignedCount,
   completedCount,
@@ -85,17 +83,6 @@ function RequestsTableToolbar({
             onChange={(value) =>
               onFilterChange({ ...filters, queue: (value as RequestQueueFilter) ?? filters.queue })
             }
-            radius='md'
-            comboboxProps={{ withinPortal: true, zIndex: 460 }}
-          />
-          <Select
-            className='doctors-mgmt-quick-select'
-            placeholder='Specialty'
-            clearable
-            searchable
-            data={specialtyOptions}
-            value={filters.specialty}
-            onChange={(value) => onFilterChange({ ...filters, specialty: value })}
             radius='md'
             comboboxProps={{ withinPortal: true, zIndex: 460 }}
           />

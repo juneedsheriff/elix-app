@@ -1,0 +1,41 @@
+.request-records-gallery__card {
+  cursor: pointer;
+}
+
+.request-records-gallery__card:hover,
+.request-records-gallery__card:focus-visible {
+  border-color: color-mix(in srgb, var(--border) 40%, #0d9488);
+  outline: none;
+}
+
+.request-records-gallery__card-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.request-records-gallery__thumb {
+  width: 150px;
+  height: 150px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f8fafc;
+  border: 2px solid #1cafad;
+}
+
+.request-records-gallery__file-icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  color: #475569;
+}
+
+.request-records-gallery__details {
+  min-width: 0;
+}

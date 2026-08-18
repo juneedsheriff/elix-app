@@ -82,6 +82,7 @@
     "db:apply-pse-clinic-home-care": "node scripts/apply-pse-clinic-home-care.mjs",
     "db:apply-patient-profile-docs": "node scripts/apply-patient-profile-docs.mjs",
     "db:apply-request-messages": "node scripts/apply-migration.mjs 069_request_messages.sql",
+    "db:apply-staff-patient-avatar": "node scripts/apply-migration.mjs 081_staff_set_patient_avatar.sql",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "db:seed-pse": "node scripts/seed-pse.mjs"
   },

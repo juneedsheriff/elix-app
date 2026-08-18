@@ -24,6 +24,7 @@ export type OpinionRequestFile = {
   file_name: string;
   summary: string | null;
   storage_path: string | null;
+  record_category?: string | null;
 };
 
 export type OpinionRequestRecommendation = {
@@ -80,6 +81,7 @@ export type OpinionRequest = {
   patient_id: string | null;
   patient_name: string | null;
   patient_gender?: string | null;
+  patient_avatar_url?: string | null;
   doctor_id: string | null;
   doctor_name: string | null;
   doctor_specialty: string | null;

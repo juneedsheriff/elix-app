@@ -1,8 +1,9 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react';
+import ImageLightboxGallery, { type LightboxImageItem } from '../common/ImageLightboxGallery';
 import PatientCameraCaptureModal from './PatientCameraCaptureModal';
-import { dataUrlToFile } from '../../lib/imageFiles';
-import { openMedicalRecordByPath } from '../../lib/records';
+import { isImageFileName, isImageMimeType, dataUrlToFile } from '../../lib/imageFiles';
+import { getMedicalRecordDownloadUrl, openMedicalRecordByPath } from '../../lib/records';
 import { uploadPatientAttachedDocument } from '../../lib/patients';
 import type { PatientAttachedDocument } from '../../types/patient';
 
@@ -13,7 +14,13 @@ type PatientDocumentListProps = {
   disabled?: boolean;
   allowCamera?: boolean;
   hint?: string;
+  /** Limits upload/validation for this specific document list. */
+  uploadKind?: 'govt_id' | 'default';
 };
+
+function isPatientAttachedDocumentImage(doc: PatientAttachedDocument): boolean {
+  return isImageMimeType(doc.mime_type) || isImageFileName(doc.file_name);
+}
 
 export default function PatientDocumentList({
   label,
@@ -21,19 +28,94 @@ export default function PatientDocumentList({
   onChange,
   disabled = false,
   allowCamera = true,
-  hint
+  hint,
+  uploadKind = 'default'
 }: PatientDocumentListProps) {
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [lightboxImages, setLightboxImages] = useState<LightboxImageItem[]>([]);
+  const [lightboxLoading, setLightboxLoading] = useState(false);
+  const [lightboxError, setLightboxError] = useState<string | null>(null);
+
+  const imageDocuments = useMemo(
+    () => documents.filter((doc) => isPatientAttachedDocumentImage(doc)),
+    [documents]
+  );
+  const otherDocuments = useMemo(
+    () => documents.filter((doc) => !isPatientAttachedDocumentImage(doc)),
+    [documents]
+  );
+
+  useEffect(() => {
+    const urlsToRevoke: string[] = [];
+    let cancelled = false;
+
+    async function loadPreviews() {
+      if (imageDocuments.length === 0) {
+        setLightboxImages([]);
+        setLightboxError(null);
+        setLightboxLoading(false);
+        return;
+      }
+
+      setLightboxLoading(true);
+      setLightboxError(null);
+
+      const results = await Promise.all(
+        imageDocuments.map(async (doc) => {
+          const { data, error: urlError } = await getMedicalRecordDownloadUrl(doc.storage_path);
+          if (urlError || !data?.signedUrl) {
+            return {
+              doc,
+              url: null as string | null,
+              error: urlError?.message ?? 'Could not load image preview.'
+            };
+          }
+          urlsToRevoke.push(data.signedUrl);
+          return { doc, url: data.signedUrl, error: null };
+        })
+      );
+
+      if (cancelled) {
+        urlsToRevoke.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+
+      const failed = results.find((result) => !result.url);
+      if (failed) {
+        setLightboxError(failed.error ?? 'Could not load one or more image previews.');
+      }
+
+      setLightboxImages(
+        results
+          .filter((result): result is typeof result & { url: string } => Boolean(result.url))
+          .map((result) => ({
+            id: result.doc.id,
+            src: result.url,
+            alt: result.doc.file_name,
+            caption: result.doc.file_name
+          }))
+      );
+      setLightboxLoading(false);
+    }
+
+    void loadPreviews();
+    return () => {
+      cancelled = true;
+      urlsToRevoke.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageDocuments]);
 
   const addFile = async (file: File | null) => {
     if (!file || disabled || busy) return;
     setBusy(true);
     setError(null);
-    const { data, error: uploadError } = await uploadPatientAttachedDocument(file);
+    const { data, error: uploadError } = await uploadPatientAttachedDocument(file, {
+      kind: uploadKind
+    });
     setBusy(false);
     if (uploadError || !data) {
       setError(uploadError?.message ?? 'Could not upload the document.');
@@ -48,7 +130,9 @@ export default function PatientDocumentList({
   };
 
   const openDoc = async (doc: PatientAttachedDocument) => {
-    const { error: openError } = await openMedicalRecordByPath(doc.storage_path);
+    const { error: openError } = await openMedicalRecordByPath(doc.storage_path, {
+      fileName: doc.file_name
+    });
     if (openError) setError(openError.message);
   };
 
@@ -59,9 +143,37 @@ export default function PatientDocumentList({
         {hint ? <span className='patient-document-list__hint muted'>{hint}</span> : null}
       </div>
 
-      {documents.length ? (
+      {imageDocuments.length > 0 ? (
+        <div className='patient-document-list__previews'>
+          <p className='patient-document-list__preview-hint muted'>Click an image to view full size.</p>
+          <ImageLightboxGallery
+            images={lightboxImages}
+            loading={lightboxLoading}
+            error={lightboxError}
+            className='patient-document-list__lightbox'
+          />
+          <ul className='patient-document-list__items patient-document-list__items--images'>
+            {imageDocuments.map((doc) => (
+              <li key={doc.id} className='patient-document-list__item'>
+                <span className='patient-document-list__file-name'>{doc.file_name}</span>
+                <button
+                  type='button'
+                  className='secondary-btn patient-document-list__remove'
+                  disabled={disabled || busy}
+                  onClick={() => removeDoc(doc.id)}
+                  aria-label={`Remove ${doc.file_name}`}
+                >
+                  <Trash2 size={14} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {otherDocuments.length > 0 ? (
         <ul className='patient-document-list__items'>
-          {documents.map((doc) => (
+          {otherDocuments.map((doc) => (
             <li key={doc.id} className='patient-document-list__item'>
               <button
                 type='button'
@@ -82,16 +194,22 @@ export default function PatientDocumentList({
             </li>
           ))}
         </ul>
-      ) : (
+      ) : null}
+
+      {documents.length === 0 ? (
         <p className='muted patient-document-list__empty'>No documents uploaded yet.</p>
-      )}
+      ) : null}
 
       <div className='patient-document-list__actions'>
         <input
           id={inputId}
           ref={fileInputRef}
           type='file'
-          accept='.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,image/*'
+          accept={
+            uploadKind === 'govt_id'
+              ? 'image/*'
+              : '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,image/*'
+          }
           className='patient-document-list__file-input'
           disabled={disabled || busy}
           onChange={(event) => {

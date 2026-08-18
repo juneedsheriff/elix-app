@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Button, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
-import { IconExternalLink, IconFileText, IconTrash } from '@tabler/icons-react';
+import { ActionIcon, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { IconEye, IconFileText, IconTrash } from '@tabler/icons-react';
 import ImageLightboxGallery, { type LightboxImageItem } from '../common/ImageLightboxGallery';
 import { isImageFileName } from '../../lib/imageFiles';
+import {
+  medicalRecordCategoryId,
+  medicalRecordCategoryLabel
+} from '../../lib/medicalRecordCategories';
 import { getMedicalRecordDownloadUrl, openMedicalRecordByPath } from '../../lib/records';
 import type { OpinionRequestFile } from '../../types/opinionRequest';
+import './request-records-gallery.css';
+
+function recordCategoryLabel(record: OpinionRequestFile): string {
+  if (record.record_category) {
+    return medicalRecordCategoryLabel(medicalRecordCategoryId(record));
+  }
+  const summary = record.summary?.trim();
+  if (summary) return summary;
+  return medicalRecordCategoryLabel(null);
+}
+
+function isImageRecord(record: OpinionRequestFile): boolean {
+  return Boolean(record.storage_path && isImageFileName(record.file_name));
+}
 
 type RequestRecordsGalleryProps = {
   records: OpinionRequestFile[];
@@ -28,19 +46,24 @@ export default function RequestRecordsGallery({
   deletingRecordId = null,
   lightboxModalZIndex = 500
 }: RequestRecordsGalleryProps) {
-  const imageRecords = useMemo(
-    () => records.filter((record) => record.storage_path && isImageFileName(record.file_name)),
-    [records]
-  );
-  const otherRecords = useMemo(
-    () => records.filter((record) => !record.storage_path || !isImageFileName(record.file_name)),
-    [records]
-  );
+  const imageRecords = useMemo(() => records.filter(isImageRecord), [records]);
 
   const [images, setImages] = useState<LightboxImageItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [openingPath, setOpeningPath] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const thumbById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const image of images) map.set(image.id, image.src);
+    return map;
+  }, [images]);
+
+  const imageIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    images.forEach((image, index) => map.set(image.id, index));
+    return map;
+  }, [images]);
 
   useEffect(() => {
     const urlsToRevoke: string[] = [];
@@ -50,11 +73,8 @@ export default function RequestRecordsGallery({
       if (imageRecords.length === 0) {
         setImages([]);
         setLoadError(null);
-        setLoading(false);
         return;
       }
-      setLoading(true);
-      setLoadError(null);
 
       const results = await Promise.all(
         imageRecords.map(async (record) => {
@@ -77,6 +97,8 @@ export default function RequestRecordsGallery({
       const failed = results.find((result) => !result.url);
       if (failed) {
         setLoadError(failed.error ?? 'Could not load one or more images.');
+      } else {
+        setLoadError(null);
       }
 
       setImages(
@@ -86,10 +108,9 @@ export default function RequestRecordsGallery({
             id: result.record.id,
             src: result.url,
             alt: result.record.file_name,
-            caption: result.record.file_name
+            caption: `${result.record.file_name} · ${recordCategoryLabel(result.record)}`
           }))
       );
-      setLoading(false);
     }
 
     void loadThumbnails();
@@ -119,6 +140,20 @@ export default function RequestRecordsGallery({
     [onOpenDocument, onOpenRecord, requestId]
   );
 
+  const openRecord = useCallback(
+    (record: OpinionRequestFile) => {
+      const imageIndex = imageIndexById.get(record.id);
+      if (imageIndex !== undefined) {
+        setLightboxIndex(imageIndex);
+        return;
+      }
+      if (record.storage_path) {
+        void openDocument(record.storage_path);
+      }
+    },
+    [imageIndexById, openDocument]
+  );
+
   if (records.length === 0) {
     return (
       <Text size='sm' c='dimmed'>
@@ -129,83 +164,76 @@ export default function RequestRecordsGallery({
 
   return (
     <Stack gap='sm'>
-      {imageRecords.length > 0 ? (
-        <Stack gap='xs'>
-          <Text size='xs' fw={600} c='dimmed' tt='uppercase'>
-            Uploaded images — click to expand
-          </Text>
-          <ImageLightboxGallery
-            images={images}
-            loading={loading}
-            error={loadError}
-            modalZIndex={lightboxModalZIndex}
-          />
-          {onDeleteRecord
-            ? imageRecords.map((record) => (
-                <Paper key={record.id} radius='md' p='sm' withBorder>
-                  <Group justify='space-between' wrap='nowrap'>
-                    <Group gap='sm' wrap='nowrap'>
-                      <IconFileText size={18} />
-                      <Text size='sm' fw={600}>
-                        {record.file_name}
-                      </Text>
-                    </Group>
-                    <Tooltip label='Delete record'>
-                      <ActionIcon
-                        variant='subtle'
-                        color='red'
-                        radius='md'
-                        aria-label={`Delete ${record.file_name}`}
-                        loading={deletingRecordId === record.id}
-                        disabled={Boolean(deletingRecordId)}
-                        onClick={() => onDeleteRecord(record)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-                </Paper>
-              ))
-            : null}
-        </Stack>
+      {loadError ? (
+        <Text size='sm' c='red'>
+          {loadError}
+        </Text>
       ) : null}
 
-      {otherRecords.length > 0 ? (
-        <Stack gap='xs'>
-          {imageRecords.length > 0 ? (
-            <Text size='xs' fw={600} c='dimmed' tt='uppercase' mt='xs'>
-              Documents
-            </Text>
-          ) : null}
-          {otherRecords.map((record) => (
-            <Paper key={record.id} radius='md' p='sm' withBorder>
-              <Group justify='space-between' wrap='nowrap'>
-                <Group gap='sm' wrap='nowrap'>
-                  <IconFileText size={18} />
-                  <Stack gap={2}>
-                    <Text size='sm' fw={600}>
+      <Stack gap='xs'>
+        {records.map((record) => {
+          const thumbSrc = thumbById.get(record.id);
+          const isOpening = Boolean(record.storage_path && openingPath === record.storage_path);
+
+          return (
+            <Paper
+              key={record.id}
+              radius='md'
+              p='sm'
+              withBorder
+              className='request-records-gallery__card'
+              role='button'
+              tabIndex={0}
+              aria-label={`Open ${record.file_name}`}
+              data-opening={isOpening || undefined}
+              onClick={() => openRecord(record)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openRecord(record);
+                }
+              }}
+            >
+              <Group justify='space-between' wrap='nowrap' align='center'>
+                <Group gap='sm' wrap='nowrap' align='center' className='request-records-gallery__card-main'>
+                  {thumbSrc ? (
+                    <img
+                      src={thumbSrc}
+                      alt=''
+                      className='request-records-gallery__thumb'
+                      width={56}
+                      height={56}
+                    />
+                  ) : (
+                    <span className='request-records-gallery__file-icon' aria-hidden>
+                      <IconFileText size={22} />
+                    </span>
+                  )}
+                  <Stack gap={2} className='request-records-gallery__details'>
+                    <Text size='sm' fw={600} lineClamp={2}>
                       {record.file_name}
                     </Text>
-                    {record.summary ? (
-                      <Text size='xs' c='dimmed'>
-                        {record.summary}
-                      </Text>
-                    ) : null}
+                    <Text size='xs' c='dimmed'>
+                      {recordCategoryLabel(record)}
+                    </Text>
                   </Stack>
                 </Group>
                 <Group gap='xs' wrap='nowrap'>
-                  {record.storage_path ? (
-                    <Button
-                      variant='light'
+                  <Tooltip label='View record'>
+                    <ActionIcon
+                      variant='subtle'
                       color='cyan'
-                      size='xs'
-                      leftSection={<IconExternalLink size={14} stroke={1.6} />}
-                      loading={openingPath === record.storage_path}
-                      onClick={() => void openDocument(record.storage_path!)}
+                      radius='md'
+                      aria-label={`View ${record.file_name}`}
+                      loading={isOpening}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openRecord(record);
+                      }}
                     >
-                      Open
-                    </Button>
-                  ) : null}
+                      <IconEye size={18} />
+                    </ActionIcon>
+                  </Tooltip>
                   {onDeleteRecord ? (
                     <Tooltip label='Delete record'>
                       <ActionIcon
@@ -215,7 +243,10 @@ export default function RequestRecordsGallery({
                         aria-label={`Delete ${record.file_name}`}
                         loading={deletingRecordId === record.id}
                         disabled={Boolean(deletingRecordId)}
-                        onClick={() => onDeleteRecord(record)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteRecord(record);
+                        }}
                       >
                         <IconTrash size={16} />
                       </ActionIcon>
@@ -224,9 +255,17 @@ export default function RequestRecordsGallery({
                 </Group>
               </Group>
             </Paper>
-          ))}
-        </Stack>
-      ) : null}
+          );
+        })}
+      </Stack>
+
+      <ImageLightboxGallery
+        images={images}
+        showGrid={false}
+        openedIndex={lightboxIndex}
+        onOpenedIndexChange={setLightboxIndex}
+        modalZIndex={lightboxModalZIndex}
+      />
     </Stack>
   );
 }
