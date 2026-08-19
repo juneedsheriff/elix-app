@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSupabase } from '../../context/SupabaseProvider';
 import { adminSignOut, fetchAdminByAuthUserId } from '../../lib/admins';
@@ -8,20 +8,21 @@ import { clearAuthSurface, getAuthSurface, setAuthSurface } from '../../lib/navi
 import { isAnyPatientServiceExecutive } from '../../lib/staffPermissions';
 import type { Admin } from '../../types/admin';
 import { ElixHealthAdminGuard } from './ElixHealthAdminShell';
-import ElixHealthDoctorCreatePage from './ElixHealthDoctorCreatePage';
-import ElixHealthDoctorEditPage from './ElixHealthDoctorEditPage';
-import ElixHealthDoctorsPage from './ElixHealthDoctorsPage';
 import { doctorSignOut, ElixHealthDoctorGuard } from './ElixHealthDoctorShell';
 import { ELIX_HEALTH_PATHS, staffLandingPath } from './elixHealthRoutes';
-import ElixHealthLogin from './ElixHealthLogin';
-import ElixHealthOverviewPage from './ElixHealthOverviewPage';
-import ElixHealthPatientEditPage from './ElixHealthPatientEditPage';
-import ElixHealthPatientsPage from './ElixHealthPatientsPage';
-import ElixHealthRequestsPage from './ElixHealthRequestsPage';
-import ElixHealthMyProfilePage from './ElixHealthMyProfilePage';
-import ElixHealthStaffPage from './ElixHealthStaffPage';
 import { AdministratorOnly } from './AdministratorOnly';
 import ElixPreloader from '../../components/ui/ElixPreloader';
+
+const ElixHealthDoctorCreatePage = lazy(() => import('./ElixHealthDoctorCreatePage'));
+const ElixHealthDoctorEditPage = lazy(() => import('./ElixHealthDoctorEditPage'));
+const ElixHealthDoctorsPage = lazy(() => import('./ElixHealthDoctorsPage'));
+const ElixHealthLogin = lazy(() => import('./ElixHealthLogin'));
+const ElixHealthOverviewPage = lazy(() => import('./ElixHealthOverviewPage'));
+const ElixHealthPatientEditPage = lazy(() => import('./ElixHealthPatientEditPage'));
+const ElixHealthPatientsPage = lazy(() => import('./ElixHealthPatientsPage'));
+const ElixHealthRequestsPage = lazy(() => import('./ElixHealthRequestsPage'));
+const ElixHealthMyProfilePage = lazy(() => import('./ElixHealthMyProfilePage'));
+const ElixHealthStaffPage = lazy(() => import('./ElixHealthStaffPage'));
 
 function PseIndexRedirect() {
   return <Navigate to={ELIX_HEALTH_PATHS.requests} replace />;
@@ -121,7 +122,8 @@ export default function ElixHealthApp() {
   }
 
   return (
-    <Routes>
+    <Suspense fallback={<ElixPreloader label='Loading…' />}>
+      <Routes>
       <Route
         path='login'
         element={
@@ -197,5 +199,6 @@ export default function ElixHealthApp() {
         }
       />
     </Routes>
+    </Suspense>
   );
 }

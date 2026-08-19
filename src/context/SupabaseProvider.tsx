@@ -201,11 +201,31 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const [doctor, patient, admin] = await Promise.all([
-        resolveDoctorForUser(nextSession.user),
-        resolvePatientForUser(nextSession.user),
-        fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data)
-      ]);
+      // Performance: avoid fetching doctor+patient+admin on every session apply.
+      // We use the role stored in user_metadata when available, and fall back to the
+      // previous parallel fetch only when the role is missing/unknown.
+      const metaRole = nextSession.user.user_metadata?.role as AppRole | undefined;
+
+      let doctor: Doctor | null = null;
+      let patient: Patient | null = null;
+      let admin: any = null;
+
+      if (metaRole === 'doctor') {
+        doctor = await resolveDoctorForUser(nextSession.user);
+      } else if (metaRole === 'patient') {
+        patient = await resolvePatientForUser(nextSession.user);
+      } else if (metaRole === 'admin') {
+        admin = await fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data);
+      } else {
+        const result = await Promise.all([
+          resolveDoctorForUser(nextSession.user),
+          resolvePatientForUser(nextSession.user),
+          fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data)
+        ]);
+        doctor = result[0];
+        patient = result[1];
+        admin = result[2];
+      }
 
       if (patient && isPatientLoginBlocked(patient) && !admin && !doctor) {
         await supabase.auth.signOut();

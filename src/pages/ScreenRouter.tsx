@@ -1,62 +1,82 @@
-import AdminDashboardPage from './admin/AdminDashboardPage';
-import CmsAuditPage from './admin/CmsAuditPage';
-import UserManagementPage from './admin/UserManagementPage';
-import DoctorConsultationPage from './doctor/DoctorConsultationPage';
-import DoctorDashboardPage from './doctor/DoctorDashboardPage';
-import DoctorsPage from './patient/DoctorsPage';
-import MyRequestsPage from './patient/MyRequestsPage';
-import NotificationsPage from './patient/NotificationsPage';
-import PatientDashboardPage from './patient/PatientDashboardPage';
-import PaymentsPage from './patient/PaymentsPage';
-import TimelinePage from './patient/TimelinePage';
-import UploadRecordsPage from './patient/UploadRecordsPage';
-import SettingsPage from './settings/SettingsPage';
-import EmptyPage from './shared/EmptyPage';
+import { Suspense, lazy, type ReactNode } from 'react';
+import ElixPreloader from '../components/ui/ElixPreloader';
 import type { ScreenPageProps } from './types';
+const AdminDashboardPage = lazy(() => import('./admin/AdminDashboardPage'));
+const CmsAuditPage = lazy(() => import('./admin/CmsAuditPage'));
+const UserManagementPage = lazy(() => import('./admin/UserManagementPage'));
+const DoctorConsultationPage = lazy(() => import('./doctor/DoctorConsultationPage'));
+const DoctorDashboardPage = lazy(() => import('./doctor/DoctorDashboardPage'));
+const DoctorsPage = lazy(() => import('./patient/DoctorsPage'));
+const MyRequestsPage = lazy(() => import('./patient/MyRequestsPage'));
+const NotificationsPage = lazy(() => import('./patient/NotificationsPage'));
+const PatientDashboardPage = lazy(() => import('./patient/PatientDashboardPage'));
+const PaymentsPage = lazy(() => import('./patient/PaymentsPage'));
+const TimelinePage = lazy(() => import('./patient/TimelinePage'));
+const UploadRecordsPage = lazy(() => import('./patient/UploadRecordsPage'));
+const SettingsPage = lazy(() => import('./settings/SettingsPage'));
+const EmptyPage = lazy(() => import('./shared/EmptyPage'));
 
 type ScreenRouterProps = ScreenPageProps & {
   screenId: string;
 };
 
 export default function ScreenRouter({ screenId, onNavigate, ...pageProps }: ScreenRouterProps) {
+  let element: ReactNode = null;
+
   switch (screenId) {
     case 'patient-dashboard':
-      return <PatientDashboardPage {...pageProps} onNavigate={onNavigate} />;
+      element = <PatientDashboardPage {...pageProps} onNavigate={onNavigate} />;
+      break;
     case 'upload-records':
-      return <UploadRecordsPage {...pageProps} onNavigate={onNavigate} />;
+      element = <UploadRecordsPage {...pageProps} onNavigate={onNavigate} />;
+      break;
     case 'my-requests':
-      return <MyRequestsPage {...pageProps} onNavigate={onNavigate} />;
+      element = <MyRequestsPage {...pageProps} onNavigate={onNavigate} />;
+      break;
     case 'doctor-list':
     case 'doctor-profile':
-      return <DoctorsPage />;
+      element = <DoctorsPage />;
+      break;
     case 'payments':
     case 'subscriptions':
-      return <PaymentsPage />;
+      element = <PaymentsPage />;
+      break;
     case 'notifications':
-      return <NotificationsPage />;
+      element = <NotificationsPage />;
+      break;
     case 'timeline':
     case 'ai-insights':
-      return <TimelinePage />;
+      element = <TimelinePage />;
+      break;
     case 'case-review':
     case 'doctor-dashboard':
     case 'doctor-analytics':
-      return <DoctorDashboardPage {...pageProps} onNavigate={onNavigate} />;
+      element = <DoctorDashboardPage {...pageProps} onNavigate={onNavigate} />;
+      break;
     case 'availability':
-      return <SettingsPage {...pageProps} />;
+      element = <SettingsPage {...pageProps} />;
+      break;
     case 'doctor-consultation':
-      return <DoctorConsultationPage {...pageProps} onNavigate={onNavigate} />;
+      element = <DoctorConsultationPage {...pageProps} onNavigate={onNavigate} />;
+      break;
     case 'admin-dashboard':
     case 'admin-analytics':
-      return <AdminDashboardPage />;
+      element = <AdminDashboardPage />;
+      break;
     case 'user-management':
     case 'fraud-monitoring':
-      return <UserManagementPage />;
+      element = <UserManagementPage />;
+      break;
     case 'cms':
     case 'audit':
-      return <CmsAuditPage />;
+      element = <CmsAuditPage />;
+      break;
     case 'settings':
-      return <SettingsPage {...pageProps} />;
+      element = <SettingsPage {...pageProps} />;
+      break;
     default:
-      return <EmptyPage />;
+      element = <EmptyPage />;
   }
+
+  return <Suspense fallback={<ElixPreloader label='Loading…' />}>{element}</Suspense>;
 }
