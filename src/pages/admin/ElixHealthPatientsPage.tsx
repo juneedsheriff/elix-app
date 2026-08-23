@@ -23,7 +23,6 @@ import {
 import type { Doctor } from '../../types/doctor';
 import type { Patient } from '../../types/patient';
 import AssignPatientToClinicModal from './patients/AssignPatientToClinicModal';
-import PatientsAnalyticsCards from './patients/PatientsAnalyticsCards';
 import PatientsDataTable from './patients/PatientsDataTable';
 import PatientsFilterDrawer from './patients/PatientsFilterDrawer';
 import PatientsPageHeader from './patients/PatientsPageHeader';
@@ -31,7 +30,7 @@ import PatientsPageSkeleton from './patients/PatientsPageSkeleton';
 import PatientsTableToolbar from './patients/PatientsTableToolbar';
 import {
   applyPatientQuickFilters,
-  computePatientAnalytics,
+  exportPatientsCsv,
   uniqueSorted,
   type PatientQuickFilters
 } from './patients/patientsUtils';
@@ -199,11 +198,6 @@ export default function ElixHealthPatientsPage() {
     return patients;
   }, [isAdmin, patients, workspaceTab]);
 
-  const analytics = useMemo(
-    () => computePatientAnalytics(workspaceScopedPatients),
-    [workspaceScopedPatients]
-  );
-
   const cityOptions = useMemo(
     () => uniqueSorted(workspaceScopedPatients.map((patient) => patient.city)),
     [workspaceScopedPatients]
@@ -345,24 +339,30 @@ export default function ElixHealthPatientsPage() {
       ? (patient) => void openDeleteAllRequests(patient)
       : undefined,
     onDeletePatient: canDeletePatient ? (patient) => void openDeletePatient(patient) : undefined,
-    onBookConsultation: canBookForPatient
-      ? (patient) => {
-          setHomeCarePatient(null);
-          setConsultationPatient(patient);
-        }
-      : undefined,
-    onRequestHomeCare: canRequestHomeCareForPatient
-      ? (patient) => {
-          setConsultationPatient(null);
-          setHomeCarePatient(patient);
-        }
-      : undefined
+    onBookConsultation:
+      !isAdmin && canBookForPatient
+        ? (patient) => {
+            setHomeCarePatient(null);
+            setConsultationPatient(patient);
+          }
+        : undefined,
+    onRequestHomeCare:
+      !isAdmin && canRequestHomeCareForPatient
+        ? (patient) => {
+            setConsultationPatient(null);
+            setHomeCarePatient(patient);
+          }
+        : undefined
   });
 
   const clearFilters = useCallback(() => {
     setSearch('');
     setFilters(DEFAULT_FILTERS);
   }, []);
+
+  const handleExport = useCallback(() => {
+    exportPatientsCsv(filteredPatients);
+  }, [filteredPatients]);
 
   if (error) {
     const hint = error.toLowerCase().includes('infinite recursion')
@@ -386,6 +386,9 @@ export default function ElixHealthPatientsPage() {
         totalCount={workspaceScopedPatients.length}
         canEdit={canEdit || canAddPatient}
         onOpenFilters={() => setDrawerOpen(true)}
+        onExport={handleExport}
+        onRefresh={() => void load()}
+        refreshing={loading}
         onAddPatient={() => setAddModalOpen(true)}
       />
 
@@ -404,8 +407,6 @@ export default function ElixHealthPatientsPage() {
       {isAdmin && workspaceTabs.length ? (
         <WorkspaceTabs tabs={workspaceTabs} value={workspaceTab} onChange={setWorkspaceTab} />
       ) : null}
-
-      <PatientsAnalyticsCards analytics={analytics} loading={loading} />
 
       <div className='elixhealth-datatable-card doctors-mgmt-table-card'>
         <PatientsDataTable

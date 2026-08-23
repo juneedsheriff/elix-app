@@ -83,6 +83,9 @@
     "db:apply-patient-profile-docs": "node scripts/apply-patient-profile-docs.mjs",
     "db:apply-request-messages": "node scripts/apply-migration.mjs 069_request_messages.sql",
     "db:apply-staff-patient-avatar": "node scripts/apply-migration.mjs 081_staff_set_patient_avatar.sql",
+    "db:apply-clinic-request-auto-assign": "node scripts/apply-migration.mjs 082_clinic_request_auto_assign_pse.sql",
+    "db:apply-pse-update-doctors": "node scripts/apply-migration.mjs 083_pse_update_doctors.sql",
+    "db:apply-own-doctor-scheduler": "node scripts/apply-migration.mjs 084_update_own_doctor_scheduler.sql",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "db:seed-pse": "node scripts/seed-pse.mjs"
   },

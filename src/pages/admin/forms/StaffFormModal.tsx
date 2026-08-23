@@ -294,7 +294,6 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                   <option value='patient_service_executive_clinic'>
                     Patient Service Executive (clinic)
                   </option>
-                  <option value='administrator'>ElixClinix</option>
                 </select>
               </label>
             ) : null}

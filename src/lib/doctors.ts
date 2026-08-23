@@ -1,4 +1,10 @@
-import type { ConsultationCurrency, ConsultationTier, Doctor } from '../types/doctor';
+import type {
+  ConsultationCurrency,
+  ConsultationHours,
+  ConsultationTier,
+  Doctor,
+  TimeSettings
+} from '../types/doctor';
 import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
 import { formatConsultationFee } from './consultationCurrency';
 import { normalizeConsultationTiersInput } from './consultationTiers';
@@ -347,6 +353,15 @@ export type OwnDoctorProfileUpdateInput = {
   image_url: string;
 };
 
+export type OwnDoctorSchedulerUpdateInput = {
+  scheduler_effect_from: string | null;
+  scheduler_time_interval: number | null;
+  scheduler_color: string;
+  elix_patient_priority: boolean;
+  time_settings: TimeSettings;
+  consultation_hours: ConsultationHours;
+};
+
 export async function updateOwnDoctorProfile(input: OwnDoctorProfileUpdateInput) {
   const fullName = input.full_name.trim();
   if (!fullName) {
@@ -365,6 +380,34 @@ export async function updateOwnDoctorProfile(input: OwnDoctorProfileUpdateInput)
     p_membership: input.membership?.trim() || null,
     p_languages: input.languages.trim() || null,
     p_image_url: input.image_url.trim() || null
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { data: null, error: { message: 'Not signed in.' } };
+  }
+
+  return fetchDoctorByAuthUserId(user.id);
+}
+
+export async function updateOwnDoctorScheduler(input: OwnDoctorSchedulerUpdateInput) {
+  const color = input.scheduler_color.trim() || '#09abc0';
+  const interval =
+    input.scheduler_time_interval != null ? Math.round(input.scheduler_time_interval) : null;
+
+  const { error } = await supabase.rpc('update_own_doctor_scheduler', {
+    p_scheduler_effect_from: input.scheduler_effect_from || null,
+    p_scheduler_time_interval: interval,
+    p_scheduler_color: color,
+    p_elix_patient_priority: Boolean(input.elix_patient_priority),
+    p_time_settings: input.time_settings ?? {},
+    p_consultation_hours: input.consultation_hours
   });
 
   if (error) {

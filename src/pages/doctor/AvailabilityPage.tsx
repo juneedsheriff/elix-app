@@ -1,23 +1,32 @@
-import MetricCard from '../../components/ui/MetricCard';
 import SectionCard from '../../components/ui/SectionCard';
-import DoctorConsultationPricingSection from './DoctorConsultationPricingSection';
+import { useSupabase } from '../../context/SupabaseProvider';
 import type { ScreenPageProps } from '../types';
+import DoctorSchedulerForm from './DoctorSchedulerForm';
 
 export default function AvailabilityPage({ doctorProfile }: ScreenPageProps) {
-  return (
-    <div className='screen-grid'>
-      <SectionCard title='Scheduler' subtitle='Consultation pricing and calendar settings'>
-        <div className='metrics-grid'>
-          <MetricCard title='Next open slot' value='14:30 UTC' subtitle='Automatically synced to patient timezone' />
-          <MetricCard title='Booked this week' value='27' subtitle='11 video, 16 async reviews' />
-        </div>
-      </SectionCard>
+  const { refreshDoctorProfile } = useSupabase();
 
-      <DoctorConsultationPricingSection
-        doctorProfile={doctorProfile}
-        title='Consultation fees by duration'
-        subtitle='Patients see these prices when they request a doctor consultation'
-      />
+  if (!doctorProfile) {
+    return (
+      <SectionCard title='Scheduler' subtitle='Consultation calendar settings'>
+        <p className='muted'>Sign in as a doctor to manage your schedule.</p>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <div className='elixhealth-profile-page screen-grid'>
+      <SectionCard
+        title='Scheduler'
+        subtitle='Set availability, breaks, and calendar preferences for consultations'
+      >
+        <DoctorSchedulerForm
+          doctor={doctorProfile}
+          onSaved={() => {
+            void refreshDoctorProfile();
+          }}
+        />
+      </SectionCard>
     </div>
   );
 }

@@ -19,7 +19,7 @@ import type { OpinionRequest } from '../../types/opinionRequest';
 
 const DOCTOR_CASES_POLL_MS = 25_000;
 
-type DoctorCaseStatusFilter = 'pending' | 'completed';
+type DoctorCaseStatusFilter = 'all' | 'pending' | 'completed';
 
 function statusLabel(status: string, view: 'patient' | 'doctor', request?: OpinionRequest): string {
   if (view === 'patient' && request) {
@@ -105,10 +105,11 @@ export default function OpinionRequestsPanel({
   const visibleRequests = useMemo(() => {
     let list = kindFilteredRequests;
     if (view === 'doctor' && isElixHealthWorkspace) {
-      list =
-        doctorStatusFilter === 'completed'
-          ? list.filter(isPatientRequestCompleted)
-          : list.filter((request) => !isPatientRequestCompleted(request));
+      if (doctorStatusFilter === 'completed') {
+        list = list.filter(isPatientRequestCompleted);
+      } else if (doctorStatusFilter === 'pending') {
+        list = list.filter((request) => !isPatientRequestCompleted(request));
+      }
     }
     if (view !== 'doctor' || !doctorSearch.trim()) return list;
     return list.filter((request) => matchesDoctorSearch(request, doctorSearch));
@@ -121,6 +122,7 @@ export default function OpinionRequestsPanel({
     (request) => !isPatientRequestCompleted(request)
   ).length;
   const doctorCompletedCasesCount = kindFilteredRequests.filter(isPatientRequestCompleted).length;
+  const doctorAllCasesCount = kindFilteredRequests.length;
 
   const load = useCallback(
     async (options?: { silent?: boolean; manual?: boolean }) => {
@@ -241,6 +243,7 @@ export default function OpinionRequestsPanel({
                     className='doctor-cases-workspace__status-filter'
                     aria-label='Filter cases'
                     data={[
+                      { value: 'all', label: `All (${doctorAllCasesCount})` },
                       { value: 'pending', label: `Pending (${doctorPendingCasesCount})` },
                       { value: 'completed', label: `Completed (${doctorCompletedCasesCount})` }
                     ]}
@@ -343,11 +346,13 @@ export default function OpinionRequestsPanel({
               onSearchChange={setDoctorSearch}
               hasActiveFilters={Boolean(doctorSearch.trim())}
               onClearFilters={() => setDoctorSearch('')}
-              emptyHint={
-                doctorStatusFilter === 'completed'
-                  ? 'No completed cases yet.'
-                  : 'No pending cases.'
-              }
+                emptyHint={
+                  doctorStatusFilter === 'completed'
+                    ? 'No completed cases yet.'
+                    : doctorStatusFilter === 'pending'
+                      ? 'No pending cases.'
+                      : emptyHint
+                }
               onNavigate={onNavigate}
               returnScreen={doctorReturnScreen}
               onOpenError={showOpenRecordError}

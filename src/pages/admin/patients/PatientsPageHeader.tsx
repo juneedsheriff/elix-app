@@ -1,11 +1,20 @@
 import { memo } from 'react';
-import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconFilter, IconPlus } from '@tabler/icons-react';
+import { ActionIcon, Button, Group, Menu, Stack, Text, Title } from '@mantine/core';
+import {
+  IconDownload,
+  IconFilter,
+  IconPlus,
+  IconRefresh,
+  IconSettings
+} from '@tabler/icons-react';
 
 type PatientsPageHeaderProps = {
   totalCount: number;
   canEdit: boolean;
   onOpenFilters: () => void;
+  onExport: () => void;
+  onRefresh: () => void;
+  refreshing?: boolean;
   onAddPatient: () => void;
 };
 
@@ -13,6 +22,9 @@ function PatientsPageHeader({
   totalCount,
   canEdit,
   onOpenFilters,
+  onExport,
+  onRefresh,
+  refreshing,
   onAddPatient
 }: PatientsPageHeaderProps) {
   return (
@@ -27,15 +39,34 @@ function PatientsPageHeader({
       </Stack>
 
       <Group gap='sm' className='doctors-mgmt-header__actions' wrap='wrap'>
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconFilter size={18} />}
-          onClick={onOpenFilters}
-        >
-          Filters
-        </Button>
+        <Menu position='bottom-end' withinPortal shadow='md' radius='md'>
+          <Menu.Target>
+            <ActionIcon
+              variant='default'
+              radius='md'
+              size='input-md'
+              className='doctors-mgmt-header__ghost'
+              aria-label='Page settings'
+            >
+              <IconSettings size={18} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item leftSection={<IconFilter size={16} />} onClick={onOpenFilters}>
+              Filters
+            </Menu.Item>
+            <Menu.Item leftSection={<IconDownload size={16} />} onClick={onExport}>
+              Export
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<IconRefresh size={16} />}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              Refresh
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
 
         {canEdit ? (
           <Button

@@ -320,11 +320,12 @@ export function useDoctorsTableColumns({
         Cell: ({ row }) => {
           const doctor = row.original;
           const isPlatformGranted = grantedDoctorIds?.has(doctor.id) ?? false;
-          const canManageDoctor = canEdit && !isPlatformGranted;
+          const canEditDoctor = canEdit;
+          const canDeleteDoctor = Boolean(canEdit && !isPlatformGranted && onDeleteDoctor);
           const editPath = doctorEditUrl(doctor.id);
           return (
             <Group gap={4} wrap='nowrap' justify='flex-end' className='doctors-mgmt-actions'>
-              <Tooltip label={canManageDoctor ? 'Edit profile' : 'View profile'}>
+              <Tooltip label={canEditDoctor ? 'Edit profile' : 'View profile'}>
                 <ActionIcon
                   component={Link}
                   to={editPath}
@@ -333,12 +334,12 @@ export function useDoctorsTableColumns({
                   radius='md'
                   size='lg'
                   className='doctors-mgmt-action'
-                  aria-label={canManageDoctor ? 'Edit doctor' : 'View doctor'}
+                  aria-label={canEditDoctor ? 'Edit doctor' : 'View doctor'}
                 >
-                  {canManageDoctor ? <IconPencil size={18} /> : <IconEye size={18} />}
+                  {canEditDoctor ? <IconPencil size={18} /> : <IconEye size={18} />}
                 </ActionIcon>
               </Tooltip>
-              {canManageDoctor && onDeleteDoctor ? (
+              {canDeleteDoctor ? (
                 <Tooltip label='Delete doctor'>
                   <ActionIcon
                     variant='subtle'
@@ -347,7 +348,7 @@ export function useDoctorsTableColumns({
                     size='lg'
                     className='doctors-mgmt-action'
                     aria-label={`Delete ${doctor.full_name}`}
-                    onClick={() => onDeleteDoctor(doctor)}
+                    onClick={() => onDeleteDoctor?.(doctor)}
                   >
                     <IconTrash size={18} />
                   </ActionIcon>
@@ -368,7 +369,7 @@ export function useDoctorsTableColumns({
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item component={Link} to={editPath} leftSection={<IconEye size={16} />}>
-                    {canManageDoctor ? 'Open editor' : 'View profile'}
+                    {canEditDoctor ? 'Open editor' : 'View profile'}
                   </Menu.Item>
                   {doctor.email ? (
                     <Menu.Item
@@ -388,11 +389,11 @@ export function useDoctorsTableColumns({
                       Call doctor
                     </Menu.Item>
                   ) : null}
-                  {canManageDoctor && onDeleteDoctor ? (
+                  {canDeleteDoctor ? (
                     <Menu.Item
                       color='red'
                       leftSection={<IconTrash size={16} />}
-                      onClick={() => onDeleteDoctor(doctor)}
+                      onClick={() => onDeleteDoctor?.(doctor)}
                     >
                       Delete doctor
                     </Menu.Item>

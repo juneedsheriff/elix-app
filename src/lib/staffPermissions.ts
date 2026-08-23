@@ -50,7 +50,7 @@ export function requestsNavLabel(role: AdminRole): string {
 }
 
 export function canEditProfiles(admin: Pick<Admin, 'role'>): boolean {
-  return isAdministrator(admin) || isClinicPatientServiceExecutive(admin);
+  return isAdministrator(admin) || isAnyPatientServiceExecutive(admin);
 }
 
 export function canCreatePatients(admin: Pick<Admin, 'role'>): boolean {

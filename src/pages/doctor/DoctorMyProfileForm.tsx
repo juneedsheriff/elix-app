@@ -95,7 +95,7 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
       />
 
       <h3 className='elixhealth-form-section-title'>Personal</h3>
-      <div className='elixhealth-form-grid'>
+      <div className='elixhealth-form-grid elixhealth-form-grid--4'>
         <label className='elixhealth-field'>
           <span>
             Full name <span className='elixhealth-required'>*</span>
@@ -141,7 +141,7 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
       </div>
 
       <h3 className='elixhealth-form-section-title'>Professional details</h3>
-      <div className='elixhealth-form-grid'>
+      <div className='elixhealth-form-grid elixhealth-form-grid--4'>
         <label className='elixhealth-field'>
           <span>Qualification</span>
           <input
@@ -160,7 +160,7 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
             disabled={busy}
           />
         </label>
-        <div className='elixhealth-field elixhealth-field--full'>
+        <div className='elixhealth-field elixhealth-field--span-2'>
           <PreferredLanguageMultiSelect
             label='Languages'
             value={parsePreferredLanguages(form.languages)}
@@ -171,8 +171,8 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
       </div>
 
       <h3 className='elixhealth-form-section-title'>Profile details</h3>
-      <div className='elixhealth-form-grid'>
-        <label className='elixhealth-field elixhealth-field--full'>
+      <div className='elixhealth-form-grid elixhealth-form-grid--2'>
+        <label className='elixhealth-field'>
           <span>About doctor</span>
           <textarea
             rows={3}
@@ -181,7 +181,7 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
             disabled={busy}
           />
         </label>
-        <label className='elixhealth-field elixhealth-field--full'>
+        <label className='elixhealth-field'>
           <span>Work experience</span>
           <textarea
             rows={3}
@@ -190,7 +190,7 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
             disabled={busy}
           />
         </label>
-        <label className='elixhealth-field elixhealth-field--full'>
+        <label className='elixhealth-field'>
           <span>Awards &amp; recognitions</span>
           <textarea
             rows={2}
@@ -199,7 +199,7 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
             disabled={busy}
           />
         </label>
-        <label className='elixhealth-field elixhealth-field--full'>
+        <label className='elixhealth-field'>
           <span>Membership</span>
           <textarea
             rows={2}
@@ -210,17 +210,22 @@ export default function DoctorMyProfileForm({ doctor, onSaved }: DoctorMyProfile
         </label>
       </div>
 
-      <p className='muted'>Specialty and login email are managed by ElixClinix admin. Change password via Forgot password on the sign-in screen.</p>
+      <p className='muted'>
+        Specialty and login email are managed by ElixClinix admin. Change password via Forgot password on
+        the sign-in screen.
+      </p>
 
-      <button type='submit' className='primary-btn' disabled={busy}>
-        {busy ? (
-          <>
-            <Loader2 size={16} className='spin' aria-hidden /> Saving…
-          </>
-        ) : (
-          'Save profile'
-        )}
-      </button>
+      <div className='elixhealth-form-actions elixhealth-form-actions--end'>
+        <button type='submit' className='primary-btn elixhealth-save-btn' disabled={busy}>
+          {busy ? (
+            <>
+              <Loader2 size={14} className='spin' aria-hidden /> Saving…
+            </>
+          ) : (
+            'Save profile'
+          )}
+        </button>
+      </div>
     </form>
   );
 }

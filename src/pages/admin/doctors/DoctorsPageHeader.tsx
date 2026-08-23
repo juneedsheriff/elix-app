@@ -1,6 +1,13 @@
 import { memo } from 'react';
-import { Button, Group, Stack, Text, Title } from '@mantine/core';
-import { IconDownload, IconFilter, IconPlus, IconSearch } from '@tabler/icons-react';
+import { ActionIcon, Button, Group, Menu, Stack, Text, Title } from '@mantine/core';
+import {
+  IconDownload,
+  IconFilter,
+  IconPlus,
+  IconRefresh,
+  IconSearch,
+  IconSettings
+} from '@tabler/icons-react';
 
 type DoctorsPageHeaderProps = {
   totalCount: number;
@@ -8,6 +15,8 @@ type DoctorsPageHeaderProps = {
   canRequestPlatformDoctor?: boolean;
   onOpenFilters: () => void;
   onExport: () => void;
+  onRefresh: () => void;
+  refreshing?: boolean;
   onAddDoctor: () => void;
   onRequestPlatformDoctor?: () => void;
 };
@@ -18,6 +27,8 @@ function DoctorsPageHeader({
   canRequestPlatformDoctor,
   onOpenFilters,
   onExport,
+  onRefresh,
+  refreshing,
   onAddDoctor,
   onRequestPlatformDoctor
 }: DoctorsPageHeaderProps) {
@@ -33,25 +44,34 @@ function DoctorsPageHeader({
       </Stack>
 
       <Group gap='sm' className='doctors-mgmt-header__actions' wrap='wrap'>
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconFilter size={18} />}
-          onClick={onOpenFilters}
-        >
-          Filters
-        </Button>
-
-        <Button
-          variant='default'
-          radius='md'
-          className='doctors-mgmt-header__ghost'
-          leftSection={<IconDownload size={18} />}
-          onClick={onExport}
-        >
-          Export
-        </Button>
+        <Menu position='bottom-end' withinPortal shadow='md' radius='md'>
+          <Menu.Target>
+            <ActionIcon
+              variant='default'
+              radius='md'
+              size='input-md'
+              className='doctors-mgmt-header__ghost'
+              aria-label='Page settings'
+            >
+              <IconSettings size={18} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item leftSection={<IconFilter size={16} />} onClick={onOpenFilters}>
+              Filters
+            </Menu.Item>
+            <Menu.Item leftSection={<IconDownload size={16} />} onClick={onExport}>
+              Export
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<IconRefresh size={16} />}
+              onClick={onRefresh}
+              disabled={refreshing}
+            >
+              Refresh
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
 
         {canRequestPlatformDoctor && onRequestPlatformDoctor ? (
           <Button

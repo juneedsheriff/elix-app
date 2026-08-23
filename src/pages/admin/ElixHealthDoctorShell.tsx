@@ -45,7 +45,10 @@ function ElixHealthDoctorRoutes({ doctor }: { doctor: Doctor }) {
       <Route index element={<DoctorDashboardPage {...pageProps} />} />
       <Route path='cases' element={<Navigate to={ELIX_HEALTH_PATHS.workspace} replace />} />
       <Route path='homecare' element={<Navigate to={ELIX_HEALTH_PATHS.workspace} replace />} />
-      <Route path='availability' element={<Navigate to={ELIX_HEALTH_PATHS.workspaceProfile} replace />} />
+      <Route
+        path='availability'
+        element={<Navigate to={`${ELIX_HEALTH_PATHS.workspaceProfile}?tab=scheduler`} replace />}
+      />
       <Route path='consultation' element={<DoctorConsultationPage {...pageProps} />} />
       <Route path='profile' element={<DoctorMyProfilePage {...pageProps} />} />
     </Routes>

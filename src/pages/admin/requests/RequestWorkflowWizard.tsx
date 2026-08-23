@@ -1164,10 +1164,16 @@ export default function RequestWorkflowWizard({
             onReleaseToDoctor={() => void handleReleaseToDoctor()}
           />
         );
-      case 5:
+      case 5: {
+        const scheduleDoctor = resolveInvoiceDoctor(request, doctors);
         return canCoordinate ? (
           <Stack gap='md' className='request-workflow-step'>
-            <AppointmentDateTimePicker value={scheduledAt} onChange={setScheduledAt} />
+            <AppointmentDateTimePicker
+              value={scheduledAt}
+              onChange={setScheduledAt}
+              consultationHours={scheduleDoctor?.consultation_hours ?? null}
+              intervalMinutes={scheduleDoctor?.scheduler_time_interval ?? 30}
+            />
             <TextInput
               label='Meeting link'
               description='Optional — leave blank if this consultation has no video meeting.'
@@ -1215,6 +1221,7 @@ export default function RequestWorkflowWizard({
             )}
           </Stack>
         );
+      }
       case 6:
         return (
           <Stack gap='sm' className='request-workflow-step'>

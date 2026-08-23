@@ -288,9 +288,6 @@ export default function ConsultationHoursEditor({ value, onChange }: Consultatio
       <div className='consultation-hours-editor__head'>
         <div>
           <h4 className='consultation-hours-editor__title'>Weekly availability</h4>
-          <p className='consultation-hours-editor__hint'>
-            Set when patients can book consultations — similar to a Calendly weekly schedule.
-          </p>
         </div>
         <div className='consultation-hours-editor__actions'>
          

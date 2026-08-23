@@ -2,39 +2,18 @@
   width: 100%;
 }
 
+.appointment-datetime-picker-wrap {
+  width: 100%;
+}
+
 .appointment-datetime-picker__date,
 .appointment-datetime-picker__time {
   flex: 1 1 12rem;
   min-width: min(100%, 12rem);
 }
 
-.appointment-datetime-picker__time {
-  cursor: pointer;
-}
-
-.appointment-datetime-picker__time .mantine-TextInput-wrapper,
-.appointment-datetime-picker__time .mantine-Input-wrapper {
-  position: relative;
-  cursor: pointer;
-}
-
-.appointment-datetime-picker__time input[type='time'] {
-  position: relative;
-  min-height: 2.5rem;
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-/* Stretch the native picker hit-target across the whole input. */
-.appointment-datetime-picker__time input[type='time']::-webkit-calendar-picker-indicator {
-  position: absolute;
-  inset: 0;
-  width: auto;
-  height: auto;
-  margin: 0;
-  padding: 0;
-  opacity: 0;
-  cursor: pointer;
+.appointment-datetime-picker__hint {
+  line-height: 1.4;
 }
 
 @media (max-width: 1024px) {
@@ -48,10 +27,5 @@
     flex: 1 1 auto;
     width: 100%;
     min-width: 0;
-  }
-
-  .appointment-datetime-picker__time input[type='time'] {
-    min-height: 2.75rem;
-    font-size: 1.05rem;
   }
 }

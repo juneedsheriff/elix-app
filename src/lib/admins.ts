@@ -413,7 +413,7 @@ export async function updateDoctorForAdmin(id: string, input: AdminDoctorUpdateI
       data: null,
       error: {
         message:
-          'No doctor row was updated. Ensure you are signed in as admin and run migration 013_admin_profile_updates.sql (npm run db:apply-admin-update-policies).'
+          'No doctor row was updated. You may not have permission for this doctor, or the doctor update policies are missing. Sign in as admin/PSE and run: npm run db:apply-pse-update-doctors'
       }
     };
   }

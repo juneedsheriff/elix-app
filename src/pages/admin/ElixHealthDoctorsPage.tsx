@@ -419,6 +419,8 @@ export default function ElixHealthDoctorsPage() {
         canRequestPlatformDoctor={canRequestDoctor}
         onOpenFilters={() => setDrawerOpen(true)}
         onExport={handleExport}
+        onRefresh={() => void load()}
+        refreshing={loading}
         onAddDoctor={() => navigate(ELIX_HEALTH_PATHS.doctorNew)}
         onRequestPlatformDoctor={() => setRequestDoctorModalOpen(true)}
       />

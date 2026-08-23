@@ -2,14 +2,32 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
-import { fetchDoctorById } from '../../lib/doctors';
 import { fetchAllDoctorsForAdmin } from '../../lib/admins';
+import type { Admin } from '../../types/admin';
 import type { Doctor } from '../../types/doctor';
-import { canEditProfiles, isAdministrator } from '../../lib/staffPermissions';
+import {
+  canEditProfiles,
+  isAdministrator,
+  isClinicPatientServiceExecutive,
+  isPatientServiceExecutive
+} from '../../lib/staffPermissions';
 import AdminDoctorEditForm from './forms/AdminDoctorEditForm';
 import AdminDoctorPseClinicSection from './forms/AdminDoctorPseClinicSection';
 import { ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import { useElixHealthStaff } from './ElixHealthStaffContext';
+
+function staffOwnsDoctor(staff: Pick<Admin, 'role' | 'clinic_id'>, doctor: Doctor): boolean {
+  if (isAdministrator(staff)) return true;
+  if (isPatientServiceExecutive(staff) && !doctor.clinic_id) return true;
+  if (
+    isClinicPatientServiceExecutive(staff) &&
+    staff.clinic_id &&
+    doctor.clinic_id === staff.clinic_id
+  ) {
+    return true;
+  }
+  return false;
+}
 
 export default function ElixHealthDoctorEditPage() {
   const { staff } = useElixHealthStaff();
@@ -32,31 +50,22 @@ export default function ElixHealthDoctorEditPage() {
 
     setLoading(true);
     setError(null);
-    if (isAdmin) {
-      const { data: doctors, error: listError } = await fetchAllDoctorsForAdmin();
-      if (listError) {
-        setDoctor(null);
-        setError(listError.message);
-      } else {
-        const match = (doctors ?? []).find((row) => row.id === doctorId) ?? null;
-        if (!match) {
-          setDoctor(null);
-          setError('Doctor not found.');
-        } else {
-          setDoctor(match);
-        }
-      }
+    // Admins and PSE both load through the staff doctors query (scoped by RLS).
+    const { data: doctors, error: listError } = await fetchAllDoctorsForAdmin();
+    if (listError) {
+      setDoctor(null);
+      setError(listError.message);
     } else {
-      const { data, error: fetchError } = await fetchDoctorById(doctorId);
-      if (fetchError || !data) {
+      const match = (doctors ?? []).find((row) => row.id === doctorId) ?? null;
+      if (!match) {
         setDoctor(null);
-        setError(fetchError?.message ?? 'Doctor not found.');
+        setError('Doctor not found.');
       } else {
-        setDoctor(data);
+        setDoctor(match);
       }
     }
     setLoading(false);
-  }, [doctorId, isAdmin]);
+  }, [doctorId]);
 
   useEffect(() => {
     void load();
@@ -101,6 +110,8 @@ export default function ElixHealthDoctorEditPage() {
             <AdminDoctorEditForm
               doctor={doctor}
               readOnly={readOnly}
+              allowDelete={!readOnly && staffOwnsDoctor(staff, doctor)}
+              allowVisibilityToggle={!readOnly && staffOwnsDoctor(staff, doctor)}
               onSaved={() => {
                 navigate(ELIX_HEALTH_PATHS.doctors, { replace: true });
               }}

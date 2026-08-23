@@ -70,7 +70,7 @@ export function formatRequestDate(iso: string): string {
 }
 
 export function requestStatusKey(
-  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'doctor_response'>
+  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'doctor_response' | 'consultation_stage' | 'clinic_id'>
 ): RequestStatusFilter {
   if (request.doctor_response?.trim() || request.status === 'closed') return 'closed';
   if (request.status === 'in_review') return 'with_doctor';
@@ -82,7 +82,7 @@ export function requestStatusKey(
 }
 
 export function requestStatusColor(
-  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'doctor_response'>
+  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'doctor_response' | 'consultation_stage' | 'clinic_id'>
 ): 'orange' | 'cyan' | 'violet' | 'gray' | 'green' {
   const key = requestStatusKey(request);
   if (key === 'pending_assignment') return 'orange';

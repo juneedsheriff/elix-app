@@ -201,7 +201,8 @@ const requestListSelectBase = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   ),
   opinion_request_records (
     uploaded_files (
@@ -271,7 +272,8 @@ const requestListSelectWithResponse = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   ),
   opinion_request_records (
     uploaded_files (
@@ -302,7 +304,8 @@ const requestListSelectWithResponseNoAssign = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   ),
   opinion_request_records (
     uploaded_files (
@@ -335,7 +338,8 @@ const requestListSelectPatient = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   )
 `;
 
@@ -356,7 +360,8 @@ const requestListSelectWithResponseLegacy = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   ),
   opinion_request_records (
     uploaded_files (
@@ -383,7 +388,8 @@ const requestListSelectWithResponseNoAssignLegacy = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   ),
   opinion_request_records (
     uploaded_files (
@@ -407,7 +413,8 @@ const requestListSelectBaseLegacy = `
   doctors (
     id,
     full_name,
-    specialty
+    specialty,
+    image_url
   ),
   opinion_request_records (
     uploaded_files (
@@ -459,9 +466,11 @@ export function isPendingAdminAssignment(
 
 /** PSE coordination has started (assigned executive or workflow past "new"). */
 export function hasPseCoordinationStarted(
-  request: Pick<OpinionRequest, 'assigned_to' | 'consultation_stage'>
+  request: Pick<OpinionRequest, 'assigned_to' | 'consultation_stage' | 'clinic_id'>
 ): boolean {
   if (request.assigned_to) return true;
+  // Clinic-scoped requests belong to clinic PSE even before assignee is written.
+  if (request.clinic_id) return true;
   return Boolean(request.consultation_stage && request.consultation_stage !== 'new');
 }
 
@@ -473,7 +482,7 @@ export function isPendingAdminApproval(
 }
 
 export function isAssignedToPatientService(
-  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'consultation_stage'>
+  request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'consultation_stage' | 'clinic_id'>
 ): boolean {
   return request.status === 'submitted' && hasPseCoordinationStarted(request);
 }
@@ -573,10 +582,20 @@ export function patientRequestTitle(
 export function staffRequestStatusLabel(
   request: Pick<
     OpinionRequest,
-    'status' | 'assigned_to' | 'doctor_response' | 'consultation_stage' | 'payment_status'
+    | 'status'
+    | 'assigned_to'
+    | 'doctor_response'
+    | 'consultation_stage'
+    | 'payment_status'
+    | 'clinic_id'
   >
 ): string {
   if (request.consultation_stage === 'completed' || request.status === 'closed') return 'Completed';
+  const stage = request.consultation_stage ?? 'new';
+  // Clinic patient submits land as "new" until DB auto-assign; show as assigned to PSE.
+  if (stage === 'new' && (request.assigned_to || request.clinic_id)) {
+    return 'Assigned to PSE';
+  }
   if (request.consultation_stage) return consultationStageLabel(request.consultation_stage);
   if (request.doctor_response?.trim()) return 'Closed';
   if (request.status === 'in_review') return 'With doctor';
@@ -747,7 +766,7 @@ type RequestListRow = {
   home_care_remarks?: string | null;
   home_care_followup_date?: string | null;
   assignee: { full_name: string } | null;
-  doctors: { id: string; full_name: string; specialty: string } | null;
+  doctors: { id: string; full_name: string; specialty: string; image_url?: string | null } | null;
   opinion_request_records: Array<{
     uploaded_files: OpinionRequestFile | null;
     medical_records?: OpinionRequestFile | null;
@@ -1571,6 +1590,7 @@ function mapRequestRow(
     doctor_id: row.doctor_id,
     doctor_name: row.doctor_name ?? row.doctors?.full_name ?? null,
     doctor_specialty: row.doctors?.specialty ?? null,
+    doctor_image_url: row.doctors?.image_url ?? null,
     doctor_selection_mode: row.doctor_selection_mode ?? (row.doctor_id ? 'self_select' : 'needs_recommendation'),
     requested_specialty: row.requested_specialty ?? null,
     clinic_id: row.clinic_id ?? null,
@@ -2171,7 +2191,7 @@ async function fetchPatientOpinionRequestRows(
       assigned_to,
       assigned_at,
       coordination_notes,
-      doctors (id, full_name, specialty)
+      doctors (id, full_name, specialty, image_url)
     `
     );
     if (!result.error) {
@@ -2488,7 +2508,7 @@ export async function fetchPatientOpinionRequestById(
       assigned_to,
       assigned_at,
       coordination_notes,
-      doctors (id, full_name, specialty)
+      doctors (id, full_name, specialty, image_url)
     `
   ];
 

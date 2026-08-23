@@ -44,7 +44,7 @@ const DOCTOR_SCREEN_TO_PATH: Record<string, string> = {
   'case-review': ELIX_HEALTH_PATHS.workspace,
   'doctor-consultation': ELIX_HEALTH_PATHS.workspaceConsultation,
   'doctor-homecare': ELIX_HEALTH_PATHS.workspaceHomeCare,
-  availability: ELIX_HEALTH_PATHS.workspaceAvailability,
+  availability: `${ELIX_HEALTH_PATHS.workspaceProfile}?tab=scheduler`,
   settings: ELIX_HEALTH_PATHS.workspaceProfile,
   'doctor-profile': ELIX_HEALTH_PATHS.workspaceProfile
 };
@@ -55,6 +55,7 @@ export function doctorWorkspacePath(screenId: string): string {
 
 export function doctorNavIdFromPathname(pathname: string): ElixHealthDoctorNavId {
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceProfile)) return 'profile';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'profile';
   return 'dashboard';
 }
 
@@ -62,7 +63,7 @@ export function doctorPageTitleFromPathname(pathname: string): string {
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceConsultation)) return 'Consultation';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceProfile)) return 'Profile';
   if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceHomeCare)) return 'Home Care';
-  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Scheduler';
+  if (pathname.startsWith(ELIX_HEALTH_PATHS.workspaceAvailability)) return 'Profile';
   return 'Patient Requests';
 }
 

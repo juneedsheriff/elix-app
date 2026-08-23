@@ -538,7 +538,7 @@ export default function PatientMyRequests({
                 className={requestTab === 'upcoming' ? 'pmr-tab pmr-tab--active' : 'pmr-tab'}
                 onClick={() => setRequestTab('upcoming')}
               >
-                Upcoming
+                <span className='pmr-tab__label'>Upcoming</span>
                 <span className='pmr-tab__count'>{upcomingRequests.length}</span>
               </button>
               <button
@@ -547,10 +547,10 @@ export default function PatientMyRequests({
                 id='pmr-tab-completed'
                 aria-selected={requestTab === 'completed'}
                 aria-controls='pmr-request-panel'
-                className={requestTab === 'completed' ? 'pmr-tab pmr-tab--active' : 'pmr-tab'}
+                className={requestTab === 'completed' ? 'pmr-tab pmr-tab--active pmr-tab--completed' : 'pmr-tab'}
                 onClick={() => setRequestTab('completed')}
               >
-                Completed
+                <span className='pmr-tab__label'>Completed</span>
                 <span className='pmr-tab__count'>{completedRequests.length}</span>
               </button>
             </div>
@@ -599,7 +599,7 @@ export default function PatientMyRequests({
           {!loading && !error && visibleRequests.length > 0 ? (
             <ul
               id='pmr-request-panel'
-              className='pmr-list'
+              className={`pmr-list pmr-list--${requestTab}`}
               role='list'
               aria-labelledby={showRequestTabs ? `pmr-tab-${requestTab}` : undefined}
             >
@@ -607,6 +607,7 @@ export default function PatientMyRequests({
                 <PatientRequestListCard
                   key={request.id}
                   request={request}
+                  listVariant={requestTab}
                   relativeTime={formatRequestDate(requestUpdatedIso(request))}
                   onOpen={openDetail}
                 />

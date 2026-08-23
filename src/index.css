@@ -5671,6 +5671,12 @@ body:has(.elixhealth-app),
   gap: 1rem;
 }
 
+.elixhealth-profile-pricing {
+  margin-top: 0.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
 .elixhealth-form-section-title {
   margin: 0.25rem 0 0;
   font-size: 0.95rem;
@@ -5688,14 +5694,27 @@ body:has(.elixhealth-app),
 
 .elixhealth-field--checkbox {
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.55rem;
+  padding-top: 1.55rem;
+}
+
+.elixhealth-field--checkbox.elixhealth-field--full {
   grid-column: 1 / -1;
+  padding-top: 0;
+  align-items: center;
 }
 
 .elixhealth-field--checkbox input {
   width: 1rem;
   height: 1rem;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.elixhealth-field--checkbox span {
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .elixhealth-color-input {
@@ -5885,6 +5904,27 @@ body:has(.elixhealth-app),
   gap: 0.85rem;
 }
 
+.elixhealth-form-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.elixhealth-form-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.elixhealth-field--span-2 {
+  grid-column: span 2;
+}
+
+.elixhealth-save-btn {
+  width: auto;
+  min-width: 7.5rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
 .elixhealth-field {
   display: flex;
   flex-direction: column;
@@ -5936,12 +5976,21 @@ body:has(.elixhealth-app),
   background: var(--surface-soft);
 }
 
+@media (max-width: 1100px) {
+  .elixhealth-form-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
-  .elixhealth-form-grid {
+  .elixhealth-form-grid,
+  .elixhealth-form-grid--4,
+  .elixhealth-form-grid--2 {
     grid-template-columns: 1fr;
   }
 
-  .elixhealth-field--full {
+  .elixhealth-field--full,
+  .elixhealth-field--span-2 {
     grid-column: auto;
   }
 }
