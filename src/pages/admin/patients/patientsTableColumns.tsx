@@ -27,6 +27,7 @@ import {
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import type { Patient } from '../../../types/patient';
 import { avatarColorFromName, displayInitials, resolveProfilePhotoUrl } from '../../../lib/avatarDisplay';
+import { formatConsultationFollowupDate } from '../../../lib/consultationSummaryFields';
 import { patientEditUrl } from '../elixHealthRoutes';
 import {
   bloodGroupBadgeColor,
@@ -208,6 +209,22 @@ export function usePatientsTableColumns({
             >
               {bg}
             </Badge>
+          );
+        }
+      },
+      {
+        id: 'followup_date',
+        header: 'Follow-up Date',
+        accessorFn: (row) => row.consultation_followup_date ?? '',
+        size: 150,
+        minSize: 130,
+        enableColumnActions: false,
+        Cell: ({ row }) => {
+          const formatted = formatConsultationFollowupDate(row.original.consultation_followup_date);
+          return (
+            <Text size='sm' c={formatted ? undefined : 'dimmed'}>
+              {formatted || '—'}
+            </Text>
           );
         }
       },

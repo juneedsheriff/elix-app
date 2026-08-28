@@ -13,7 +13,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
   CloudUpload,
-  Download,
   FolderOpen,
   Link2,
   Loader2,
@@ -23,36 +22,30 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import RecordFileTypeIcon, { recordFileIconType } from './RecordFileTypeIcon';
-import { fetchPatientConsultationSummaries } from '../../lib/opinionRequests';
-import {
-  downloadLabOrderPdf,
-  downloadPrescriptionOrderPdf
-} from '../../lib/consultationOrdersPdf';
 import {
   getPendingOpinionRequest,
   navigateToResumePendingOpinionRequest
 } from '../../lib/navigation/pendingOpinionRequest';
 import {
-  DEFAULT_MEDICAL_RECORD_CATEGORY,
+  isConsultationSummaryRecord,
   isExternalOnlyCategory,
   isGoogleDriveShareUrl,
-  MEDICAL_RECORD_CATEGORIES,
   MEDICAL_RECORD_VIEW_FILTERS,
+  medicalRecordCategoryId,
   medicalRecordCategoryLabel,
+  medicalRecordCategoriesForPatientUpload,
   type MedicalRecordCategoryId,
   type MedicalRecordViewFilterId
 } from '../../lib/medicalRecordCategories';
 import {
   deleteMedicalRecord,
   fetchUserMedicalRecords,
-  getMedicalRecordDownloadUrl,
   medicalFileValidationError,
   isR2StorageConfigured,
   openMedicalRecordFile,
   saveExternalMedicalRecordLink,
   uploadMedicalRecord
 } from '../../lib/records';
-import type { ConsultationSummary } from '../../types/opinionRequest';
 import type { MedicalRecord } from '../../types/medicalRecord';
 import './upload-records.css';
 
@@ -80,12 +73,7 @@ function formatFileSize(bytes: number): string {
 }
 
 function recordCategoryId(record: MedicalRecord): MedicalRecordCategoryId {
-  const raw = record.record_category;
-  if (raw && MEDICAL_RECORD_CATEGORIES.some((category) => category.id === raw)) {
-    return raw as MedicalRecordCategoryId;
-  }
-  if (record.external_url?.trim()) return 'dicom_file';
-  return DEFAULT_MEDICAL_RECORD_CATEGORY;
+  return medicalRecordCategoryId(record);
 }
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
@@ -105,7 +93,6 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const initialTabResolvedRef = useRef(false);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [summaries, setSummaries] = useState<ConsultationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -121,7 +108,6 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   const [filterMenuStyle, setFilterMenuStyle] = useState<CSSProperties>({});
   const [recordPendingDelete, setRecordPendingDelete] = useState<MedicalRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState(false);
-  const [downloadingOrderKey, setDownloadingOrderKey] = useState<string | null>(null);
 
   const canUpload = Boolean(userId && configured && isR2StorageConfigured());
   const showTabs = !loading && records.length > 0;
@@ -184,25 +170,18 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   const loadRecords = useCallback(async () => {
     if (!userId) {
       setRecords([]);
-      setSummaries([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     setError(null);
-    const [recordsRes, summariesRes] = await Promise.all([
-      fetchUserMedicalRecords(userId),
-      fetchPatientConsultationSummaries(userId)
-    ]);
+    const recordsRes = await fetchUserMedicalRecords(userId);
     if (recordsRes.error) {
       setError(recordsRes.error.message);
       setRecords([]);
     } else {
       setRecords(recordsRes.data ?? []);
-    }
-    if (!summariesRes.error) {
-      setSummaries(summariesRes.data ?? []);
     }
     setLoading(false);
   }, [userId]);
@@ -420,68 +399,6 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
     setRecordPendingDelete(null);
   };
 
-  const downloadOrder = useCallback(
-    async (summary: ConsultationSummary, type: 'prescription' | 'lab') => {
-      const text =
-        type === 'prescription'
-          ? summary.prescription?.trim() ?? ''
-          : summary.labs_diagnostics?.trim() ?? '';
-      const storagePath =
-        type === 'prescription'
-          ? summary.prescription_file_path?.trim() ?? ''
-          : summary.lab_order_file_path?.trim() ?? '';
-      const fileName =
-        type === 'prescription'
-          ? summary.prescription_file_name?.trim()
-          : summary.lab_order_file_name?.trim();
-      if (!text && !storagePath) return;
-
-      const key = `${summary.id}:${type}`;
-      setDownloadingOrderKey(key);
-      try {
-        // Prefer doctor-uploaded attachment when both text and file were captured.
-        if (storagePath) {
-          const { data, error } = await getMedicalRecordDownloadUrl(storagePath, {
-            requestId: summary.request_id
-          });
-          if (error || !data?.signedUrl) {
-            setStatusMessage(error?.message ?? 'Could not download order file.');
-            return;
-          }
-          const anchor = document.createElement('a');
-          anchor.href = data.signedUrl;
-          anchor.download = fileName || (type === 'prescription' ? 'Prescription' : 'Lab-Order');
-          anchor.click();
-          window.setTimeout(() => URL.revokeObjectURL(data.signedUrl), 60_000);
-          return;
-        }
-
-        if (text) {
-          const meta = {
-            patientName: summary.patient_name,
-            patientGender: summary.patient_gender,
-            patientId: summary.patient_auth_user_id,
-            requestId: summary.request_id,
-            doctorName: summary.doctor_name,
-            doctorSpecialty: summary.doctor_specialty,
-            doctorQualification: summary.doctor_qualification,
-            doctorMedicalLicenseNo: summary.doctor_medical_license_no,
-            scheduledAt: summary.scheduled_at,
-            issuedAt: new Date(summary.updated_at || summary.created_at)
-          };
-          if (type === 'prescription') {
-            await downloadPrescriptionOrderPdf(text, meta);
-          } else {
-            await downloadLabOrderPdf(text, meta);
-          }
-        }
-      } finally {
-        setDownloadingOrderKey(null);
-      }
-    },
-    []
-  );
-
   const confirmDelete = async () => {
     if (!recordPendingDelete || deletingRecord) return;
 
@@ -526,7 +443,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
           <option value='' disabled hidden>
             Select record type
           </option>
-          {MEDICAL_RECORD_CATEGORIES.map((category) => (
+          {medicalRecordCategoriesForPatientUpload().map((category) => (
             <option key={category.id} value={category.id}>
               {category.label}
             </option>
@@ -748,9 +665,11 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
                     <span>
                       {record.external_url
                         ? 'Google Drive link'
-                        : formatFileSize(record.file_size_bytes) +
-                          ' • Uploaded ' +
-                          relativeUploadLabel(record.uploaded_at)}
+                        : isConsultationSummaryRecord(record)
+                          ? 'From your consultation • ' + relativeUploadLabel(record.uploaded_at)
+                          : formatFileSize(record.file_size_bytes) +
+                            ' • Uploaded ' +
+                            relativeUploadLabel(record.uploaded_at)}
                     </span>
                   </p>
                 </div>
@@ -772,6 +691,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
                           {record.external_url ? 'Open link' : 'Open'}
                         </button>
                       </li>
+                      {isConsultationSummaryRecord(record) ? null : (
                       <li>
                         <button
                           type='button'
@@ -782,6 +702,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
                           Remove
                         </button>
                       </li>
+                      )}
                     </ul>
                   ) : null}
                 </div>
@@ -937,74 +858,6 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
 
         {!loading && !error && !userId ? (
           <p className='urv-empty'>No records yet. Sign in to upload files.</p>
-        ) : null}
-
-        {summaries.length > 0 && activeTab === 'view' && showTabs ? (
-          <section className='urv-summaries' aria-labelledby='urv-summaries-heading'>
-            <h2 id='urv-summaries-heading' className='urv-summaries__title'>
-              Consultation summaries
-            </h2>
-            <p className='urv-summaries__sub'>
-              Structured notes and prescriptions from completed consultations
-            </p>
-            <ul className='urv-summary-list'>
-              {summaries.map((summary) => {
-                const hasPrescription = Boolean(
-                  summary.prescription?.trim() || summary.prescription_file_path?.trim()
-                );
-                const hasLabOrder = Boolean(
-                  summary.labs_diagnostics?.trim() || summary.lab_order_file_path?.trim()
-                );
-                const consultationDate = summary.scheduled_at ?? summary.created_at;
-                const doctorLabel = summary.doctor_name?.trim() || 'Consultation';
-                return (
-                  <li key={summary.id} className='urv-summary-item'>
-                    <strong>{doctorLabel}</strong>
-                    <span>
-                      {hasPrescription && hasLabOrder
-                        ? 'Prescription and lab order'
-                        : hasPrescription
-                          ? 'Prescription'
-                          : hasLabOrder
-                            ? 'Lab order'
-                            : summary.assessment_plan ?? summary.chief_complaint ?? ''}
-                    </span>
-                    <span>{new Date(consultationDate).toLocaleDateString()}</span>
-                    {hasPrescription || hasLabOrder ? (
-                      <div className='urv-summary-actions'>
-                        {hasPrescription ? (
-                          <button
-                            type='button'
-                            className='secondary-btn urv-summary-action-btn'
-                            onClick={() => void downloadOrder(summary, 'prescription')}
-                            disabled={downloadingOrderKey === `${summary.id}:prescription`}
-                          >
-                            <Download size={14} aria-hidden />
-                            {downloadingOrderKey === `${summary.id}:prescription`
-                              ? 'Preparing…'
-                              : 'Prescription'}
-                          </button>
-                        ) : null}
-                        {hasLabOrder ? (
-                          <button
-                            type='button'
-                            className='secondary-btn urv-summary-action-btn'
-                            onClick={() => void downloadOrder(summary, 'lab')}
-                            disabled={downloadingOrderKey === `${summary.id}:lab`}
-                          >
-                            <Download size={14} aria-hidden />
-                            {downloadingOrderKey === `${summary.id}:lab`
-                              ? 'Preparing…'
-                              : 'Lab Order'}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
         ) : null}
       </div>
 

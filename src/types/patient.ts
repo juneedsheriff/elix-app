@@ -58,6 +58,8 @@ export type Patient = {
   /** PSE clinic workspace when managed by clinic PSE */
   clinic_id?: string | null;
   pse_clinic_name?: string | null;
+  /** Nearest upcoming (or most recent past) doctor consultation follow-up date (YYYY-MM-DD). */
+  consultation_followup_date?: string | null;
 };
 
 export type PatientUpsertInput = {

@@ -6,6 +6,7 @@ import { parsePatientAttachedDocuments } from './patientDocuments';
 import { deletePatientPermanently } from './adminAuth';
 import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
+import { fetchPatientConsultationFollowupDates } from './opinionRequests';
 import { supabase } from './supabase';
 
 const ADMIN_COLUMNS_BASE =
@@ -121,6 +122,24 @@ async function enrichPatientsWithClinicNames(patients: Patient[]): Promise<Patie
     if (!patient.clinic_id || patient.pse_clinic_name?.trim()) return patient;
     const clinicName = clinicNameById.get(patient.clinic_id);
     return clinicName ? { ...patient, pse_clinic_name: clinicName } : patient;
+  });
+}
+
+async function enrichPatientsWithFollowupDates(patients: Patient[]): Promise<Patient[]> {
+  const authUserIds = patients
+    .map((patient) => patient.auth_user_id?.trim())
+    .filter((id): id is string => Boolean(id));
+  if (!authUserIds.length) return patients;
+
+  const followupByAuthUserId = await fetchPatientConsultationFollowupDates(authUserIds);
+  if (!followupByAuthUserId.size) return patients;
+
+  return patients.map((patient) => {
+    const authUserId = patient.auth_user_id?.trim();
+    if (!authUserId) return patient;
+    const followupDate = followupByAuthUserId.get(authUserId) ?? null;
+    if (!followupDate) return patient;
+    return { ...patient, consultation_followup_date: followupDate };
   });
 }
 
@@ -324,7 +343,8 @@ export async function fetchAllPatientsForAdmin() {
 
   if (!withClinic.error) {
     const mapped = (withClinic.data ?? []).map((row) => mapPatientAdminRow(row as PatientAdminRow));
-    const enriched = await enrichPatientsWithClinicNames(mapped);
+    const withClinicNames = await enrichPatientsWithClinicNames(mapped);
+    const enriched = await enrichPatientsWithFollowupDates(withClinicNames);
     return {
       data: enriched,
       error: null
@@ -341,7 +361,8 @@ export async function fetchAllPatientsForAdmin() {
     .order('created_at', { ascending: false });
 
   if (result.error) return { data: null, error: result.error };
-  const enriched = await enrichPatientsWithClinicNames((result.data ?? []) as Patient[]);
+  const withClinicNames = await enrichPatientsWithClinicNames((result.data ?? []) as Patient[]);
+  const enriched = await enrichPatientsWithFollowupDates(withClinicNames);
   return { data: enriched, error: null };
 }
 

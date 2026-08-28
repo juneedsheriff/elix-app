@@ -1,5 +1,6 @@
 export const MEDICAL_RECORD_CATEGORIES = [
   { id: 'doctors_notes', label: "Doctor's Notes" },
+  { id: 'consultation_summary', label: 'Consultation Summary', patientUpload: false },
   { id: 'medical_reports', label: 'Medical Reports' },
   { id: 'lab_results', label: 'Lab Results' },
   {
@@ -32,6 +33,13 @@ export function isExternalOnlyCategory(categoryId: MedicalRecordCategoryId): boo
   return categoryId === 'dicom_file';
 }
 
+/** Categories a patient can pick when uploading (excludes doctor/system-generated types). */
+export function medicalRecordCategoriesForPatientUpload() {
+  return MEDICAL_RECORD_CATEGORIES.filter(
+    (category) => !('patientUpload' in category && category.patientUpload === false)
+  );
+}
+
 export function isGoogleDriveShareUrl(url: string): boolean {
   try {
     const parsed = new URL(url.trim());
@@ -56,12 +64,21 @@ export type MedicalRecordViewFilterId = (typeof MEDICAL_RECORD_VIEW_FILTERS)[num
 
 /** Resolve stored category for a vault record (falls back for legacy rows). */
 export function medicalRecordCategoryId(
-  record: { record_category?: string | null; external_url?: string | null }
+  record: { record_category?: string | null; external_url?: string | null; storage_path?: string | null }
 ): MedicalRecordCategoryId {
   const raw = record.record_category;
   if (raw && MEDICAL_RECORD_CATEGORIES.some((category) => category.id === raw)) {
     return raw as MedicalRecordCategoryId;
   }
+  if (record.storage_path?.startsWith('consultation-summaries/')) return 'consultation_summary';
   if (record.external_url?.trim()) return 'dicom_file';
   return DEFAULT_MEDICAL_RECORD_CATEGORY;
+}
+
+export function isConsultationSummaryRecord(record: {
+  id?: string | null;
+  record_category?: string | null;
+  storage_path?: string | null;
+}): boolean {
+  return medicalRecordCategoryId(record) === 'consultation_summary';
 }

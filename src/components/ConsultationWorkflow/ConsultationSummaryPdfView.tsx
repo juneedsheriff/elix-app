@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
+import { useMediaQuery } from '@mantine/hooks';
 import {
   consultationSummaryPdfMetaFromRequest,
   generateConsultationSummaryPdfBlob,
@@ -66,12 +67,16 @@ function emptyPreview(): DocPreviewState {
   return { url: null, loading: false, error: null, isPdf: true, isImage: false };
 }
 
-function fileKindFromName(fileName: string): Pick<DocPreviewState, 'isPdf' | 'isImage'> {
+function fileKindFromName(fileName: string, storagePath?: string): Pick<DocPreviewState, 'isPdf' | 'isImage'> {
   const lower = fileName.toLowerCase();
-  return {
-    isPdf: lower.endsWith('.pdf'),
-    isImage: isImageFileName(fileName)
-  };
+  const path = storagePath?.toLowerCase() ?? '';
+  if (isImageFileName(fileName) || isImageFileName(path)) {
+    return { isPdf: false, isImage: true };
+  }
+  if (lower.endsWith('.pdf') || path.endsWith('.pdf') || path.startsWith('consultation-summaries/')) {
+    return { isPdf: true, isImage: false };
+  }
+  return { isPdf: false, isImage: false };
 }
 
 function isUploadedFilePlaceholder(value: string | null | undefined): boolean {
@@ -126,6 +131,7 @@ export default function ConsultationSummaryPdfView({
   summary,
   request
 }: ConsultationSummaryPdfViewProps) {
+  const isCompactViewport = useMediaQuery('(max-width: 1024px)');
   const [summaryPreview, setSummaryPreview] = useState<DocPreviewState>(emptyPreview);
   const [prescriptionPreview, setPrescriptionPreview] =
     useState<DocPreviewState>(emptyPreview);
@@ -393,7 +399,7 @@ export default function ConsultationSummaryPdfView({
       }
       revokeUrl(summaryUrlRef);
       summaryUrlRef.current = data.signedUrl;
-      const kind = fileKindFromName(storedFileName);
+      const kind = fileKindFromName(storedFileName, storedPath);
       setSummaryPreview({
         url: data.signedUrl,
         loading: false,
@@ -708,6 +714,36 @@ export default function ConsultationSummaryPdfView({
     }
   };
 
+  const renderSummaryHtml = () => (
+    <div className='consultation-summary-pdf__page' aria-label='Consultation summary'>
+      <header className='consultation-summary-pdf__header'>
+        <p className='consultation-summary-pdf__brand'>ElixClinix</p>
+        <h5 className='consultation-summary-pdf__title'>Consultation Summary</h5>
+        {patientDisplayName ? (
+          <p className='consultation-summary-pdf__meta'>Patient: {patientDisplayName}</p>
+        ) : null}
+        {doctorDisplayName ? (
+          <p className='consultation-summary-pdf__meta'>
+            Doctor: {doctorDisplayName}
+            {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
+          </p>
+        ) : null}
+        {request.scheduled_at ? (
+          <p className='consultation-summary-pdf__meta'>
+            Consultation: {new Date(request.scheduled_at).toLocaleString()}
+          </p>
+        ) : null}
+      </header>
+
+      {sections.map((section) => (
+        <section key={section.label} className='consultation-summary-pdf__section'>
+          <h6>{section.label}</h6>
+          <p>{section.value}</p>
+        </section>
+      ))}
+    </div>
+  );
+
   const renderDocument = (opts: {
     kind: DocKind;
     title: string;
@@ -730,6 +766,7 @@ export default function ConsultationSummaryPdfView({
             }
           ]
         : [];
+    const showHtmlSummary = opts.kind === 'summary' && sections.length > 0 && Boolean(isCompactViewport);
     return (
       <section className='consultation-summary-pdf__doc' aria-label={title}>
         <div className='consultation-summary-pdf__toolbar'>
@@ -761,34 +798,35 @@ export default function ConsultationSummaryPdfView({
         </div>
 
         <div className='consultation-summary-pdf__viewer' aria-label={`${title} preview`}>
-          {preview.loading ? (
+          {preview.loading && !showHtmlSummary ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
               <Loader2 size={16} className='spin' aria-hidden /> Preparing file…
             </p>
           ) : null}
-          {preview.error ? (
+          {preview.error && !showHtmlSummary ? (
             <p className='auth-error consultation-summary-pdf__viewer-status' role='alert'>
               {preview.error}
             </p>
           ) : null}
-          {preview.url && preview.isPdf ? (
+          {showHtmlSummary ? renderSummaryHtml() : null}
+          {!showHtmlSummary && preview.url && preview.isPdf ? (
             <iframe
               className='consultation-summary-pdf__iframe'
               src={preview.url}
               title={title}
             />
           ) : null}
-          {preview.url && !preview.isPdf && preview.isImage ? (
+          {!showHtmlSummary && preview.url && !preview.isPdf && preview.isImage ? (
             <div className='consultation-summary-pdf__lightbox'>
               <ImageLightboxGallery images={imageItems} modalZIndex={600} />
             </div>
           ) : null}
-          {preview.url && !preview.isPdf && !preview.isImage ? (
+          {!showHtmlSummary && preview.url && !preview.isPdf && !preview.isImage ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
               Preview is not available for this file type. Use Open file or Download.
             </p>
           ) : null}
-          {!preview.loading && !preview.error && !preview.url ? (
+          {!showHtmlSummary && !preview.loading && !preview.error && !preview.url ? (
             <p className='muted consultation-summary-pdf__viewer-status'>{opts.emptyMessage}</p>
           ) : null}
         </div>
@@ -832,34 +870,9 @@ export default function ConsultationSummaryPdfView({
       {!summaryPreview.url &&
       !summaryPreview.loading &&
       sections.length > 0 &&
-      summaryPreview.error ? (
-        <div className='consultation-summary-pdf__page' aria-label='Consultation summary preview'>
-          <header className='consultation-summary-pdf__header'>
-            <p className='consultation-summary-pdf__brand'>ElixClinix</p>
-            <h5 className='consultation-summary-pdf__title'>Consultation Summary</h5>
-            {patientDisplayName ? (
-              <p className='consultation-summary-pdf__meta'>Patient: {patientDisplayName}</p>
-            ) : null}
-            {doctorDisplayName ? (
-              <p className='consultation-summary-pdf__meta'>
-                Doctor: {doctorDisplayName}
-                {request.doctor_specialty ? ` · ${request.doctor_specialty}` : ''}
-              </p>
-            ) : null}
-            {request.scheduled_at ? (
-              <p className='consultation-summary-pdf__meta'>
-                Consultation: {new Date(request.scheduled_at).toLocaleString()}
-              </p>
-            ) : null}
-          </header>
-
-          {sections.map((section) => (
-            <section key={section.label} className='consultation-summary-pdf__section'>
-              <h6>{section.label}</h6>
-              <p>{section.value}</p>
-            </section>
-          ))}
-        </div>
+      summaryPreview.error &&
+      !isCompactViewport ? (
+        renderSummaryHtml()
       ) : null}
     </div>
   );

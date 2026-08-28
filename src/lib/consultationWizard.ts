@@ -447,6 +447,8 @@ export function getWizardSteps(
 
 /** PSE may open any step up through the next actionable step. */
 export function canPseNavigateToStep(targetIndex: number, ctx: WizardProgressContext): boolean {
+  const lastIndex = wizardStepCount('pse', ctx) - 1;
+  if (targetIndex < 0 || targetIndex > lastIndex) return false;
   const maxCompleted = getMaxCompletedStepIndex(ctx, 'pse');
   return targetIndex <= maxCompleted + 1;
 }
@@ -645,7 +647,8 @@ export function resolveWizardStepOnUpdate(
 }
 
 export function getInitialPseWizardStep(ctx: WizardProgressContext) {
-  const maxNav = getMaxCompletedStepIndex(ctx, 'pse') + 1;
+  const lastIndex = Math.max(0, wizardStepCount('pse', ctx) - 1);
+  const maxNav = Math.min(getMaxCompletedStepIndex(ctx, 'pse') + 1, lastIndex);
   return initialPseWizardStep(ctx.request.id, maxNav);
 }
 

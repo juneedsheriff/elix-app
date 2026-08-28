@@ -122,6 +122,11 @@
   color: var(--text-soft);
 }
 
+.pd-hero__subtitle strong {
+  font-weight: 700;
+  color: var(--brand-cyan);
+}
+
 .pd-hero__badge {
   flex-shrink: 0;
   padding: 0.35rem 0.7rem;

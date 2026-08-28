@@ -262,6 +262,7 @@ async function canAccessConsultationSummaryPdfForRequest(
 
 const REQUEST_RECORD_CATEGORIES = new Set([
   'doctors_notes',
+  'consultation_summary',
   'medical_reports',
   'lab_results',
   'imaging_reports',

@@ -22,11 +22,13 @@ import '../../components/OpinionRequests/patient-my-requests.css';
 import SecondOpinionChoiceModal from '../../components/OpinionRequests/SecondOpinionChoiceModal';
 import type { HomeCareServiceSelection } from '../../lib/homeCareServices';
 import { appScreenPath } from '../../lib/navigation/appRoutes';
+import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import { isPatientProfileComplete, patientProfileMissingFields } from '../../lib/patientProfileCompleteness';
 import { splitPatientFullName } from '../../lib/patients';
 import {
   createHomeCareOpinionRequest,
   fetchPatientOpinionRequests,
+  fetchPatientUpcomingFollowup,
   isAwaitingDoctorReply,
   subscribePatientOpinionRequestUpdates
 } from '../../lib/opinionRequests';
@@ -88,6 +90,8 @@ export default function PatientDashboardPage({
   const [homeCareModalOpen, setHomeCareModalOpen] = useState(false);
   const [homeCareBusy, setHomeCareBusy] = useState(false);
   const [homeCareError, setHomeCareError] = useState<string | null>(null);
+  const [upcomingFollowupDate, setUpcomingFollowupDate] = useState<string | null>(null);
+  const [upcomingFollowupDoctorName, setUpcomingFollowupDoctorName] = useState<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
   const goToScreen = useCallback(
@@ -147,6 +151,8 @@ export default function PatientDashboardPage({
       if (!userId) {
         setRequests([]);
         setRecordCount(0);
+        setUpcomingFollowupDate(null);
+        setUpcomingFollowupDoctorName(null);
         setLoading(false);
         hasLoadedOnceRef.current = false;
         return;
@@ -159,9 +165,10 @@ export default function PatientDashboardPage({
         setError(null);
       }
 
-      const [requestsResult, recordsResult] = await Promise.all([
+      const [requestsResult, recordsResult, followup] = await Promise.all([
         fetchPatientOpinionRequests(userId),
-        fetchUserMedicalRecords(userId)
+        fetchUserMedicalRecords(userId),
+        fetchPatientUpcomingFollowup(userId)
       ]);
 
       if (requestsResult.error) {
@@ -177,6 +184,9 @@ export default function PatientDashboardPage({
       if (!recordsResult.error) {
         setRecordCount(recordsResult.data?.length ?? 0);
       }
+
+      setUpcomingFollowupDate(followup?.date ?? null);
+      setUpcomingFollowupDoctorName(followup?.doctorName ?? null);
 
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -210,6 +220,20 @@ export default function PatientDashboardPage({
   );
 
   const greetingName = patientGreetingName(patientProfile?.full_name);
+  const followupDateLabel = formatConsultationFollowupDate(upcomingFollowupDate);
+  const followupDoctorName = useMemo(() => {
+    if (upcomingFollowupDoctorName?.trim()) return upcomingFollowupDoctorName.trim();
+    if (!upcomingFollowupDate) return null;
+    const matching = requests.find((request) => {
+      const summaryDate = request.consultation_summary?.followup_date?.trim().slice(0, 10);
+      return summaryDate === upcomingFollowupDate;
+    });
+    return (
+      matching?.consultation_summary?.doctor_name?.trim() ||
+      matching?.doctor_name?.trim() ||
+      null
+    );
+  }, [upcomingFollowupDoctorName, upcomingFollowupDate, requests]);
   const profileIncomplete = Boolean(patientProfile && !isPatientProfileComplete(patientProfile));
   const missingProfileFields = patientProfileMissingFields(patientProfile);
   const canRequestHomeCare = Boolean(patientProfile?.clinic_id);
@@ -303,7 +327,17 @@ export default function PatientDashboardPage({
             <div className='pd-hero__content'>
               <p className='pd-hero__eyebrow'>Welcome back</p>
               <h1 className='pd-hero__title'>Hi, {greetingName}</h1>
-           
+              {followupDateLabel ? (
+                <p className='pd-hero__subtitle'>
+                  Follow-up appointment: <strong>{followupDateLabel}</strong>
+                  {followupDoctorName ? (
+                    <>
+                      {' '}
+                      with <strong>{followupDoctorName}</strong>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
             </div>
             {patientProfile?.elix_id ? (
               <span className='pd-hero__badge'>{patientProfile.elix_id}</span>

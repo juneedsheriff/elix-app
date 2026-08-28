@@ -1,4 +1,5 @@
 import type { Patient } from '../../../types/patient';
+import { formatConsultationFollowupDate } from '../../../lib/consultationSummaryFields';
 
 export type LoginFilter = 'all' | 'active' | 'disabled' | 'none';
 
@@ -95,6 +96,7 @@ export function exportPatientsCsv(patients: Patient[]) {
     'City',
     'Country',
     'Blood group',
+    'Follow-up Date',
     'Gender',
     'Joined',
     'Login status'
@@ -112,6 +114,7 @@ export function exportPatientsCsv(patients: Patient[]) {
       patient.city ?? '',
       patient.country ?? '',
       patient.blood_group ?? '',
+      formatConsultationFollowupDate(patient.consultation_followup_date) || '',
       patient.gender ?? '',
       patient.created_at ? new Date(patient.created_at).toLocaleDateString() : '',
       login

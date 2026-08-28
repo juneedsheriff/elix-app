@@ -30,6 +30,14 @@ export function emptyConsultationSummaryValues(): ConsultationSummaryFormValues 
   };
 }
 
+/** Local calendar date as YYYY-MM-DD (for date-input min / comparisons). */
+export function localIsoDate(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /** Normalize DB date / ISO string to YYYY-MM-DD for date inputs. */
 export function normalizeConsultationFollowupDate(
   value: string | null | undefined

@@ -1387,6 +1387,24 @@
   line-height: 1.5;
 }
 
+.consultation-summary-pdf__viewer > .consultation-summary-pdf__page {
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  max-height: min(70vh, 36rem);
+}
+
+@media (max-width: 1024px) {
+  .consultation-summary-pdf__page {
+    padding: 1.15rem 1.1rem;
+    max-height: none;
+  }
+
+  .consultation-summary-pdf__viewer > .consultation-summary-pdf__page {
+    max-height: min(75vh, 40rem);
+  }
+}
+
 .consultation-summary-pdf__brand {
   margin: 0;
   font-size: 0.75rem;

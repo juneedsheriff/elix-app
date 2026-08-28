@@ -43,7 +43,10 @@ import {
   generateConsultationSummaryPdfBlob
 } from './consultationSummaryPdf';
 import { notifyRequestLifecycleEmail } from './adminAuth';
-import { syncConsultationOrdersToPatientVault } from './consultationVaultRecords';
+import {
+  syncConsultationOrdersToPatientVault,
+  syncConsultationSummaryToPatientVault
+} from './consultationVaultRecords';
 import {
   createConsultationInvoiceUploadUrl,
   createConsultationOrderUploadUrl,
@@ -4518,6 +4521,176 @@ function mapPatientConsultationSummary(
   };
 }
 
+function pickPatientDisplayFollowupDate(dates: string[]): string | null {
+  const unique = [...new Set(dates.map((d) => d.trim().slice(0, 10)).filter(Boolean))].sort();
+  if (!unique.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = unique.filter((date) => date >= today);
+  return upcoming[0] ?? unique[unique.length - 1] ?? null;
+}
+
+function pickUpcomingPatientFollowupDate(dates: string[]): string | null {
+  const unique = [...new Set(dates.map((d) => d.trim().slice(0, 10)).filter(Boolean))].sort();
+  if (!unique.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  return unique.find((date) => date >= today) ?? null;
+}
+
+async function collectPatientFollowupDatesByAuthUserId(
+  patientAuthUserIds: string[]
+): Promise<Map<string, string[]>> {
+  const ids = [...new Set(patientAuthUserIds.map((id) => id.trim()).filter(Boolean))];
+  const datesByPatient = new Map<string, string[]>();
+  if (!ids.length) return datesByPatient;
+
+  const addDate = (patientId: string | null | undefined, followupDate: string | null | undefined) => {
+    const pid = patientId?.trim();
+    const date = followupDate?.trim()?.slice(0, 10);
+    if (!pid || !date || !ids.includes(pid)) return;
+    const existing = datesByPatient.get(pid) ?? [];
+    existing.push(date);
+    datesByPatient.set(pid, existing);
+  };
+
+  const summariesRes = await supabase
+    .from('consultation_summaries')
+    .select('followup_date, patient_auth_user_id')
+    .in('patient_auth_user_id', ids)
+    .not('followup_date', 'is', null);
+
+  if (!summariesRes.error?.message?.includes('followup_date') && !summariesRes.error) {
+    for (const row of summariesRes.data ?? []) {
+      addDate(row.patient_auth_user_id, row.followup_date);
+    }
+  }
+
+  const viaRequestRes = await supabase
+    .from('opinion_requests')
+    .select('patient_id, consultation_summaries(followup_date)')
+    .in('patient_id', ids);
+
+  if (!viaRequestRes.error) {
+    for (const row of viaRequestRes.data ?? []) {
+      const nested = row.consultation_summaries;
+      const summaries = Array.isArray(nested) ? nested : nested ? [nested] : [];
+      for (const summary of summaries) {
+        addDate(row.patient_id, summary?.followup_date ?? null);
+      }
+    }
+  }
+
+  return datesByPatient;
+}
+
+export type PatientUpcomingFollowup = {
+  date: string;
+  doctorName: string | null;
+};
+
+function relationDoctorName(
+  doctor: { full_name?: string | null } | { full_name?: string | null }[] | null | undefined,
+  fallback?: string | null
+): string | null {
+  const row = Array.isArray(doctor) ? doctor[0] : doctor;
+  return row?.full_name?.trim() || fallback?.trim() || null;
+}
+
+function pickUpcomingPatientFollowup(items: PatientUpcomingFollowup[]): PatientUpcomingFollowup | null {
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = items
+    .map((item) => ({
+      date: item.date.trim().slice(0, 10),
+      doctorName: item.doctorName?.trim() || null
+    }))
+    .filter((item) => item.date && item.date >= today)
+    .sort((a, b) => {
+      const byDate = a.date.localeCompare(b.date);
+      if (byDate !== 0) return byDate;
+      if (a.doctorName && !b.doctorName) return -1;
+      if (!a.doctorName && b.doctorName) return 1;
+      return 0;
+    });
+  return upcoming[0] ?? null;
+}
+
+/** Nearest upcoming doctor follow-up for the signed-in patient (hidden once the date has passed). */
+export async function fetchPatientUpcomingFollowup(
+  patientAuthUserId: string
+): Promise<PatientUpcomingFollowup | null> {
+  const id = patientAuthUserId.trim();
+  if (!id) return null;
+
+  const items: PatientUpcomingFollowup[] = [];
+  const addItem = (date: string | null | undefined, doctorName: string | null | undefined) => {
+    const iso = date?.trim().slice(0, 10);
+    if (!iso) return;
+    items.push({ date: iso, doctorName: doctorName?.trim() || null });
+  };
+
+  type SummaryFollowupRow = {
+    followup_date: string | null;
+    doctor?: { full_name: string | null } | { full_name: string | null }[] | null;
+    request?: { doctor_name: string | null } | { doctor_name: string | null }[] | null;
+  };
+
+  const summariesRes = await supabase
+    .from('consultation_summaries')
+    .select(
+      'followup_date, patient_auth_user_id, doctor:doctors(full_name), request:opinion_requests(doctor_name)'
+    )
+    .eq('patient_auth_user_id', id)
+    .not('followup_date', 'is', null)
+    .returns<SummaryFollowupRow[]>();
+
+  if (!summariesRes.error?.message?.includes('followup_date') && !summariesRes.error) {
+    for (const row of summariesRes.data ?? []) {
+      const request = Array.isArray(row.request) ? row.request[0] : row.request;
+      addItem(row.followup_date, relationDoctorName(row.doctor, request?.doctor_name));
+    }
+  }
+
+  const viaRequestRes = await supabase
+    .from('opinion_requests')
+    .select('patient_id, doctor_name, consultation_summaries(followup_date, doctor:doctors(full_name))')
+    .eq('patient_id', id);
+
+  if (!viaRequestRes.error) {
+    for (const row of viaRequestRes.data ?? []) {
+      const nested = row.consultation_summaries as
+        | { followup_date?: string | null; doctor?: { full_name: string | null } | { full_name: string | null }[] | null }
+        | { followup_date?: string | null; doctor?: { full_name: string | null } | { full_name: string | null }[] | null }[]
+        | null;
+      const summaries = Array.isArray(nested) ? nested : nested ? [nested] : [];
+      for (const summary of summaries) {
+        addItem(summary?.followup_date ?? null, relationDoctorName(summary?.doctor, row.doctor_name));
+      }
+    }
+  }
+
+  return pickUpcomingPatientFollowup(items);
+}
+
+/** Nearest upcoming doctor follow-up date for the signed-in patient (hidden once the date has passed). */
+export async function fetchPatientUpcomingFollowupDate(
+  patientAuthUserId: string
+): Promise<string | null> {
+  const followup = await fetchPatientUpcomingFollowup(patientAuthUserId);
+  return followup?.date ?? null;
+}
+
+/** Latest doctor consultation follow-up per patient auth user (admin patients list). */
+export async function fetchPatientConsultationFollowupDates(
+  patientAuthUserIds: string[]
+): Promise<Map<string, string>> {
+  const datesByPatient = await collectPatientFollowupDatesByAuthUserId(patientAuthUserIds);
+  const result = new Map<string, string>();
+  for (const [patientId, dates] of datesByPatient) {
+    const picked = pickPatientDisplayFollowupDate(dates);
+    if (picked) result.set(patientId, picked);
+  }
+  return result;
+}
+
 export async function fetchPatientConsultationSummaries(patientAuthUserId: string) {
   const [summariesRes, patientRes] = await Promise.all([
     supabase
@@ -5016,6 +5189,19 @@ export async function saveDoctorConsultation(
     );
   }
 
+  const summaryVaultSync = await syncConsultationSummaryToPatientVault({
+    request,
+    storagePath: uploadTarget.storagePath,
+    fileName: file.name,
+    fileSizeBytes: file.size
+  });
+  if (summaryVaultSync.error) {
+    console.warn(
+      '[saveDoctorConsultation] Consultation summary vault sync failed:',
+      summaryVaultSync.error.message
+    );
+  }
+
   return { data: mapConsultationSummaryRow(data), error: null };
 }
 
@@ -5375,6 +5561,20 @@ export async function saveDoctorConsultationUpload(
       error: { message: normalizeStorageAuthError(finalize.error.message) }
     };
   }
+
+  const summaryVaultSync = await syncConsultationSummaryToPatientVault({
+    request,
+    storagePath: uploadTarget.storagePath,
+    fileName: uploadFileName,
+    fileSizeBytes: file.size
+  });
+  if (summaryVaultSync.error) {
+    console.warn(
+      '[saveDoctorConsultationUpload] Consultation summary vault sync failed:',
+      summaryVaultSync.error.message
+    );
+  }
+
   return { data: mapConsultationSummaryRow(data), error: null };
 }
 

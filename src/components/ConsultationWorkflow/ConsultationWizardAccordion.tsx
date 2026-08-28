@@ -50,7 +50,19 @@ export default function ConsultationWizardAccordion({
   ariaLabel = 'Coordination progress',
   panelIdPrefix = 'coordination-step'
 }: ConsultationWizardAccordionProps) {
-  const activeStep = steps[expandedIndex ?? suggestedIndex];
+  const lastAccessible = (() => {
+    for (let i = steps.length - 1; i >= 0; i -= 1) {
+      if (canNavigate(i)) return i;
+    }
+    return 0;
+  })();
+  const resolvedExpanded =
+    expandedIndex == null
+      ? null
+      : expandedIndex >= 0 && expandedIndex < steps.length && canNavigate(expandedIndex)
+        ? expandedIndex
+        : lastAccessible;
+  const activeStep = steps[resolvedExpanded ?? suggestedIndex] ?? steps[0];
 
   return (
     <div
@@ -90,7 +102,7 @@ export default function ConsultationWizardAccordion({
             const step = steps[index];
             const isLast = index === steps.length - 1;
             const isAccessible = canNavigate(index);
-            const isExpanded = expandedIndex === index;
+            const isExpanded = resolvedExpanded === index;
             const isCurrent = index === suggestedIndex;
             const isLastStep = index === steps.length - 1;
             const isComplete = step.state === 'complete';

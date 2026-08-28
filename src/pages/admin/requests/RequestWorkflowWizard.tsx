@@ -16,7 +16,6 @@ import {
   hasConsultationSummary,
   isConsultationNotesComplete,
   isPseHomeCareWizard,
-  readPseWizardStoredStep,
   resolvePsePaymentQuote,
   resolveWizardStepOnUpdate,
   writePseWizardStoredStep,
@@ -71,16 +70,36 @@ function buildExternalPaymentLink(amount: number | null) {
   return `${ELIX_EXTERNAL_PAYMENT_BASE_URL}${encodeURIComponent(amount.toFixed(2))}`;
 }
 
+function buildHomeCarePaymentLinkFromAmountInput(input: string): string {
+  const trimmed = input.trim();
+  const amountToken = trimmed === '' || !Number.isFinite(Number(trimmed)) ? '0' : trimmed;
+  return `${ELIX_EXTERNAL_PAYMENT_BASE_URL}${encodeURIComponent(amountToken)}`;
+}
+
+function isElixPayHtmlLink(link: string): boolean {
+  const trimmed = link.trim();
+  if (!trimmed) return true;
+  try {
+    const url = new URL(trimmed);
+    return url.origin === 'https://elixclinix.com' && url.pathname.endsWith('/pay.html');
+  } catch {
+    return (
+      trimmed.startsWith(ELIX_EXTERNAL_PAYMENT_BASE_URL) || /elixclinix\.com\/pay\.html/i.test(trimmed)
+    );
+  }
+}
+
 /** Read `amount` from a payment URL (query or trailing `amount=`). */
-function parseAmountFromPaymentLink(link: string): number | null {
+function parseAmountFromPaymentLink(link: string, options?: { allowZero?: boolean }): number | null {
   const trimmed = link.trim();
   if (!trimmed) return null;
+  const minExclusive = options?.allowZero ? -1 : 0;
   try {
     const url = new URL(trimmed);
     const raw = url.searchParams.get('amount');
     if (raw != null && raw.trim()) {
       const parsed = Number(raw);
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      if (Number.isFinite(parsed) && parsed > minExclusive) return parsed;
     }
   } catch {
     // fall through to regex for non-absolute / partial URLs
@@ -88,7 +107,7 @@ function parseAmountFromPaymentLink(link: string): number | null {
   const match = trimmed.match(/[?&]amount=([^&]+)/i) ?? trimmed.match(/amount=([^&\s]+)/i);
   if (!match?.[1]) return null;
   const parsed = Number(decodeURIComponent(match[1]));
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  if (!Number.isFinite(parsed) || parsed <= minExclusive) return null;
   return parsed;
 }
 
@@ -139,6 +158,7 @@ export default function RequestWorkflowWizard({
   onError,
   onSuccess
 }: RequestWorkflowWizardProps) {
+  const isHomeCare = isPseHomeCareWizard(request);
   const isCompactViewport = useMediaQuery('(max-width: 1024px)');
   const initialProgressCtx: WizardProgressContext = useMemo(
     () => ({
@@ -149,10 +169,7 @@ export default function RequestWorkflowWizard({
     [request]
   );
   const initialWizardStep = getInitialPseWizardStep(initialProgressCtx);
-  const [expandedStep, setExpandedStep] = useState<number | null>(() => {
-    const stored = readPseWizardStoredStep(request.id);
-    return stored ?? initialWizardStep;
-  });
+  const [expandedStep, setExpandedStep] = useState<number | null>(() => initialWizardStep);
   const stepStateRef = useRef<{ requestId: string | null; step: number | null; lastSuggested: number }>({
     requestId: request.id,
     step: expandedStep ?? initialWizardStep,
@@ -163,7 +180,18 @@ export default function RequestWorkflowWizard({
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [meetingLink, setMeetingLink] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
-  const [paymentLink, setPaymentLink] = useState('');
+  const [paymentLink, setPaymentLink] = useState(() => {
+    const stored = request.payment_link?.trim() ?? '';
+    if (stored) return stored;
+    if (isPseHomeCareWizard(request)) {
+      const amount =
+        request.payment_amount != null && Number.isFinite(Number(request.payment_amount))
+          ? String(request.payment_amount)
+          : '0';
+      return buildHomeCarePaymentLinkFromAmountInput(amount);
+    }
+    return '';
+  });
   const [paymentCurrency, setPaymentCurrency] = useState<ConsultationCurrency>(() =>
     normalizeConsultationCurrency(
       request.payment_currency ??
@@ -181,11 +209,14 @@ export default function RequestWorkflowWizard({
   const [homeCareFollowupDate, setHomeCareFollowupDate] = useState(
     request.home_care_followup_date?.slice(0, 10) ?? ''
   );
-  const [homeCareCashAmount, setHomeCareCashAmount] = useState(() =>
-    request.payment_amount != null && Number.isFinite(Number(request.payment_amount))
-      ? String(request.payment_amount)
-      : ''
-  );
+  const [homeCareCashAmount, setHomeCareCashAmount] = useState(() => {
+    if (request.payment_amount != null && Number.isFinite(Number(request.payment_amount))) {
+      return String(request.payment_amount);
+    }
+    const fromLink = parseAmountFromPaymentLink(request.payment_link ?? '', { allowZero: true });
+    if (fromLink != null) return String(fromLink);
+    return '0';
+  });
 
   useEffect(() => {
     setHomeCareRemarks(request.home_care_remarks ?? '');
@@ -195,8 +226,12 @@ export default function RequestWorkflowWizard({
   useEffect(() => {
     if (request.payment_amount != null && Number.isFinite(Number(request.payment_amount))) {
       setHomeCareCashAmount(String(request.payment_amount));
+      return;
     }
-  }, [request.id, request.payment_amount]);
+    if (isHomeCare) {
+      setHomeCareCashAmount((prev) => (prev.trim() === '' ? '0' : prev));
+    }
+  }, [request.id, request.payment_amount, isHomeCare]);
 
   const loadMeta = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -231,15 +266,15 @@ export default function RequestWorkflowWizard({
     [request, recommendations.length, summary]
   );
 
-  const isHomeCare = isPseHomeCareWizard(request);
   const isClosedRequest = request.status === 'closed';
   const isReadOnlyView = !canCoordinate;
 
   const suggestedStep = useMemo(() => getSuggestedActiveStep(progressCtx, 'pse'), [progressCtx]);
-  const maxNavigableStep = useMemo(
-    () => getMaxCompletedStepIndex(progressCtx, 'pse') + 1,
-    [progressCtx]
-  );
+  const lastStepIndex = Math.max(0, getWizardSteps('pse', progressCtx, 0).length - 1);
+  const maxNavigableStep = useMemo(() => {
+    const next = getMaxCompletedStepIndex(progressCtx, 'pse') + 1;
+    return Math.min(next, lastStepIndex);
+  }, [progressCtx, lastStepIndex]);
 
   useEffect(() => {
     if (isClosedRequest && !canCoordinate) return;
@@ -290,12 +325,16 @@ export default function RequestWorkflowWizard({
       setPaymentLink(storedLink);
       return;
     }
+    if (isHomeCare) {
+      setPaymentLink(buildHomeCarePaymentLinkFromAmountInput(homeCareCashAmount || '0'));
+      return;
+    }
     if (autoPaymentLink) {
       setPaymentLink(autoPaymentLink);
       return;
     }
     setPaymentLink('');
-  }, [request.id, request.payment_link, autoPaymentLink]);
+  }, [request.id, request.payment_link, autoPaymentLink, isHomeCare]);
 
   useEffect(() => {
     paymentCurrencyTouchedRef.current = false;
@@ -325,6 +364,16 @@ export default function RequestWorkflowWizard({
 
   const handlePaymentLinkChange = (value: string) => {
     setPaymentLink(value);
+    if (!isHomeCare) return;
+    const parsed = parseAmountFromPaymentLink(value, { allowZero: true });
+    if (parsed != null) setHomeCareCashAmount(String(parsed));
+  };
+
+  const handleHomeCareAmountChange = (value: string) => {
+    setHomeCareCashAmount(value);
+    if (isElixPayHtmlLink(paymentLink)) {
+      setPaymentLink(buildHomeCarePaymentLinkFromAmountInput(value));
+    }
   };
 
   const handlePaymentCurrencyChange = (value: ConsultationCurrency) => {
@@ -338,11 +387,13 @@ export default function RequestWorkflowWizard({
       : canPseNavigateToStep(index, progressCtx);
 
   const setExpandedStepTracked = (index: number | null) => {
-    if (index !== null) {
-      writePseWizardStoredStep(request.id, index);
-      stepStateRef.current = { ...stepStateRef.current, step: index };
+    const clamped =
+      index == null ? null : Math.min(Math.max(0, index), lastStepIndex);
+    if (clamped !== null) {
+      writePseWizardStoredStep(request.id, clamped);
+      stepStateRef.current = { ...stepStateRef.current, step: clamped };
     }
-    setExpandedStep(index);
+    setExpandedStep(clamped);
   };
 
   useEffect(() => {
@@ -779,12 +830,6 @@ export default function RequestWorkflowWizard({
             <Text size='sm' c='dimmed'>
               Submitted {formatRequestDate(request.created_at)}
             </Text>
-            <Text size='sm' fw={600} mt='xs'>
-              Patient message
-            </Text>
-            <Text size='sm' style={{ whiteSpace: 'pre-wrap' }}>
-              {request.message}
-            </Text>
             {request.assigned_to_name ? (
               <Text size='sm'>
                 <Text span fw={600}>
@@ -819,7 +864,7 @@ export default function RequestWorkflowWizard({
             busy={busy}
             readOnly={!canCoordinate}
             cashAmountInput={homeCareCashAmount}
-            onCashAmountInputChange={setHomeCareCashAmount}
+            onCashAmountInputChange={handleHomeCareAmountChange}
             onPaymentLinkChange={handlePaymentLinkChange}
             onPaymentCurrencyChange={handlePaymentCurrencyChange}
             onPaymentReferenceChange={setPaymentReference}

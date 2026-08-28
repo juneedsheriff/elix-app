@@ -8,6 +8,11 @@ import {
 } from './medicalRecordCategories';
 import { fetchPatientByAuthUserId } from './patients';
 import {
+  fetchPatientConsultationSummaryVaultRecords,
+  isSyntheticConsultationSummaryRecord,
+  mergeVaultRecordsWithConsultationSummaries
+} from './consultationVaultRecords';
+import {
   createR2UploadUrl,
   createRequestRecordUploadUrl,
   deleteR2Object,
@@ -96,17 +101,23 @@ export async function fetchMedicalRecords(patientId: string | null) {
   return { data: asMedicalRecords(result.data), error: null };
 }
 
-/** Records uploaded by the signed-in user (auth user id). */
+/** Records uploaded by the signed-in user (auth user id), plus every consultation summary PDF. */
 export async function fetchUserMedicalRecords(authUserId: string) {
-  const result = await supabase
-    .from(TABLE)
-    .select(fileColumns)
-    .eq('user_id', authUserId)
-    .order('uploaded_at', { ascending: false })
-    .returns<UploadedFile[]>();
+  const [result, summaryRecords] = await Promise.all([
+    supabase
+      .from(TABLE)
+      .select(fileColumns)
+      .eq('user_id', authUserId)
+      .order('uploaded_at', { ascending: false })
+      .returns<UploadedFile[]>(),
+    fetchPatientConsultationSummaryVaultRecords(authUserId)
+  ]);
 
   if (result.error) return { data: null, error: result.error };
-  return { data: asMedicalRecords(result.data), error: null };
+  return {
+    data: mergeVaultRecordsWithConsultationSummaries(asMedicalRecords(result.data), summaryRecords),
+    error: null
+  };
 }
 
 export { isR2StorageConfigured };
@@ -347,8 +358,16 @@ export async function openMedicalRecordFile(
   const path = record.storage_path;
   if (!path) return { error: { message: 'No file to open.' } };
 
+  const requestId =
+    options?.requestId?.trim() ||
+    path.match(/^consultation-summaries\/([^/]+)\//)?.[1] ||
+    undefined;
+
   const prepared = prepareAsyncOpenInNewTab();
-  const { data, error } = await getMedicalRecordDownloadUrl(path, options);
+  const { data, error } = await getMedicalRecordDownloadUrl(path, {
+    ...options,
+    ...(requestId ? { requestId } : {})
+  });
   if (error || !data?.signedUrl) {
     prepared?.close();
     return { error: error ?? { message: 'Could not open file.' } };
@@ -374,6 +393,9 @@ export async function openMedicalRecordByPath(
 }
 
 export async function deleteMedicalRecord(record: MedicalRecord) {
+  if (isSyntheticConsultationSummaryRecord(record)) {
+    return { error: { message: 'Consultation summaries cannot be removed from the vault.' } };
+  }
   if (record.storage_path && !isExternalRecord(record)) {
     const { error: storageError } = await deleteR2Object(record.storage_path);
     if (storageError) return { error: storageError };

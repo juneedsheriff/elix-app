@@ -97,6 +97,45 @@ export default function PatientCaseDetailsForm({
     });
   };
 
+  const reasonFields = (
+    <>
+      <label className='opinion-message-label'>
+        Reason for Seeking a Doctor Consultation
+        <select
+          className='opinion-select'
+          value={value.reasonForSecondOpinion}
+          onChange={(event) =>
+            patch(value, onChange, {
+              reasonForSecondOpinion: event.target.value as PatientCaseDetails['reasonForSecondOpinion']
+            })
+          }
+          disabled={isDisabled}
+        >
+          <option value=''>Select a reason…</option>
+          {SECOND_OPINION_REASON_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+      {value.reasonForSecondOpinion === 'Other' ? (
+        <label className='opinion-message-label patient-case-details-form__full'>
+          Describe your reason
+          <textarea
+            className='opinion-message'
+            rows={2}
+            value={value.reasonForSecondOpinionOther}
+            onChange={(event) =>
+              patch(value, onChange, { reasonForSecondOpinionOther: event.target.value })
+            }
+            disabled={isDisabled}
+          />
+        </label>
+      ) : null}
+    </>
+  );
+
   return (
     <div className='patient-case-details-form'>
       {showCaseSections ? (
@@ -140,41 +179,7 @@ export default function PatientCaseDetailsForm({
           )}
         </label>
 
-        <label className='opinion-message-label'>
-          Reason for Seeking a Doctor Consultation
-          <select
-            className='opinion-select'
-            value={value.reasonForSecondOpinion}
-            onChange={(event) =>
-              patch(value, onChange, {
-                reasonForSecondOpinion: event.target.value as PatientCaseDetails['reasonForSecondOpinion']
-              })
-            }
-            disabled={isDisabled}
-          >
-            <option value=''>Select a reason…</option>
-            {SECOND_OPINION_REASON_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {value.reasonForSecondOpinion === 'Other' ? (
-          <label className='opinion-message-label patient-case-details-form__full'>
-            Describe your reason
-            <textarea
-              className='opinion-message'
-              rows={2}
-              value={value.reasonForSecondOpinionOther}
-              onChange={(event) =>
-                patch(value, onChange, { reasonForSecondOpinionOther: event.target.value })
-              }
-              disabled={isDisabled}
-            />
-          </label>
-        ) : null}
+        {reasonFields}
       </div>
 
       <SectionTitle>2. Current Medical Condition</SectionTitle>
@@ -387,6 +392,10 @@ export default function PatientCaseDetailsForm({
       </label>
 
         </>
+      ) : null}
+
+      {!showCaseSections ? (
+        <div className='patient-case-details-form__grid'>{reasonFields}</div>
       ) : null}
 
       {showPreferencesSection ? (

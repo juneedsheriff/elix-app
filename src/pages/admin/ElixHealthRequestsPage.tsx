@@ -298,26 +298,14 @@ export default function ElixHealthRequestsPage() {
     return workspaceScopedRequests.filter((request) => !isHomeCareOpinionRequest(request));
   }, [requestKindTab, showHomeCareTab, workspaceScopedRequests]);
 
-  const consultationCount = useMemo(
-    () => workspaceScopedRequests.filter((request) => !isHomeCareOpinionRequest(request)).length,
-    [workspaceScopedRequests]
-  );
-  const homeCareCount = useMemo(
-    () => workspaceScopedRequests.filter(isHomeCareOpinionRequest).length,
-    [workspaceScopedRequests]
-  );
-
   const requestKindTabs = useMemo(() => {
     const consultations = {
       value: 'consultations',
-      label: `Consultations (${consultationCount})`
+      label: 'Consultations'
     };
     if (!showHomeCareTab) return [consultations];
-    return [
-      consultations,
-      { value: 'homecare', label: `Home Care (${homeCareCount})` }
-    ];
-  }, [consultationCount, homeCareCount, showHomeCareTab]);
+    return [consultations, { value: 'homecare', label: 'Home Care' }];
+  }, [showHomeCareTab]);
 
   const analytics = useMemo(
     () => computeRequestAnalytics(kindScopedRequests, isAdmin),

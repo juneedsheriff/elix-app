@@ -60,7 +60,8 @@ function matchesSearch(patient: Patient, query: string) {
     patient.country,
     patient.pse_clinic_name,
     patient.gender,
-    patient.blood_group
+    patient.blood_group,
+    patient.consultation_followup_date
   ]
     .filter(Boolean)
     .join(' ')

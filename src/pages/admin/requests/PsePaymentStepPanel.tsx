@@ -192,7 +192,11 @@ export default function PsePaymentStepPanel({
           <Grid.Col span={{ base: 12, sm: 8 }}>
             <TextInput
               label='Payment link (external)'
-              description='Pre-filled from consultation amount. You can edit if needed.'
+              description={
+                isHomeCare
+                  ? 'Auto-filled as https://elixclinix.com/pay.html?amount=… from the amount.'
+                  : 'Pre-filled from consultation amount. You can edit if needed.'
+              }
               placeholder={paymentLinkPlaceholder}
               value={paymentLink}
               readOnly={readOnly}
@@ -203,12 +207,12 @@ export default function PsePaymentStepPanel({
             {isHomeCare && onCashAmountInputChange ? (
               <TextInput
                 label='Amount'
-                description='Required for cash or when link has no amount'
+                description='Default is 0. The payment link updates as you type.'
                 type='number'
                 min={0}
                 step='0.01'
-                placeholder='e.g. 500'
-                value={cashAmountInput ?? ''}
+                placeholder='0'
+                value={cashAmountInput ?? '0'}
                 readOnly={readOnly}
                 onChange={(e) => onCashAmountInputChange(e.currentTarget.value)}
               />

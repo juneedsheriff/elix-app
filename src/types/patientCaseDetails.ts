@@ -1,4 +1,5 @@
 export const SECOND_OPINION_REASON_OPTIONS = [
+  'Consultation',
   'Confirm diagnosis',
   'Review treatment plan',
   'Consider alternative treatments',

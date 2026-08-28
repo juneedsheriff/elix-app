@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, Camera, ClipboardList, FileUp, Loader2, Eraser } from 'lucide-react';
+import FollowupDatePicker from '../../components/Consultation/FollowupDatePicker';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
 import ConsultationSummaryPdfView from '../../components/ConsultationWorkflow/ConsultationSummaryPdfView';
@@ -12,6 +13,7 @@ import {
   consultationSummaryToFormValues,
   emptyConsultationSummaryValues,
   formatConsultationResponse,
+  localIsoDate,
   type ConsultationSummaryFormValues
 } from '../../lib/consultationSummaryFields';
 import { mergeDictatedFieldText } from '../../lib/speech/formatDictatedClinicalText';
@@ -82,7 +84,10 @@ function emptyVitalSignsDraft(): VitalSignsDraft {
 }
 
 function normalizeVitalSignLabel(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return label
+    .toLowerCase()
+    .replace(/₂/g, '2')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 function vitalSignKeyFromLabel(label: string): VitalSignKey | null {
@@ -91,7 +96,7 @@ function vitalSignKeyFromLabel(label: string): VitalSignKey | null {
   if (normalized === 'pulserate' || normalized === 'pulse' || normalized === 'heartrate') return 'pulse_rate';
   if (normalized === 'respiratoryrate' || normalized === 'rr') return 'respiratory_rate';
   if (normalized === 'temperature' || normalized === 'temp') return 'temperature';
-  if (normalized === 'spo2' || normalized === 'oxygensaturation') return 'spo2';
+  if (normalized === 'spo2' || normalized === 'spo' || normalized === 'oxygensaturation') return 'spo2';
   if (normalized === 'height') return 'height';
   if (normalized === 'weight') return 'weight';
   return null;
@@ -357,6 +362,12 @@ export default function DoctorConsultationPage({
 
     if (!values.chief_complaint.trim() || !values.assessment_plan.trim()) {
       setError('Chief Complaint and Assessment & Plan are required.');
+      return;
+    }
+
+    const followupDate = values.followup_date.trim();
+    if (followupDate && followupDate < localIsoDate()) {
+      setError('Follow-up Date must be today or a future date.');
       return;
     }
 
@@ -731,7 +742,7 @@ export default function DoctorConsultationPage({
 
                     if (key === 'followup_date') {
                       return (
-                        <label key={key} className='doctor-respond-label'>
+                        <div key={key} className='doctor-respond-label'>
                           <span className='doctor-respond-label__head'>
                             <span>{label}</span>
                             <span className='doctor-respond-label__actions'>
@@ -748,16 +759,12 @@ export default function DoctorConsultationPage({
                               </button>
                             </span>
                           </span>
-                          <input
-                            type='date'
-                            className='doctor-respond-date'
+                          <FollowupDatePicker
                             value={values.followup_date}
-                            onChange={(event) =>
-                              setValues((prev) => ({ ...prev, followup_date: event.target.value }))
-                            }
+                            onChange={(next) => setValues((prev) => ({ ...prev, followup_date: next }))}
                             disabled={submitting || micGateActive}
                           />
-                        </label>
+                        </div>
                       );
                     }
 
