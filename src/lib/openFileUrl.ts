@@ -47,3 +47,27 @@ export function completeAsyncOpenInNewTab(
   }
   openUrlInNewTab(url, fileName);
 }
+
+/**
+ * Android/iOS Chrome only show the real PDF viewer for a top-level PDF tab,
+ * not inside an iframe. Re-wrap bytes as application/pdf so Chrome recognizes it.
+ */
+export async function openPdfInNativeViewer(
+  sourceUrl: string,
+  fileName = 'document.pdf'
+): Promise<void> {
+  const prepared = prepareAsyncOpenInNewTab();
+  const safeName = fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+
+  try {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    const file = new File([buffer], safeName, { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(file);
+    completeAsyncOpenInNewTab(prepared, blobUrl);
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 120_000);
+  } catch {
+    completeAsyncOpenInNewTab(prepared, sourceUrl, safeName);
+  }
+}

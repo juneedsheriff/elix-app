@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
-import { useMediaQuery } from '@mantine/hooks';
+import OpenNativePdfPanel from '../common/OpenNativePdfPanel';
+import { useCannotEmbedPdfInIframe } from '../../lib/cannotEmbedPdf';
+import { openPdfInNativeViewer } from '../../lib/openFileUrl';
 import {
   consultationSummaryPdfMetaFromRequest,
   generateConsultationSummaryPdfBlob,
@@ -131,7 +133,7 @@ export default function ConsultationSummaryPdfView({
   summary,
   request
 }: ConsultationSummaryPdfViewProps) {
-  const isCompactViewport = useMediaQuery('(max-width: 1024px)');
+  const cannotEmbedPdf = useCannotEmbedPdfInIframe();
   const [summaryPreview, setSummaryPreview] = useState<DocPreviewState>(emptyPreview);
   const [prescriptionPreview, setPrescriptionPreview] =
     useState<DocPreviewState>(emptyPreview);
@@ -752,6 +754,7 @@ export default function ConsultationSummaryPdfView({
     onDownload: () => void;
     emptyMessage: string;
     visible: boolean;
+    pdfFileName: string;
   }) => {
     if (!opts.visible) return null;
     const { preview, title } = opts;
@@ -766,7 +769,14 @@ export default function ConsultationSummaryPdfView({
             }
           ]
         : [];
-    const showHtmlSummary = opts.kind === 'summary' && sections.length > 0 && Boolean(isCompactViewport);
+    const openPdf = () => {
+      if (!preview.url) return;
+      if (preview.isPdf) {
+        void openPdfInNativeViewer(preview.url, opts.pdfFileName);
+        return;
+      }
+      window.open(preview.url, '_blank', 'noopener,noreferrer');
+    };
     return (
       <section className='consultation-summary-pdf__doc' aria-label={title}>
         <div className='consultation-summary-pdf__toolbar'>
@@ -779,10 +789,10 @@ export default function ConsultationSummaryPdfView({
               <button
                 type='button'
                 className='secondary-btn consultation-summary-pdf__download'
-                onClick={() => window.open(preview.url!, '_blank', 'noopener,noreferrer')}
+                onClick={openPdf}
               >
                 <ExternalLink size={16} aria-hidden />
-                {preview.isImage ? 'Open image' : preview.isPdf ? 'View file' : 'Open file'}
+                {preview.isImage ? 'Open image' : preview.isPdf ? 'View in PDF viewer' : 'Open file'}
               </button>
             ) : null}
             <button
@@ -798,35 +808,37 @@ export default function ConsultationSummaryPdfView({
         </div>
 
         <div className='consultation-summary-pdf__viewer' aria-label={`${title} preview`}>
-          {preview.loading && !showHtmlSummary ? (
+          {preview.loading ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
               <Loader2 size={16} className='spin' aria-hidden /> Preparing file…
             </p>
           ) : null}
-          {preview.error && !showHtmlSummary ? (
+          {preview.error ? (
             <p className='auth-error consultation-summary-pdf__viewer-status' role='alert'>
               {preview.error}
             </p>
           ) : null}
-          {showHtmlSummary ? renderSummaryHtml() : null}
-          {!showHtmlSummary && preview.url && preview.isPdf ? (
+          {preview.url && preview.isPdf && cannotEmbedPdf ? (
+            <OpenNativePdfPanel src={preview.url} fileName={opts.pdfFileName} />
+          ) : null}
+          {preview.url && preview.isPdf && !cannotEmbedPdf ? (
             <iframe
               className='consultation-summary-pdf__iframe'
-              src={preview.url}
+              src={`${preview.url}#view=FitH`}
               title={title}
             />
           ) : null}
-          {!showHtmlSummary && preview.url && !preview.isPdf && preview.isImage ? (
+          {preview.url && !preview.isPdf && preview.isImage ? (
             <div className='consultation-summary-pdf__lightbox'>
               <ImageLightboxGallery images={imageItems} modalZIndex={600} />
             </div>
           ) : null}
-          {!showHtmlSummary && preview.url && !preview.isPdf && !preview.isImage ? (
+          {preview.url && !preview.isPdf && !preview.isImage ? (
             <p className='muted consultation-summary-pdf__viewer-status'>
               Preview is not available for this file type. Use Open file or Download.
             </p>
           ) : null}
-          {!showHtmlSummary && !preview.loading && !preview.error && !preview.url ? (
+          {!preview.loading && !preview.error && !preview.url ? (
             <p className='muted consultation-summary-pdf__viewer-status'>{opts.emptyMessage}</p>
           ) : null}
         </div>
@@ -843,7 +855,10 @@ export default function ConsultationSummaryPdfView({
         downloading: summaryDownloading,
         onDownload: handleSummaryDownload,
         emptyMessage: 'Consultation summary PDF will appear here when available.',
-        visible: hasClinicalSummary || (!hasPrescriptionOrder && !hasLabOrder)
+        visible: hasClinicalSummary || (!hasPrescriptionOrder && !hasLabOrder),
+        pdfFileName: storedFileName.toLowerCase().endsWith('.pdf')
+          ? storedFileName
+          : 'consultation-summary.pdf'
       })}
 
       {renderDocument({
@@ -853,7 +868,10 @@ export default function ConsultationSummaryPdfView({
         downloading: prescriptionDownloading,
         onDownload: handlePrescriptionDownload,
         emptyMessage: 'Prescription will appear here when available.',
-        visible: hasPrescriptionOrder
+        visible: hasPrescriptionOrder,
+        pdfFileName: prescriptionDisplayFileName?.toLowerCase().endsWith('.pdf')
+          ? prescriptionDisplayFileName
+          : 'prescription.pdf'
       })}
 
       {renderDocument({
@@ -863,7 +881,10 @@ export default function ConsultationSummaryPdfView({
         downloading: labOrderDownloading,
         onDownload: handleLabOrderDownload,
         emptyMessage: 'Lab order will appear here when available.',
-        visible: hasLabOrder
+        visible: hasLabOrder,
+        pdfFileName: labDisplayFileName?.toLowerCase().endsWith('.pdf')
+          ? labDisplayFileName
+          : 'lab-order.pdf'
       })}
 
       {/* Text fallback when summary generation fails */}
@@ -871,7 +892,7 @@ export default function ConsultationSummaryPdfView({
       !summaryPreview.loading &&
       sections.length > 0 &&
       summaryPreview.error &&
-      !isCompactViewport ? (
+      !cannotEmbedPdf ? (
         renderSummaryHtml()
       ) : null}
     </div>

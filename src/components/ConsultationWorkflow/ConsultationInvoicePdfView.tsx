@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
+import OpenNativePdfPanel from '../common/OpenNativePdfPanel';
 import { formatConsultationFee, normalizeConsultationCurrency } from '../../lib/consultationCurrency';
+import { useCannotEmbedPdfInIframe } from '../../lib/cannotEmbedPdf';
+import { openPdfInNativeViewer } from '../../lib/openFileUrl';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
+import './consultation-wizard.css';
 
 type ConsultationInvoicePdfViewProps = {
   request: OpinionRequest;
@@ -17,6 +21,7 @@ export default function ConsultationInvoicePdfView({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const cannotEmbedPdf = useCannotEmbedPdfInIframe();
   const storedPath = request.invoice_pdf_storage_path?.trim() ?? '';
 
   useEffect(() => {
@@ -67,7 +72,11 @@ export default function ConsultationInvoicePdfView({
   };
 
   const handleOpenInNewTab = () => {
-    if (pdfUrl) window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    if (!pdfUrl) return;
+    void openPdfInNativeViewer(
+      pdfUrl,
+      `consultation-invoice-${request.invoice_number ?? request.id}.pdf`
+    );
   };
 
   return (
@@ -97,7 +106,7 @@ export default function ConsultationInvoicePdfView({
             onClick={handleOpenInNewTab}
           >
             <ExternalLink size={16} aria-hidden />
-            Open PDF
+            Open in PDF viewer
           </button>
           <button
             type='button'
@@ -150,10 +159,16 @@ export default function ConsultationInvoicePdfView({
               {pdfError}
             </p>
           ) : null}
-          {pdfUrl ? (
+          {pdfUrl && cannotEmbedPdf ? (
+            <OpenNativePdfPanel
+              src={pdfUrl}
+              fileName={`consultation-invoice-${request.invoice_number ?? request.id}.pdf`}
+            />
+          ) : null}
+          {pdfUrl && !cannotEmbedPdf ? (
             <iframe
               className='consultation-invoice-pdf__iframe'
-              src={pdfUrl}
+              src={`${pdfUrl}#view=FitH`}
               title='Consultation invoice PDF'
             />
           ) : null}
