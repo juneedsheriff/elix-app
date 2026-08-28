@@ -5010,10 +5010,10 @@ export async function saveDoctorConsultation(
     issuedAt: new Date(now)
   });
   if (vaultSync.error) {
-    return {
-      data: null,
-      error: { message: normalizeStorageAuthError(vaultSync.error.message) }
-    };
+    console.warn(
+      '[saveDoctorConsultation] Patient vault sync failed after consultation save:',
+      vaultSync.error.message
+    );
   }
 
   return { data: mapConsultationSummaryRow(data), error: null };
@@ -5187,12 +5187,22 @@ async function finalizeDoctorConsultationRequest(
     requestUpdate.status = 'closed';
   }
 
-  const { error: requestError } = await supabase
+  const { data: updated, error: requestError } = await supabase
     .from('opinion_requests')
     .update(requestUpdate)
-    .eq('id', requestId);
+    .eq('id', requestId)
+    .select('id')
+    .maybeSingle();
 
   if (requestError) return { error: requestError };
+  if (!updated) {
+    return {
+      error: {
+        message:
+          'Could not finalize this consultation. Confirm the case is assigned to you, then try again.'
+      }
+    };
+  }
   await logRequestAudit(requestId, 'consultation_summary_saved', 'doctor', {
     metadata: { consultation_completed: shouldCloseRequestAfterConsultation(request) }
   });

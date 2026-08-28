@@ -11,6 +11,7 @@ import DoctorMyProfilePage from '../doctor/DoctorMyProfilePage';
 import { doctorWorkspacePath, ELIX_HEALTH_PATHS } from './elixHealthRoutes';
 import ElixHealthDoctorLayout from './ElixHealthDoctorLayout';
 import ElixHealthMantineProvider from './ElixHealthMantineProvider';
+import ElixPreloader from '../../components/ui/ElixPreloader';
 
 function ElixHealthDoctorRoutes({ doctor }: { doctor: Doctor }) {
   const navigate = useNavigate();
@@ -79,7 +80,18 @@ export function ElixHealthDoctorGuard({
   doctor: Doctor | null;
   onSignOut: () => void;
 }) {
+  const { session, loading } = useSupabase();
+  const metaRole = session?.user?.user_metadata?.role;
+
+  if (loading) {
+    return <ElixPreloader label='Loading workspace…' />;
+  }
+
   if (!doctor) {
+    // Session still valid with doctor role — profile resolve may be in flight after token refresh.
+    if (session?.user && metaRole === 'doctor') {
+      return <ElixPreloader label='Loading workspace…' />;
+    }
     return <Navigate to='/elixhealth/login' replace />;
   }
   return <ElixHealthDoctorShell doctor={doctor} onSignOut={onSignOut} />;

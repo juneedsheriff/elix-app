@@ -201,6 +201,8 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const sameUserId = nextSession.user.id;
+
       // Performance: avoid fetching doctor+patient+admin on every session apply.
       // We use the role stored in user_metadata when available, and fall back to the
       // previous parallel fetch only when the role is missing/unknown.
@@ -208,19 +210,19 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
       let doctor: Doctor | null = null;
       let patient: Patient | null = null;
-      let admin: any = null;
+      let admin: Admin | null = null;
 
       if (metaRole === 'doctor') {
         doctor = await resolveDoctorForUser(nextSession.user);
       } else if (metaRole === 'patient') {
         patient = await resolvePatientForUser(nextSession.user);
       } else if (metaRole === 'admin') {
-        admin = await fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data);
+        admin = (await fetchAdminByAuthUserId(nextSession.user.id)).data ?? null;
       } else {
         const result = await Promise.all([
           resolveDoctorForUser(nextSession.user),
           resolvePatientForUser(nextSession.user),
-          fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data)
+          fetchAdminByAuthUserId(nextSession.user.id).then((r) => r.data ?? null)
         ]);
         doctor = result[0];
         patient = result[1];
@@ -239,12 +241,27 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
       }
 
       if (mounted) {
-        setDoctorProfile(doctor);
-        setPatientProfile(admin ? null : patient);
+        setDoctorProfile((prev) => {
+          if (doctor) return doctor;
+          if (prev?.auth_user_id === sameUserId) return prev;
+          return null;
+        });
+        setPatientProfile((prev) => {
+          if (admin) return null;
+          if (patient) return patient;
+          if (prev?.auth_user_id === sameUserId) return prev;
+          return null;
+        });
         setLoading(false);
       }
 
-      if (!doctor && !patient && !admin && nextSession.user.email) {
+      const hasKnownRole =
+        metaRole === 'doctor' || metaRole === 'patient' || metaRole === 'admin';
+      if (hasKnownRole || doctor || patient || admin || !nextSession.user.email) {
+        return;
+      }
+
+      {
         const { data: authUser, error: authUserError } = await supabase.auth.getUser();
         // Only drop the session for definitive auth failures — not network blips.
         const hardFailure =
@@ -291,7 +308,13 @@ export function SupabaseProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      // Token refresh during long operations (e.g. consultation submit) must not re-resolve
+      // profiles — a transient fetch failure would clear doctorProfile and redirect to login.
+      if (event === 'TOKEN_REFRESHED') {
+        if (mounted) setSession(nextSession);
+        return;
+      }
       void applySession(nextSession);
     });
 
