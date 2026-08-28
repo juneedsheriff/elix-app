@@ -225,14 +225,28 @@ export function applyPatientProfileHistoryDefaults(
   });
 }
 
+export function hasPatientConsent(details: PatientCaseDetails): boolean {
+  return (
+    details.consentInformationAccurate === true &&
+    details.consentShareRecords === true &&
+    details.consentNotEmergencyCare === true
+  );
+}
+
 export function validatePatientCaseDetails(
-  _details: PatientCaseDetails,
-  _options: {
+  details: PatientCaseDetails,
+  options: {
     requireConsent?: boolean;
     requireSpecialty?: boolean;
     submitOnly?: boolean;
   } = {}
 ): string | null {
+  if (options.requireConsent && !hasPatientConsent(details)) {
+    return 'Please confirm all consent items before submitting.';
+  }
+  if (options.requireSpecialty && !details.specialtyRequired?.trim()) {
+    return 'Select a specialty before submitting.';
+  }
   return null;
 }
 

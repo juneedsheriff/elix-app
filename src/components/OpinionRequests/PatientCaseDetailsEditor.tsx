@@ -6,6 +6,7 @@ import {
   applyPatientProfileHistoryDefaults,
   caseDetailsFromRequest,
   emptyPatientCaseDetails,
+  hasPatientConsent,
   serializePatientCaseDetails,
   validatePatientCaseDetails
 } from '../../lib/patientCaseDetails';
@@ -88,9 +89,13 @@ export default function PatientCaseDetailsEditor({
     syncedRemoteKeyRef.current = remoteCaseDetailsKey;
   }, [request.id, remoteCaseDetailsKey, request, actorRole, patientProfile]);
 
+  const storedDetails = caseDetailsFromRequest(request);
+  const consentReadOnly =
+    showConsent && actorRole === 'patient' && hasPatientConsent(storedDetails);
+
   const handleSave = async () => {
     const validationError = validatePatientCaseDetails(caseDetails, {
-      requireConsent: showConsent,
+      requireConsent: showConsent && !consentReadOnly,
       requireSpecialty: specialtyMode === 'patient_select'
     });
     if (validationError) {
@@ -100,6 +105,13 @@ export default function PatientCaseDetailsEditor({
 
     const nextDetails = emptyPatientCaseDetails({
       ...caseDetails,
+      ...(consentReadOnly
+        ? {
+            consentInformationAccurate: storedDetails.consentInformationAccurate,
+            consentShareRecords: storedDetails.consentShareRecords,
+            consentNotEmergencyCare: storedDetails.consentNotEmergencyCare
+          }
+        : {}),
       specialtyRequired:
         specialtyMode === 'from_doctor'
           ? doctorSpecialty ?? caseDetails.specialtyRequired
@@ -167,6 +179,7 @@ export default function PatientCaseDetailsEditor({
         showCurrentHealthcareProvider={showCurrentHealthcareProvider}
         showConsultationQuestions={showConsultationQuestions}
         sectionsThrough={sectionsThrough}
+        consentReadOnly={consentReadOnly}
       />
 
       <div className='patient-case-details-editor__actions'>

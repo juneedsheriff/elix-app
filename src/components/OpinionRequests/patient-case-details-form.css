@@ -49,6 +49,21 @@
   margin-top: 0.2rem;
 }
 
+.patient-case-details-form__consent-note {
+  margin: 0 0 0.65rem;
+  font-size: 0.86rem;
+}
+
+.patient-case-details-form__checkbox-item--locked {
+  cursor: default;
+  opacity: 1;
+}
+
+.patient-case-details-form__checkbox-item--locked input:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 @media (max-width: 720px) {
   .patient-case-details-form__grid {
     grid-template-columns: 1fr;

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, Loader2, ShieldAlert, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, CameraOff, Loader2, ShieldAlert, SwitchCamera, X } from 'lucide-react';
 import { captureVideoFrameToDataUrl, captureVideoFrameToSquareDataUrl } from '../../lib/imageFiles';
 import {
+  isMobileOrTabletDevice,
   queryCameraPermission,
   requestCameraStream,
   stopMediaStream,
+  type CameraFacingMode,
   type CameraPermissionStatus
 } from '../../lib/cameraPermission';
 
@@ -26,6 +28,9 @@ export default function PatientCameraCaptureModal({
   const [status, setStatus] = useState<CameraPermissionStatus>('checking');
   const [requesting, setRequesting] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
+  const facingModeRef = useRef<CameraFacingMode>('user');
+  const [facingMode, setFacingMode] = useState<CameraFacingMode>('user');
+  const canSwitchCamera = useMemo(() => isMobileOrTabletDevice(), []);
 
   const cleanupStream = useCallback(() => {
     stopMediaStream(streamRef.current);
@@ -36,47 +41,61 @@ export default function PatientCameraCaptureModal({
     setPreviewReady(false);
   }, []);
 
-  const attachStream = useCallback(async () => {
-    setRequesting(true);
-    const stream = await requestCameraStream();
-    setRequesting(false);
+  const attachStream = useCallback(
+    async (nextFacingMode: CameraFacingMode) => {
+      setRequesting(true);
+      const stream = await requestCameraStream(nextFacingMode);
+      setRequesting(false);
 
-    if (!stream) {
-      setStatus('denied');
-      return;
-    }
-
-    streamRef.current = stream;
-    setStatus('granted');
-
-    const playPreview = async (): Promise<boolean> => {
-      const video = videoRef.current;
-      if (!video) return false;
-      video.srcObject = stream;
-      try {
-        await video.play();
-        setPreviewReady(true);
-        return true;
-      } catch {
-        return false;
+      if (!stream) {
+        setStatus('denied');
+        return;
       }
-    };
 
-    if (await playPreview()) return;
+      streamRef.current = stream;
+      facingModeRef.current = nextFacingMode;
+      setFacingMode(nextFacingMode);
+      setStatus('granted');
 
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    if (await playPreview()) return;
+      const playPreview = async (): Promise<boolean> => {
+        const video = videoRef.current;
+        if (!video) return false;
+        video.srcObject = stream;
+        try {
+          await video.play();
+          setPreviewReady(true);
+          return true;
+        } catch {
+          return false;
+        }
+      };
 
-    setPreviewReady(false);
-    setStatus('denied');
+      if (await playPreview()) return;
+
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (await playPreview()) return;
+
+      setPreviewReady(false);
+      setStatus('denied');
+      cleanupStream();
+    },
+    [cleanupStream]
+  );
+
+  const switchCamera = useCallback(() => {
+    const nextFacingMode: CameraFacingMode =
+      facingModeRef.current === 'user' ? 'environment' : 'user';
     cleanupStream();
-  }, [cleanupStream]);
+    void attachStream(nextFacingMode);
+  }, [attachStream, cleanupStream]);
 
   useEffect(() => {
     if (!open) {
       cleanupStream();
       setStatus('checking');
       setRequesting(false);
+      setFacingMode('user');
+      facingModeRef.current = 'user';
       return;
     }
 
@@ -88,7 +107,7 @@ export default function PatientCameraCaptureModal({
 
       setStatus(permission);
       if (permission === 'granted') {
-        await attachStream();
+        await attachStream('user');
       }
     })();
 
@@ -99,7 +118,7 @@ export default function PatientCameraCaptureModal({
   }, [open, attachStream, cleanupStream]);
 
   const handleAllow = () => {
-    void attachStream();
+    void attachStream(facingModeRef.current);
   };
 
   const handleCapture = () => {
@@ -170,7 +189,9 @@ export default function PatientCameraCaptureModal({
           {showPreview
             ? isDocumentMode
               ? 'Point the camera at your notes, then tap Capture photo.'
-              : 'Position your face in the frame, then tap Capture photo.'
+              : facingMode === 'environment'
+                ? 'Frame your photo with the rear camera, then tap Capture photo.'
+                : 'Position your face in the frame, then tap Capture photo.'
             : isChecking
               ? 'Checking camera permission…'
               : isUnsupported
@@ -204,9 +225,30 @@ export default function PatientCameraCaptureModal({
         ) : (
           <div className='patient-camera-modal__actions'>
             {showPreview ? (
-              <button type='button' className='primary-btn' onClick={handleCapture}>
-                <Camera size={16} aria-hidden /> Capture photo
-              </button>
+              <>
+                {canSwitchCamera ? (
+                  <button
+                    type='button'
+                    className='secondary-btn patient-camera-modal__switch'
+                    onClick={switchCamera}
+                    disabled={requesting}
+                  >
+                    {requesting ? (
+                      <>
+                        <Loader2 size={16} className='spin' aria-hidden /> Switching camera…
+                      </>
+                    ) : (
+                      <>
+                        <SwitchCamera size={16} aria-hidden />
+                        {facingMode === 'user' ? 'Use rear camera' : 'Use front camera'}
+                      </>
+                    )}
+                  </button>
+                ) : null}
+                <button type='button' className='primary-btn' onClick={handleCapture} disabled={requesting}>
+                  <Camera size={16} aria-hidden /> Capture photo
+                </button>
+              </>
             ) : !isUnsupported ? (
               <button
                 type='button'

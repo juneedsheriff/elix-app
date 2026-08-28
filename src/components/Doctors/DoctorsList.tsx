@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { Loader2, Search, Star } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
 import { formatConsultationTiersSummary } from '../../lib/consultationTiers';
@@ -6,12 +6,28 @@ import { fetchDoctors } from '../../lib/doctors';
 import type { Doctor } from '../../types/doctor';
 
 function DoctorCard({ doctor, onSelect }: { doctor: Doctor; onSelect: (doctor: Doctor) => void }) {
+  const openProfile = () => onSelect(doctor);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openProfile();
+    }
+  };
+
   return (
-    <article className='doctor-card'>
+    <article
+      className='doctor-card doctor-card--clickable'
+      role='button'
+      tabIndex={0}
+      onClick={openProfile}
+      onKeyDown={handleKeyDown}
+      aria-label={`View profile for ${doctor.full_name}`}
+    >
       <img
         className='doctor-avatar'
         src={doctor.image_url}
-        alt={doctor.full_name}
+        alt=''
         loading='lazy'
         width={72}
         height={72}
@@ -29,9 +45,7 @@ function DoctorCard({ doctor, onSelect }: { doctor: Doctor; onSelect: (doctor: D
           <span className='tag'>{doctor.languages}</span>
           <span className='tag'>{formatConsultationTiersSummary(doctor)}</span>
         </div>
-        <button type='button' className='text-btn doctor-view-btn' onClick={() => onSelect(doctor)}>
-          View profile
-        </button>
+        <span className='text-btn doctor-view-btn'>View profile</span>
       </div>
     </article>
   );

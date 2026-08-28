@@ -13,6 +13,7 @@ import PatientCaseDetailsForm from '../OpinionRequests/PatientCaseDetailsForm';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import {
   emptyPatientCaseDetails,
+  hasPatientConsent,
   serializePatientCaseDetails,
   validatePatientCaseDetails
 } from '../../lib/patientCaseDetails';
@@ -188,6 +189,8 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
   const awaitingRecordsChoice =
     Boolean(user?.id) && !recordsLoading && !recordsError && records.length === 0 && !proceedWithoutRecords;
 
+  const consentComplete = hasPatientConsent(caseDetails);
+
   if (submitted) {
     return (
       <section className='section-card opinion-form-card'>
@@ -295,7 +298,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
           </p>
         ) : null}
 
-        <button type='submit' className='primary-btn wide' disabled={submitting}>
+        <button type='submit' className='primary-btn wide' disabled={submitting || !consentComplete}>
           {submitting ? 'Submitting…' : 'Submit request'}
         </button>
           </>

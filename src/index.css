@@ -1369,6 +1369,21 @@ select {
   align-items: start;
 }
 
+.doctor-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.doctor-card--clickable:hover {
+  border-color: rgba(9, 171, 192, 0.45);
+  box-shadow: 0 2px 8px rgba(9, 171, 192, 0.08);
+}
+
+.doctor-card--clickable:focus-visible {
+  outline: 2px solid rgba(9, 171, 192, 0.85);
+  outline-offset: 2px;
+}
+
 @media (max-width: 380px) {
   .doctor-card {
     grid-template-columns: 1fr;
@@ -2358,6 +2373,10 @@ select {
 }
 
 .patient-camera-modal__allow {
+  justify-content: center;
+}
+
+.patient-camera-modal__switch {
   justify-content: center;
 }
 

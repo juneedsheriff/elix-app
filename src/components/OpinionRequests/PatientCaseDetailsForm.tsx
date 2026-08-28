@@ -29,6 +29,8 @@ export type PatientCaseDetailsFormProps = {
   sectionsThrough?: 6 | 8;
   disabled?: boolean;
   readOnly?: boolean;
+  /** When true, consent checkboxes cannot be changed (already accepted at submission). */
+  consentReadOnly?: boolean;
 };
 
 function patch(
@@ -73,9 +75,11 @@ export default function PatientCaseDetailsForm({
   showCaseSections = true,
   sectionsThrough = 8,
   disabled = false,
-  readOnly = false
+  readOnly = false,
+  consentReadOnly = false
 }: PatientCaseDetailsFormProps) {
   const isDisabled = disabled || readOnly;
+  const consentDisabled = isDisabled || consentReadOnly;
   const showPreferencesSection = sectionsThrough >= 8 && showPreferences;
   const showConsentSection = sectionsThrough >= 8 && showConsent;
   const allSpecialties = specialtyOptionsForValues(specialties, [
@@ -436,6 +440,11 @@ export default function PatientCaseDetailsForm({
           <SectionTitle>Consent</SectionTitle>
           <fieldset className='opinion-fieldset patient-case-details-form__fieldset'>
             <legend>Please confirm the following</legend>
+            {consentReadOnly ? (
+              <p className='muted patient-case-details-form__consent-note'>
+                You accepted these terms when submitting your request.
+              </p>
+            ) : null}
             <ul className='patient-case-details-form__checkbox-list'>
               {(
                 [
@@ -454,12 +463,17 @@ export default function PatientCaseDetailsForm({
                 ] as const
               ).map(([key, label]) => (
                 <li key={key}>
-                  <label className='patient-case-details-form__checkbox-item'>
+                  <label
+                    className={`patient-case-details-form__checkbox-item${
+                      consentReadOnly ? ' patient-case-details-form__checkbox-item--locked' : ''
+                    }`}
+                  >
                     <input
                       type='checkbox'
                       checked={value[key]}
                       onChange={(event) => patch(value, onChange, { [key]: event.target.checked })}
-                      disabled={isDisabled}
+                      disabled={consentDisabled}
+                      aria-readonly={consentReadOnly || undefined}
                     />
                     <span>{label}</span>
                   </label>
