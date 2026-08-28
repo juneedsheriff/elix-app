@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
-import OpenNativePdfPanel from '../common/OpenNativePdfPanel';
+import ReactPdfDocumentViewer from '../common/ReactPdfDocumentViewer';
 import { formatConsultationFee, normalizeConsultationCurrency } from '../../lib/consultationCurrency';
-import { useCannotEmbedPdfInIframe } from '../../lib/cannotEmbedPdf';
 import { openPdfInNativeViewer } from '../../lib/openFileUrl';
 import { getMedicalRecordDownloadUrl } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
@@ -21,7 +20,6 @@ export default function ConsultationInvoicePdfView({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
-  const cannotEmbedPdf = useCannotEmbedPdfInIframe();
   const storedPath = request.invoice_pdf_storage_path?.trim() ?? '';
 
   useEffect(() => {
@@ -106,7 +104,7 @@ export default function ConsultationInvoicePdfView({
             onClick={handleOpenInNewTab}
           >
             <ExternalLink size={16} aria-hidden />
-            Open in PDF viewer
+            Open in new tab
           </button>
           <button
             type='button'
@@ -159,18 +157,8 @@ export default function ConsultationInvoicePdfView({
               {pdfError}
             </p>
           ) : null}
-          {pdfUrl && cannotEmbedPdf ? (
-            <OpenNativePdfPanel
-              src={pdfUrl}
-              fileName={`consultation-invoice-${request.invoice_number ?? request.id}.pdf`}
-            />
-          ) : null}
-          {pdfUrl && !cannotEmbedPdf ? (
-            <iframe
-              className='consultation-invoice-pdf__iframe'
-              src={`${pdfUrl}#view=FitH`}
-              title='Consultation invoice PDF'
-            />
+          {pdfUrl ? (
+            <ReactPdfDocumentViewer src={pdfUrl} title='Consultation invoice PDF' />
           ) : null}
         </div>
       ) : null}

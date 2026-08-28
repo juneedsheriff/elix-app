@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Loader2 } from 'lucide-react';
-import OpenNativePdfPanel from '../common/OpenNativePdfPanel';
-import { useCannotEmbedPdfInIframe } from '../../lib/cannotEmbedPdf';
+import ReactPdfDocumentViewer from '../common/ReactPdfDocumentViewer';
 import { openPdfInNativeViewer } from '../../lib/openFileUrl';
 import {
   consultationSummaryPdfMetaFromRequest,
@@ -133,7 +132,6 @@ export default function ConsultationSummaryPdfView({
   summary,
   request
 }: ConsultationSummaryPdfViewProps) {
-  const cannotEmbedPdf = useCannotEmbedPdfInIframe();
   const [summaryPreview, setSummaryPreview] = useState<DocPreviewState>(emptyPreview);
   const [prescriptionPreview, setPrescriptionPreview] =
     useState<DocPreviewState>(emptyPreview);
@@ -792,7 +790,7 @@ export default function ConsultationSummaryPdfView({
                 onClick={openPdf}
               >
                 <ExternalLink size={16} aria-hidden />
-                {preview.isImage ? 'Open image' : preview.isPdf ? 'View in PDF viewer' : 'Open file'}
+                {preview.isImage ? 'Open image' : preview.isPdf ? 'Open in new tab' : 'Open file'}
               </button>
             ) : null}
             <button
@@ -818,15 +816,8 @@ export default function ConsultationSummaryPdfView({
               {preview.error}
             </p>
           ) : null}
-          {preview.url && preview.isPdf && cannotEmbedPdf ? (
-            <OpenNativePdfPanel src={preview.url} fileName={opts.pdfFileName} />
-          ) : null}
-          {preview.url && preview.isPdf && !cannotEmbedPdf ? (
-            <iframe
-              className='consultation-summary-pdf__iframe'
-              src={`${preview.url}#view=FitH`}
-              title={title}
-            />
+          {preview.url && preview.isPdf ? (
+            <ReactPdfDocumentViewer src={preview.url} title={title} />
           ) : null}
           {preview.url && !preview.isPdf && preview.isImage ? (
             <div className='consultation-summary-pdf__lightbox'>
@@ -891,8 +882,7 @@ export default function ConsultationSummaryPdfView({
       {!summaryPreview.url &&
       !summaryPreview.loading &&
       sections.length > 0 &&
-      summaryPreview.error &&
-      !cannotEmbedPdf ? (
+      summaryPreview.error ? (
         renderSummaryHtml()
       ) : null}
     </div>
