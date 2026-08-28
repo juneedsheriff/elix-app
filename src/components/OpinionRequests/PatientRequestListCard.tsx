@@ -152,8 +152,8 @@ export default function PatientRequestListCard({
                 ) : doctorPhotoUrl ? (
                   <img
                     src={doctorPhotoUrl}
-                    alt=''
-                    className='pmr-card__avatar-photo'
+                    alt={doctorName}
+                    className='pmr-card__avatar pmr-card__avatar-photo'
                     width={52}
                     height={52}
                   />

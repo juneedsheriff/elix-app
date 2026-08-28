@@ -91,6 +91,61 @@ export async function fetchDoctors(limit = 50, options?: { patientClinicId?: str
   };
 }
 
+export async function fetchDoctorProfilesByIds(ids: string[]) {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (!unique.length) {
+    return {
+      data: [] as Array<{
+        id: string;
+        full_name: string;
+        specialty: string;
+        image_url: string | null;
+      }>,
+      error: null
+    };
+  }
+
+  const result = await supabase
+    .from('doctors')
+    .select('id, full_name, specialty, image_url')
+    .in('id', unique);
+
+  const byId = new Map<
+    string,
+    { id: string; full_name: string; specialty: string; image_url: string | null }
+  >();
+
+  for (const row of result.data ?? []) {
+    byId.set(row.id, {
+      id: row.id,
+      full_name: row.full_name,
+      specialty: row.specialty,
+      image_url: row.image_url ?? null
+    });
+  }
+
+  const missing = unique.filter((id) => !byId.get(id)?.image_url?.trim());
+  if (missing.length) {
+    const browse = await fetchDoctors(Math.max(200, unique.length));
+    for (const doctor of browse.data ?? []) {
+      if (!unique.includes(doctor.id)) continue;
+      const existing = byId.get(doctor.id);
+      const imageUrl = doctor.image_url?.trim() || existing?.image_url || null;
+      byId.set(doctor.id, {
+        id: doctor.id,
+        full_name: existing?.full_name || doctor.full_name,
+        specialty: existing?.specialty || doctor.specialty,
+        image_url: imageUrl
+      });
+    }
+  }
+
+  return {
+    data: unique.map((id) => byId.get(id)).filter((row): row is NonNullable<typeof row> => Boolean(row)),
+    error: result.error && byId.size === 0 ? result.error : null
+  };
+}
+
 export async function fetchDoctorById(id: string) {
   const result = await supabase.from('doctors').select(doctorColumns).eq('id', id).maybeSingle();
 

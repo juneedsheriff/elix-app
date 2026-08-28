@@ -32,6 +32,7 @@ import {
 import {
   fetchDoctorByAuthUserId,
   fetchDoctorById,
+  fetchDoctorProfilesByIds,
   fetchPatientBrowseDoctorById,
   normalizeDoctor
 } from './doctors';
@@ -1593,7 +1594,7 @@ function mapRequestRow(
     doctor_id: row.doctor_id,
     doctor_name: row.doctor_name ?? row.doctors?.full_name ?? null,
     doctor_specialty: row.doctors?.specialty ?? null,
-    doctor_image_url: row.doctors?.image_url ?? null,
+    doctor_image_url: row.doctors?.image_url?.trim() || null,
     doctor_selection_mode: row.doctor_selection_mode ?? (row.doctor_id ? 'self_select' : 'needs_recommendation'),
     requested_specialty: row.requested_specialty ?? null,
     clinic_id: row.clinic_id ?? null,
@@ -1914,6 +1915,36 @@ async function enrichRequestsWithWorkflowFields(requests: OpinionRequest[]): Pro
     return workflow ? mergeWorkflowFields(request, workflow) : request;
   });
   return enrichRequestsWithPaymentLink(merged);
+}
+
+async function enrichRequestsWithDoctorProfiles(requests: OpinionRequest[]): Promise<OpinionRequest[]> {
+  if (!requests.length) return requests;
+
+  const doctorIds = [
+    ...new Set(
+      requests
+        .map((request) => request.selected_doctor_id?.trim() || request.doctor_id?.trim() || '')
+        .filter(Boolean)
+    )
+  ];
+  if (!doctorIds.length) return requests;
+
+  const { data } = await fetchDoctorProfilesByIds(doctorIds);
+  if (!data.length) return requests;
+
+  const byId = new Map(data.map((doctor) => [doctor.id, doctor]));
+  return requests.map((request) => {
+    const doctorId = request.selected_doctor_id?.trim() || request.doctor_id?.trim();
+    if (!doctorId) return request;
+    const doctor = byId.get(doctorId);
+    if (!doctor) return request;
+    return {
+      ...request,
+      doctor_name: request.doctor_name?.trim() || doctor.full_name || null,
+      doctor_specialty: request.doctor_specialty?.trim() || doctor.specialty || null,
+      doctor_image_url: doctor.image_url?.trim() || request.doctor_image_url || null
+    };
+  });
 }
 
 type PaymentLinkRow = Pick<
@@ -2470,7 +2501,8 @@ export async function fetchPatientOpinionRequests(patientAuthUserId: string): Pr
 
   const mapped = (rows ?? []).map((row) => mapRequestRow(row, new Map()));
   const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
-  const withRecords = await attachRequestRecords(withWorkflow);
+  const withDoctors = await enrichRequestsWithDoctorProfiles(withWorkflow);
+  const withRecords = await attachRequestRecords(withDoctors);
   const data = await enrichRequestsWithConsultationSummaries(withRecords);
   return {
     data,
@@ -2482,7 +2514,8 @@ export async function fetchPatientOpinionRequests(patientAuthUserId: string): Pr
 async function mapPatientOpinionRequestRows(rows: RequestListRow[]): Promise<OpinionRequest[]> {
   const mapped = rows.map((row) => mapRequestRow(row, new Map()));
   const withWorkflow = await enrichRequestsWithWorkflowFields(mapped);
-  const withRecords = await attachRequestRecords(withWorkflow);
+  const withDoctors = await enrichRequestsWithDoctorProfiles(withWorkflow);
+  const withRecords = await attachRequestRecords(withDoctors);
   return enrichRequestsWithConsultationSummaries(withRecords);
 }
 
