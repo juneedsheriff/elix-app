@@ -15,6 +15,7 @@ import {
 import { formatPatientAvailability } from '../../lib/doctorSchedule';
 import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
+  canJoinConsultationMeeting,
   isRecommendationOpinionRequest,
   patientRequestStatusLabel,
   patientRequestTitle
@@ -56,10 +57,6 @@ function isAppointmentScheduled(request: OpinionRequest): boolean {
   if (request.scheduled_at) return true;
   const stage = request.consultation_stage;
   return stage === 'scheduled' || stage === 'schedule_confirmed' || stage === 'paid' || stage === 'completed';
-}
-
-function isHttpsMeetingLink(link: string | null | undefined): boolean {
-  return /^https:\/\//i.test(link?.trim() ?? '');
 }
 
 function statusAccentClass(request: OpinionRequest, listVariant: 'upcoming' | 'completed'): string {
@@ -126,7 +123,7 @@ export default function PatientRequestListCard({
     listVariant === 'upcoming' &&
     !isHomeCare &&
     isPaid &&
-    isHttpsMeetingLink(meetingLink);
+    canJoinConsultationMeeting(request);
 
   const doctorPhotoUrl = resolveProfilePhotoUrl(request.doctor_image_url);
   const doctorInitials = displayInitials(doctorName);

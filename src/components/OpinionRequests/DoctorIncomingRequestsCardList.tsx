@@ -10,6 +10,7 @@ import {
   canDoctorGiveConsultation,
   hasPatientConsultationNotes
 } from '../../lib/doctorConsultation';
+import { canJoinConsultationMeeting } from '../../lib/opinionRequests';
 import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import { formatRequestDate } from '../../pages/admin/requests/requestsUtils';
 import type { OpinionRequest } from '../../types/opinionRequest';
@@ -39,10 +40,6 @@ function doctorStatusLabel(status: string): string {
   if (status === 'in_review') return 'In review';
   if (status === 'closed') return 'Completed';
   return 'Submitted';
-}
-
-function isHttpsMeetingLink(link: string | null | undefined): boolean {
-  return /^https:\/\//i.test(link?.trim() ?? '');
 }
 
 function CardField({
@@ -160,7 +157,7 @@ export default function DoctorIncomingRequestsCardList({
         >
           {data.map((request) => {
             const meetingLink = request.meeting_link?.trim() || null;
-            const canJoinMeeting = isHttpsMeetingLink(meetingLink);
+            const canJoinMeeting = canJoinConsultationMeeting(request);
             const scheduledAt = request.scheduled_at?.trim();
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);

@@ -7,6 +7,7 @@ import {
   consultationNotesPreview,
   hasPatientConsultationNotes
 } from '../../lib/doctorConsultation';
+import { canJoinConsultationMeeting } from '../../lib/opinionRequests';
 import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import { formatRequestDate, patientInitials } from '../../pages/admin/requests/requestsUtils';
@@ -125,6 +126,7 @@ export function useDoctorCasesTableColumns({
           const request = row.original;
           const meetingLink = request.meeting_link?.trim();
           const scheduledAt = request.scheduled_at?.trim();
+          const showJoin = canJoinConsultationMeeting(request);
 
           if (!meetingLink && !scheduledAt) {
             return (
@@ -159,7 +161,7 @@ export function useDoctorCasesTableColumns({
                   </Text>
                 </Group>
               ) : null}
-              {meetingLink ? (
+              {showJoin && meetingLink ? (
                 <Anchor href={meetingLink} target='_blank' rel='noreferrer' size='xs' fw={600}>
                   Join meeting
                 </Anchor>

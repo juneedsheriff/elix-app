@@ -41,7 +41,9 @@ import {
   pseMarkPaymentPendingNoLink,
   canPseManageRequestRecords,
   pseDeleteRequestRecord,
-  subscribeOpinionRequestLiveUpdates
+  subscribeOpinionRequestLiveUpdates,
+  canJoinConsultationMeeting,
+  isPatientRequestCompleted
 } from '../../../lib/opinionRequests';
 import {
   formatConsultationFee,
@@ -1237,7 +1239,9 @@ export default function RequestWorkflowWizard({
             {request.scheduled_at ? (
               <Text size='sm' c='dimmed'>
                 Current: {new Date(request.scheduled_at).toLocaleString()}
-                {request.meeting_link ? ` · ${request.meeting_link}` : ''}
+                {canJoinConsultationMeeting(request) && request.meeting_link
+                  ? ` · ${request.meeting_link}`
+                  : ''}
               </Text>
             ) : null}
           </Stack>
@@ -1249,7 +1253,7 @@ export default function RequestWorkflowWizard({
             {request.scheduled_at ? (
               <Text size='sm'>
                 {new Date(request.scheduled_at).toLocaleString()}
-                {request.meeting_link ? (
+                {canJoinConsultationMeeting(request) && request.meeting_link ? (
                   <>
                     {' '}
                     ·{' '}
@@ -1257,6 +1261,11 @@ export default function RequestWorkflowWizard({
                       {request.meeting_link}
                     </Anchor>
                   </>
+                ) : isPatientRequestCompleted(request) && request.scheduled_at ? (
+                  <Text span size='sm' c='dimmed'>
+                    {' '}
+                    · Meeting closed
+                  </Text>
                 ) : null}
               </Text>
             ) : (

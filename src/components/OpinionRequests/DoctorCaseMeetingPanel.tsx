@@ -1,4 +1,5 @@
 import { Calendar, Video } from 'lucide-react';
+import { canJoinConsultationMeeting, isPatientRequestCompleted } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 type DoctorCaseMeetingPanelProps = {
@@ -11,7 +12,8 @@ function isGoogleMeetLink(url: string): boolean {
 
 export default function DoctorCaseMeetingPanel({ request }: DoctorCaseMeetingPanelProps) {
   const meetingLink = request.meeting_link?.trim();
-  if (!meetingLink) return null;
+  const showJoin = canJoinConsultationMeeting(request);
+  if (!meetingLink || isPatientRequestCompleted(request)) return null;
 
   const joinLabel = isGoogleMeetLink(meetingLink) ? 'Join Google Meet' : 'Join meeting';
 
@@ -29,24 +31,28 @@ export default function DoctorCaseMeetingPanel({ request }: DoctorCaseMeetingPan
         </p>
       ) : null}
 
-      <a
-        href={meetingLink}
-        target='_blank'
-        rel='noreferrer'
-        className='primary-btn case-review-meeting-panel__join'
-      >
-        <Video size={16} aria-hidden />
-        {joinLabel}
-      </a>
+      {showJoin ? (
+        <>
+          <a
+            href={meetingLink}
+            target='_blank'
+            rel='noreferrer'
+            className='primary-btn case-review-meeting-panel__join'
+          >
+            <Video size={16} aria-hidden />
+            {joinLabel}
+          </a>
 
-      <a
-        href={meetingLink}
-        target='_blank'
-        rel='noreferrer'
-        className='case-review-meeting-panel__url'
-      >
-        {meetingLink}
-      </a>
+          <a
+            href={meetingLink}
+            target='_blank'
+            rel='noreferrer'
+            className='case-review-meeting-panel__url'
+          >
+            {meetingLink}
+          </a>
+        </>
+      ) : null}
     </div>
   );
 }

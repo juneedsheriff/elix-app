@@ -43,9 +43,11 @@ import PatientConsultationRetainCard, {
   hasRetainedPaymentDetails
 } from './PatientConsultationRetainCard';
 import {
+  canJoinConsultationMeeting,
   consultationSummaryFromDoctorResponse,
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
+  isPatientRequestCompleted,
   isRecommendationOpinionRequest,
   patientConfirmSchedule,
   patientProceedWithoutRecords,
@@ -250,7 +252,10 @@ export default function PatientConsultationWizard({
     return () => window.clearInterval(intervalId);
   }, [request.scheduled_at]);
 
-  const joinMeetingAvailable = isJoinMeetingAvailable(request.scheduled_at, nowTick);
+  const requestCompleted = isPatientRequestCompleted(request);
+  const showMeetingLink = canJoinConsultationMeeting(request);
+  const joinMeetingAvailable =
+    showMeetingLink && isJoinMeetingAvailable(request.scheduled_at, nowTick);
   const joinOpensInMs = getMillisecondsUntilJoinOpens(request.scheduled_at, nowTick);
 
   const loadExtras = useCallback(async () => {
@@ -1018,7 +1023,7 @@ export default function PatientConsultationWizard({
                   </div>
                 ) : null}
 
-                {request.meeting_link?.trim() ? (
+                {request.meeting_link?.trim() && !requestCompleted ? (
                   <div className='patient-appointment-detail-card__row'>
                     <span className='patient-appointment-detail-card__icon' aria-hidden>
                       <Link2 size={18} />
@@ -1060,7 +1065,7 @@ export default function PatientConsultationWizard({
                   </button>
                 ) : null}
 
-                {request.payment_status === 'paid' && request.meeting_link?.trim() && request.scheduled_at ? (
+                {showMeetingLink && request.payment_status === 'paid' && request.scheduled_at ? (
                   joinMeetingAvailable ? (
                     <a
                       href={request.meeting_link}

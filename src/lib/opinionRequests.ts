@@ -457,6 +457,17 @@ export function isPatientRequestCompleted(
   return request.status === 'closed';
 }
 
+/** Video join is only for active consultations — hide after the request is completed. */
+export function canJoinConsultationMeeting(
+  request: Pick<
+    OpinionRequest,
+    'meeting_link' | 'consultation_stage' | 'doctor_response' | 'status'
+  >
+): boolean {
+  if (isPatientRequestCompleted(request)) return false;
+  return /^https:\/\//i.test(request.meeting_link?.trim() ?? '');
+}
+
 /** Request submitted by patient but not yet assigned by admin. */
 export function isPendingAdminAssignment(
   request: Pick<OpinionRequest, 'status' | 'assigned_to' | 'consultation_stage'>
