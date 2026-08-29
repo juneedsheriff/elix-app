@@ -17,6 +17,7 @@ import PatientConsultationRetainCard, {
   isUpcomingPatientConsultation
 } from '../../components/ConsultationWorkflow/PatientConsultationRetainCard';
 import HomeCareServicesModal from '../../components/OpinionRequests/HomeCareServicesModal';
+import PatientClinicBranchCard from '../../components/patient/PatientClinicBranchCard';
 import PatientRequestListCard from '../../components/OpinionRequests/PatientRequestListCard';
 import '../../components/OpinionRequests/patient-my-requests.css';
 import SecondOpinionChoiceModal from '../../components/OpinionRequests/SecondOpinionChoiceModal';
@@ -32,6 +33,7 @@ import {
   isAwaitingDoctorReply,
   subscribePatientOpinionRequestUpdates
 } from '../../lib/opinionRequests';
+import { fetchAssignedClinicBranch, type PseClinicBranch } from '../../lib/clinicBranch';
 import { fetchUserMedicalRecords } from '../../lib/records';
 import type { OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
@@ -92,6 +94,8 @@ export default function PatientDashboardPage({
   const [homeCareError, setHomeCareError] = useState<string | null>(null);
   const [upcomingFollowupDate, setUpcomingFollowupDate] = useState<string | null>(null);
   const [upcomingFollowupDoctorName, setUpcomingFollowupDoctorName] = useState<string | null>(null);
+  const [clinicBranch, setClinicBranch] = useState<PseClinicBranch | null>(null);
+  const [clinicBranchLoading, setClinicBranchLoading] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
   const goToScreen = useCallback(
@@ -238,6 +242,35 @@ export default function PatientDashboardPage({
   const missingProfileFields = patientProfileMissingFields(patientProfile);
   const canRequestHomeCare = Boolean(patientProfile?.clinic_id);
 
+  useEffect(() => {
+    const clinicId = patientProfile?.clinic_id?.trim();
+    if (!clinicId) {
+      setClinicBranch(null);
+      setClinicBranchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setClinicBranchLoading(true);
+    void fetchAssignedClinicBranch(clinicId).then(({ data }) => {
+      if (cancelled) return;
+      setClinicBranch(
+        data ?? {
+          id: clinicId,
+          name: patientProfile?.pse_clinic_name?.trim() || 'ElixClinix branch',
+          location: null,
+          email: null,
+          phone: null
+        }
+      );
+      setClinicBranchLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patientProfile?.clinic_id, patientProfile?.pse_clinic_name]);
+
   const metrics = [
     {
       label: 'Open requests',
@@ -344,6 +377,10 @@ export default function PatientDashboardPage({
             ) : null}
           </div>
         </header>
+
+        {patientProfile?.clinic_id ? (
+          <PatientClinicBranchCard branch={clinicBranch} loading={clinicBranchLoading} />
+        ) : null}
 
         <section className='pd-actions' aria-label='Quick actions'>
           <button

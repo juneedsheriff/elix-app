@@ -3,7 +3,7 @@ import type { Admin } from '../types/admin';
 import type { AdminDoctorUpdateInput, Doctor } from '../types/doctor';
 import type { Patient, PatientAttachedDocument } from '../types/patient';
 import { parsePatientAttachedDocuments } from './patientDocuments';
-import { deletePatientPermanently } from './adminAuth';
+import { deletePatientPermanently, notifyPatientClinicAssignment } from './adminAuth';
 import { adminInputToDbRow, DOCTOR_PROFILE_COLUMNS } from './doctorProfile';
 import { normalizeDoctor } from './doctors';
 import { fetchPatientConsultationFollowupDates } from './opinionRequests';
@@ -652,12 +652,18 @@ export async function assignPatientToClinicForAdmin(patientId: string, clinicId:
     transferredRequests = requestRows?.length ?? 0;
   }
 
+  const assigned = {
+    ...patient,
+    clinic_id: trimmedClinicId,
+    pse_clinic_name: patient.pse_clinic_name?.trim() || clinic.name
+  };
+
+  if (assigned.email?.trim()) {
+    void notifyPatientClinicAssignment(assigned.id);
+  }
+
   return {
-    data: {
-      ...patient,
-      clinic_id: trimmedClinicId,
-      pse_clinic_name: patient.pse_clinic_name?.trim() || clinic.name
-    },
+    data: assigned,
     transferredRequests,
     error: null
   };

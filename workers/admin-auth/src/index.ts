@@ -573,7 +573,16 @@ type ProfileRow = {
   phone?: string | null;
   mobile_no?: string | null;
   clinic_id?: string | null;
+  elix_id?: string | null;
 };
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function canManagePatientAuth(caller: StaffCaller, patient: Pick<ProfileRow, 'clinic_id'>): boolean {
   if (caller.role === 'administrator') return true;
@@ -595,7 +604,7 @@ async function loadProfile(role: Role, profileId: string, env: Env): Promise<Pro
   const colsWithClinic =
     role === 'doctor'
       ? 'id,email,full_name,auth_user_id,login_disabled,mobile_no,phone,clinic_id'
-      : 'id,email,full_name,auth_user_id,login_disabled,phone,clinic_id';
+      : 'id,email,full_name,auth_user_id,login_disabled,phone,clinic_id,elix_id';
   const colsLegacy =
     role === 'doctor'
       ? 'id,email,full_name,auth_user_id,login_disabled,mobile_no,phone'
@@ -617,11 +626,233 @@ async function findUserByEmail(email: string, admin: SupabaseClient): Promise<st
   return match?.id ?? null;
 }
 
+const DEFAULT_CLINIC_INCHARGE_PHONE = '990-117-8340';
+const HEAD_OFFICE_PHONE = '9449811444';
+const HEAD_OFFICE_EMAIL = 'support@elixclinix.com';
+
+type ClinicBranchDetails = {
+  name: string;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
+async function loadClinicBranch(clinicId: string | null | undefined, env: Env): Promise<ClinicBranchDetails | null> {
+  const id = clinicId?.trim();
+  if (!id) return null;
+
+  const withDetails = await serviceClient(env)
+    .from('pse_clinics')
+    .select('name, location, email, phone')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (!withDetails.error && withDetails.data) {
+    const row = withDetails.data as {
+      name?: string | null;
+      location?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    };
+    return {
+      name: row.name?.trim() || 'ElixClinix branch',
+      location: row.location?.trim() || null,
+      email: row.email?.trim() || null,
+      phone: row.phone?.trim() || null
+    };
+  }
+
+  const legacy = await serviceClient(env).from('pse_clinics').select('name').eq('id', id).maybeSingle();
+  if (legacy.error || !legacy.data) return null;
+  return {
+    name: ((legacy.data as { name?: string | null }).name ?? '').trim() || 'ElixClinix branch',
+    location: null,
+    email: null,
+    phone: null
+  };
+}
+
+function clinicBranchServicesHtml(): string {
+  return `
+    <li>Home Nursing Services</li>
+    <li>Doctor Consultation</li>
+    <li>Second Opinion</li>
+    <li>Physiotherapy Services</li>
+    <li>Medical Records Online</li>
+    <li>Sample Collection at Home</li>
+    <li>Parent Care Services</li>
+    <li>Surgery Referral &amp; Coordination</li>
+    <li>Patient Escort Services</li>
+    <li>Lab &amp; Diagnostics</li>
+    <li>Digital X-Ray</li>
+    <li>Other Healthcare Support Services</li>
+  `;
+}
+
+function buildClinicAssignmentEmailHtml(input: {
+  patientName: string;
+  branch: ClinicBranchDetails;
+  login?: { patientId: string; mobile: string; email: string; temporaryPassword: string; appUrl: string };
+}): string {
+  const name = escapeHtml(input.patientName.trim() || 'Patient');
+  const branchName = escapeHtml(input.branch.name);
+  const location = escapeHtml(input.branch.location?.trim() || input.branch.name);
+  const phone = escapeHtml(input.branch.phone?.trim() || DEFAULT_CLINIC_INCHARGE_PHONE);
+  const email = escapeHtml(input.branch.email?.trim() || HEAD_OFFICE_EMAIL);
+  const login = input.login;
+
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #1f2937; line-height: 1.55; max-width: 640px;">
+      <p>Dear ${name},</p>
+      <p><strong>Welcome to ElixClinix!</strong></p>
+      <p>
+        We are pleased to inform you that your ElixClinix patient profile has been successfully added to
+        <strong>${branchName}</strong> based on your registered address and city.
+      </p>
+      <p>
+        Our local branch team will be available to coordinate and support your healthcare requirements
+        and help you access the services available in your area.
+      </p>
+
+      ${
+        login
+          ? `
+      <h3 style="margin-bottom: 8px;">Your Registration Details</h3>
+      <p style="margin-top: 0;">
+        Patient ID: ${escapeHtml(login.patientId.trim() || 'Pending')} | Name: ${name}<br />
+        Mobile: ${escapeHtml(login.mobile.trim() || 'Not provided')} | Email: ${escapeHtml(login.email)}
+      </p>
+      <p>
+        <strong>Login ID &amp; Password:</strong><br />
+        Login ID: ${escapeHtml(login.email)}<br />
+        Password: ${escapeHtml(login.temporaryPassword)}
+      </p>
+      <p>Sign in at <a href="${escapeHtml(login.appUrl)}">${escapeHtml(login.appUrl)}</a>. On first login, you will be asked to change your password.</p>
+      `
+          : ''
+      }
+
+      <h3 style="margin-bottom: 8px;">Your ElixClinix Branch Details</h3>
+      <p style="margin-top: 0;">
+        Branch: ${branchName}<br />
+        Location: ${location}<br />
+        Contact Number: ${phone}<br />
+        Email: <a href="mailto:${email}">${email}</a>
+      </p>
+
+      <h3 style="margin-bottom: 8px;">Services Available at This Branch</h3>
+      <p style="margin-top: 0;">The following services are available through your ElixClinix branch:</p>
+      <ul>
+        ${clinicBranchServicesHtml()}
+      </ul>
+      <p>Our team will assist you in selecting and coordinating the appropriate service based on your healthcare needs.</p>
+      <p>You can contact our clinic incharge on Mob No: ${phone}</p>
+      <p>
+        We are happy to have you with us and look forward to providing you and your family with
+        convenient, coordinated and reliable healthcare support.
+      </p>
+      <p>
+        For any grievances, complaints or concerns, please contact our head office on ${HEAD_OFFICE_PHONE}
+        or email us at <a href="mailto:${HEAD_OFFICE_EMAIL}">${HEAD_OFFICE_EMAIL}</a>.
+      </p>
+      <p>
+        Warm regards,<br />
+        Team ElixClinix<br />
+        <em>Your Healthcare. Our Care.</em>
+      </p>
+    </div>
+  `;
+}
+
+function buildClinicPatientWelcomeEmailHtml(input: {
+  patientName: string;
+  patientId: string;
+  mobile: string;
+  email: string;
+  temporaryPassword: string;
+  appUrl: string;
+  branch?: ClinicBranchDetails | null;
+}): string {
+  if (input.branch) {
+    return buildClinicAssignmentEmailHtml({
+      patientName: input.patientName,
+      branch: input.branch,
+      login: {
+        patientId: input.patientId,
+        mobile: input.mobile,
+        email: input.email,
+        temporaryPassword: input.temporaryPassword,
+        appUrl: input.appUrl
+      }
+    });
+  }
+
+  const name = escapeHtml(input.patientName.trim() || 'Patient');
+  const patientId = escapeHtml(input.patientId.trim() || 'Pending');
+  const mobile = escapeHtml(input.mobile.trim() || 'Not provided');
+  const email = escapeHtml(input.email.trim());
+  const password = escapeHtml(input.temporaryPassword);
+  const appUrl = escapeHtml(input.appUrl);
+
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #1f2937; line-height: 1.55; max-width: 640px;">
+      <p>Dear ${name},</p>
+      <p><strong>Welcome to ElixClinix!</strong></p>
+      <p>
+        Thank you for registering with the ElixClinix App. We are delighted to have you with us and
+        look forward to supporting you and your family with convenient, coordinated and reliable
+        healthcare services.
+      </p>
+
+      <h3 style="margin-bottom: 8px;">Your Registration Details</h3>
+      <p style="margin-top: 0;">
+        Patient ID: ${patientId} | Name: ${name}<br />
+        Mobile: ${mobile} | Email: ${email}
+      </p>
+      <p>
+        <strong>Login ID &amp; Password:</strong><br />
+        Login ID: ${email}<br />
+        Password: ${password}
+      </p>
+      <p>Please keep your Patient ID handy when contacting ElixClinix for any healthcare assistance.</p>
+      <p>Sign in at <a href="${appUrl}">${appUrl}</a>. On first login, you will be asked to change your password.</p>
+
+      <h3 style="margin-bottom: 8px;">Our Services</h3>
+      <p style="margin-top: 0;">Through the ElixClinix App, you can access:</p>
+      <ul>
+        <li>Home Nursing Services – Nursing care including injections, IV care, wound care and minor procedures</li>
+        <li>Doctor Video Consultation – Consult doctors and specialists remotely.</li>
+        <li>Second Opinion – Expert medical opinions from national and international specialists.</li>
+        <li>Physiotherapy at Home – Professional rehabilitation and physiotherapy at home.</li>
+        <li>Medical Records Online – Securely upload and access your health records.</li>
+        <li>Sample Collection at Home – Convenient doorstep collection of laboratory samples.</li>
+        <li>Parent Care – Healthcare coordination and assistance for parents and elderly family members.</li>
+        <li>Surgery Referral – Assistance in identifying suitable surgeons and hospitals.</li>
+        <li>Patient Escort Services – Assistance during hospital and laboratory visits.</li>
+        <li>Homecare &amp; Healthcare Assistance – Coordinated healthcare support for you and your family.</li>
+      </ul>
+
+      <h3 style="margin-bottom: 8px;">Need Assistance?</h3>
+      <p style="margin-top: 0;">
+        ElixClinix – Multispeciality Clinics &amp; Diagnostic Center<br />
+        Email: <a href="mailto:${HEAD_OFFICE_EMAIL}">${HEAD_OFFICE_EMAIL}</a><br />
+        Website: <a href="https://www.elixclinix.com">www.elixclinix.com</a>
+      </p>
+    </div>
+  `;
+}
+
 async function sendTemporaryPasswordEmail(
   toEmail: string,
   patientName: string,
   temporaryPassword: string,
-  env: Env
+  env: Env,
+  details?: {
+    patientId?: string | null;
+    mobile?: string | null;
+    clinicWelcome?: boolean;
+    branch?: ClinicBranchDetails | null;
+  }
 ): Promise<{ error?: string }> {
   const apiKey = env.RESEND_API_KEY?.trim();
   const senderEmail = env.SMTP_ADMIN_EMAIL?.trim();
@@ -634,7 +865,25 @@ async function sendTemporaryPasswordEmail(
   }
 
   const appUrl = env.ALLOWED_ORIGIN?.trim() || 'https://app.elixclinix.com';
-  const safeName = patientName.trim() || 'Patient';
+  const safeName = escapeHtml(patientName.trim() || 'Patient');
+  const useClinicWelcome = Boolean(details?.clinicWelcome);
+  const html = useClinicWelcome
+    ? buildClinicPatientWelcomeEmailHtml({
+        patientName,
+        patientId: details?.patientId ?? '',
+        mobile: details?.mobile ?? '',
+        email: toEmail,
+        temporaryPassword,
+        appUrl,
+        branch: details?.branch
+      })
+    : `
+        <p>Hi ${safeName},</p>
+        <p>Your clinic created your ElixClinix account.</p>
+        <p><strong>Temporary password:</strong> ${escapeHtml(temporaryPassword)}</p>
+        <p>Sign in at <a href="${escapeHtml(appUrl)}">${escapeHtml(appUrl)}</a>. On first login, you will be asked to change your password.</p>
+      `;
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -644,13 +893,8 @@ async function sendTemporaryPasswordEmail(
     body: JSON.stringify({
       from: `${senderName} <${senderEmail}>`,
       to: [toEmail],
-      subject: 'Your ElixClinix login is ready',
-      html: `
-        <p>Hi ${safeName},</p>
-        <p>Your clinic created your ElixClinix account.</p>
-        <p><strong>Temporary password:</strong> ${temporaryPassword}</p>
-        <p>Sign in at <a href="${appUrl}">${appUrl}</a>. On first login, you will be asked to change your password.</p>
-      `
+      subject: useClinicWelcome ? 'Welcome to ElixClinix' : 'Your ElixClinix login is ready',
+      html
     })
   });
 
@@ -1126,11 +1370,22 @@ async function provisionPatientLogin(profileId: string, env: Env) {
   });
   if (enable.error) return { error: enable.error };
 
+  const branch = profile.clinic_id ? await loadClinicBranch(profile.clinic_id, env) : null;
   const emailResult = await sendTemporaryPasswordEmail(
     profile.email.trim().toLowerCase(),
     profile.full_name,
     temporaryPassword,
-    env
+    env,
+    {
+      patientId: profile.elix_id,
+      mobile: profile.phone,
+      clinicWelcome: Boolean(profile.clinic_id),
+      branch:
+        branch ??
+        (profile.clinic_id
+          ? { name: 'ElixClinix branch', location: null, email: null, phone: null }
+          : null)
+    }
   );
 
   const status = await getAccountStatus('patient', profile.id, env);
@@ -1200,6 +1455,26 @@ async function preconfirmPatientSignup(body: PatientPreconfirmBody, env: Env) {
   }
 
   return { bootstrapPassword };
+}
+
+async function sendClinicAssignmentNotification(profileId: string, env: Env): Promise<{ error?: string }> {
+  const profile = await loadProfile('patient', profileId, env);
+  if (!profile) return { error: 'Patient profile not found.' };
+  if (!profile.email?.trim()) return { error: 'Patient does not have an email address.' };
+  if (!profile.clinic_id) return { error: 'Patient is not assigned to a clinic.' };
+
+  const branch = await loadClinicBranch(profile.clinic_id, env);
+  if (!branch) return { error: 'Clinic workspace not found.' };
+
+  return sendEmailViaResend({
+    toEmail: profile.email.trim().toLowerCase(),
+    subject: 'Welcome to ElixClinix',
+    html: buildClinicAssignmentEmailHtml({
+      patientName: profile.full_name,
+      branch
+    }),
+    env
+  });
 }
 
 export default {
@@ -1346,6 +1621,33 @@ export default {
         origin,
         env
       );
+    }
+
+    if (request.method === 'POST' && pathname === '/patient/notify-clinic-assignment') {
+      let body: { profileId?: string };
+      try {
+        body = (await request.json()) as { profileId?: string };
+      } catch {
+        return json({ error: 'Invalid JSON body.' }, 400, origin, env);
+      }
+
+      const profileId = body.profileId?.trim();
+      if (!profileId) {
+        return json({ error: 'profileId is required.' }, 400, origin, env);
+      }
+
+      const patient = await loadProfile('patient', profileId, env);
+      if (!patient) return json({ error: 'Profile not found.' }, 404, origin, env);
+      if (!canManagePatientAuth(caller, patient)) {
+        return json({ error: 'You do not have permission to notify this patient.' }, 403, origin, env);
+      }
+
+      const result = await sendClinicAssignmentNotification(profileId, env);
+      if (result.error) {
+        return json({ error: result.error }, 400, origin, env);
+      }
+
+      return json({ ok: true, emailSent: true }, 200, origin, env);
     }
 
     if (request.method === 'POST' && pathname === '/patient/delete') {

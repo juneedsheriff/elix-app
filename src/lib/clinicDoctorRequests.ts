@@ -289,7 +289,36 @@ export async function removeDoctorFromClinicWorkspace(doctorId: string, clinicId
   return { removedAs: (data as string) ?? 'grant', error: null };
 }
 
+export type PseClinicAdminRow = {
+  id: string;
+  name: string;
+  home_care_enabled: boolean;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
 export async function fetchPseClinicsForAdmin() {
+  const withBranch = await supabase
+    .from('pse_clinics')
+    .select('id, name, home_care_enabled, location, email, phone')
+    .order('name', { ascending: true });
+
+  if (!withBranch.error) {
+    return {
+      data: (withBranch.data ?? []).map((row) => ({
+        id: row.id as string,
+        name: (row.name as string) ?? 'Clinic workspace',
+        home_care_enabled:
+          typeof row.home_care_enabled === 'boolean' ? row.home_care_enabled : true,
+        location: typeof row.location === 'string' ? row.location : null,
+        email: typeof row.email === 'string' ? row.email : null,
+        phone: typeof row.phone === 'string' ? row.phone : null
+      })) satisfies PseClinicAdminRow[],
+      error: null
+    };
+  }
+
   const withFlag = await supabase
     .from('pse_clinics')
     .select('id, name, home_care_enabled')
@@ -301,8 +330,11 @@ export async function fetchPseClinicsForAdmin() {
         id: row.id as string,
         name: (row.name as string) ?? 'Clinic workspace',
         home_care_enabled:
-          typeof row.home_care_enabled === 'boolean' ? row.home_care_enabled : true
-      })),
+          typeof row.home_care_enabled === 'boolean' ? row.home_care_enabled : true,
+        location: null,
+        email: null,
+        phone: null
+      })) satisfies PseClinicAdminRow[],
       error: null
     };
   }
@@ -321,8 +353,11 @@ export async function fetchPseClinicsForAdmin() {
     data: (data ?? []).map((row) => ({
       id: row.id as string,
       name: (row.name as string) ?? 'Clinic workspace',
-      home_care_enabled: true
-    })),
+      home_care_enabled: true,
+      location: null,
+      email: null,
+      phone: null
+    })) satisfies PseClinicAdminRow[],
     error: null
   };
 }

@@ -176,6 +176,13 @@ export async function provisionPatientLogin(profileId: string) {
   });
 }
 
+export async function notifyPatientClinicAssignment(profileId: string) {
+  return adminAuthFetch<{ ok: boolean; emailSent?: boolean }>('/patient/notify-clinic-assignment', {
+    method: 'POST',
+    body: JSON.stringify({ profileId })
+  });
+}
+
 export type PatientPermanentDeleteResult = {
   ok: boolean;
   deletedRequests?: number;

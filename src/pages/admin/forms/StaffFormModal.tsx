@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { createStaffMember, updateStaffMember } from '../../../lib/adminAuth';
+import { updatePseClinicBranchDetails } from '../../../lib/clinicBranch';
 import {
   fetchPseClinicsForAdmin,
-  updatePseClinicHomeCareEnabled
+  updatePseClinicHomeCareEnabled,
+  type PseClinicAdminRow
 } from '../../../lib/clinicDoctorRequests';
 import { adminRoleLabel } from '../../../lib/staffPermissions';
 import type { Admin, AdminRole } from '../../../types/admin';
@@ -16,7 +18,7 @@ type StaffFormModalProps = {
   onSaved: () => void;
 };
 
-type ClinicOption = { id: string; name: string; home_care_enabled: boolean };
+type ClinicOption = PseClinicAdminRow;
 
 const NEW_CLINIC_VALUE = '__new_clinic__';
 
@@ -29,6 +31,9 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
   const [clinicOptions, setClinicOptions] = useState<ClinicOption[]>([]);
   const [clinicsLoading, setClinicsLoading] = useState(false);
   const [homeCareEnabled, setHomeCareEnabled] = useState(true);
+  const [clinicLocation, setClinicLocation] = useState('');
+  const [clinicEmail, setClinicEmail] = useState('');
+  const [clinicPhone, setClinicPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -48,6 +53,9 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
     setClinicSelection(staff?.clinic_id ?? '');
     setClinicName(staff?.clinic_name ?? '');
     setHomeCareEnabled(staff?.clinic_home_care_enabled !== false);
+    setClinicLocation('');
+    setClinicEmail('');
+    setClinicPhone('');
     setPassword('');
     setConfirmPassword('');
     setError(null);
@@ -70,6 +78,9 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
         if (match) {
           setClinicSelection(match.id);
           setHomeCareEnabled(match.home_care_enabled);
+          setClinicLocation(match.location ?? '');
+          setClinicEmail(match.email ?? '');
+          setClinicPhone(match.phone ?? '');
         }
       } else if (!isEdit && options.length) {
         setClinicSelection((prev) => {
@@ -79,6 +90,9 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
         const selected =
           options.find((clinic) => clinic.id === (staff?.clinic_id ?? options[0]!.id)) ?? options[0]!;
         setHomeCareEnabled(selected.home_care_enabled);
+        setClinicLocation(selected.location ?? '');
+        setClinicEmail(selected.email ?? '');
+        setClinicPhone(selected.phone ?? '');
       }
     });
 
@@ -88,9 +102,20 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
   }, [open, isClinicRole, isEdit, staff?.clinic_id]);
 
   useEffect(() => {
-    if (!isClinicRole || !clinicSelection || usesNewClinic) return;
+    if (!isClinicRole || !clinicSelection) return;
+    if (usesNewClinic) {
+      setClinicLocation('');
+      setClinicEmail('');
+      setClinicPhone('');
+      return;
+    }
     const match = clinicOptions.find((clinic) => clinic.id === clinicSelection);
-    if (match) setHomeCareEnabled(match.home_care_enabled);
+    if (match) {
+      setHomeCareEnabled(match.home_care_enabled);
+      setClinicLocation(match.location ?? '');
+      setClinicEmail(match.email ?? '');
+      setClinicPhone(match.phone ?? '');
+    }
   }, [clinicSelection, clinicOptions, isClinicRole, usesNewClinic]);
 
   useEffect(() => {
@@ -229,6 +254,17 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
         setError(homeCareError.message);
         return;
       }
+
+      const { error: branchError } = await updatePseClinicBranchDetails(resolvedClinicId, {
+        location: clinicLocation,
+        email: clinicEmail,
+        phone: clinicPhone
+      });
+      if (branchError) {
+        setBusy(false);
+        setError(branchError.message);
+        return;
+      }
     }
 
     setBusy(false);
@@ -312,6 +348,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                         {clinic.name}
                       </option>
                     ))}
+                    <option value={NEW_CLINIC_VALUE}>Create new clinic…</option>
                   </select>
                 </label>
                 {usesNewClinic ? (
@@ -327,6 +364,36 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                     />
                   </label>
                 ) : null}
+                <label className='elixhealth-field elixhealth-field--full'>
+                  <span>Branch location</span>
+                  <input
+                    type='text'
+                    value={clinicLocation}
+                    onChange={(e) => setClinicLocation(e.target.value)}
+                    placeholder='e.g. HSR Layout, Bengaluru'
+                    disabled={busy}
+                  />
+                </label>
+                <label className='elixhealth-field elixhealth-field--full'>
+                  <span>Branch email</span>
+                  <input
+                    type='email'
+                    value={clinicEmail}
+                    onChange={(e) => setClinicEmail(e.target.value)}
+                    placeholder='branch@elixclinix.com'
+                    disabled={busy}
+                  />
+                </label>
+                <label className='elixhealth-field elixhealth-field--full'>
+                  <span>Branch contact number</span>
+                  <input
+                    type='tel'
+                    value={clinicPhone}
+                    onChange={(e) => setClinicPhone(e.target.value)}
+                    placeholder='990-117-8340'
+                    disabled={busy}
+                  />
+                </label>
                 <p className='muted elixhealth-staff-note'>
                   Changing the clinic moves this executive to another isolated workspace. Existing
                   patients, doctors, and requests stay with the previous clinic.

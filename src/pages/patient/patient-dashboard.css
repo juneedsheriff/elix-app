@@ -139,6 +139,10 @@
   border: 1px solid color-mix(in srgb, var(--brand-cyan) 22%, var(--border));
 }
 
+.pd-dashboard .pcb-card {
+  margin: 0 1.15rem;
+}
+
 .pd-actions {
   display: grid;
   grid-template-columns: 1fr;

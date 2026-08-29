@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Check, Mail, User, WifiOff } from 'lucide-react';
 import ElixLogo from '../../components/ui/ElixLogo';
+import PatientClinicBranchCard from '../../components/patient/PatientClinicBranchCard';
 import PatientProfileEditSection from '../../components/patient/PatientProfileEditSection';
 import SectionCard from '../../components/ui/SectionCard';
 import { useSupabase } from '../../context/SupabaseProvider';
+import { fetchAssignedClinicBranch, type PseClinicBranch } from '../../lib/clinicBranch';
 import {
   avatarColorFromName,
   displayInitials,
@@ -21,9 +24,40 @@ export default function SettingsPage({
   dbConnected
 }: ScreenPageProps) {
   const { refreshDoctorProfile } = useSupabase();
+  const [clinicBranch, setClinicBranch] = useState<PseClinicBranch | null>(null);
+  const [clinicBranchLoading, setClinicBranchLoading] = useState(false);
   const photoUrl = resolveProfilePhotoUrl(doctorProfile?.image_url);
   const initials = displayInitials(doctorProfile?.full_name ?? userEmail);
   const avatarBg = avatarColorFromName(doctorProfile?.full_name ?? userEmail);
+
+  useEffect(() => {
+    const clinicId = patientProfile?.clinic_id?.trim();
+    if (!clinicId) {
+      setClinicBranch(null);
+      setClinicBranchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setClinicBranchLoading(true);
+    void fetchAssignedClinicBranch(clinicId).then(({ data }) => {
+      if (cancelled) return;
+      setClinicBranch(
+        data ?? {
+          id: clinicId,
+          name: patientProfile?.pse_clinic_name?.trim() || 'ElixClinix branch',
+          location: null,
+          email: null,
+          phone: null
+        }
+      );
+      setClinicBranchLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patientProfile?.clinic_id, patientProfile?.pse_clinic_name]);
 
   return (
     <div className='screen-grid settings-page'>
@@ -102,7 +136,12 @@ export default function SettingsPage({
       ) : null}
 
       {patientProfile ? (
-        <PatientProfileEditSection patientProfile={patientProfile} userId={userId} />
+        <>
+          {patientProfile.clinic_id ? (
+            <PatientClinicBranchCard branch={clinicBranch} loading={clinicBranchLoading} />
+          ) : null}
+          <PatientProfileEditSection patientProfile={patientProfile} userId={userId} />
+        </>
       ) : userEmail && !doctorProfile ? (
         <SectionCard title='Patient profile' subtitle='Complete your health profile'>
           <p className='muted'>Sign in again to sync your profile to the patients table.</p>
