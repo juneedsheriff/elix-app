@@ -672,121 +672,170 @@ async function loadClinicBranch(clinicId: string | null | undefined, env: Env): 
   };
 }
 
-function clinicBranchServicesHtml(): string {
+const EMAIL_BRAND = '#0b8f9a';
+const EMAIL_INK = '#16323f';
+const EMAIL_MUTED = '#5b7280';
+
+function emailDetailRow(label: string, value: string, href?: string): string {
+  const content = href
+    ? `<a href="${href}" style="color:${EMAIL_BRAND};text-decoration:none;font-weight:600;">${value}</a>`
+    : value;
   return `
-    <li>Home Nursing Services</li>
-    <li>Doctor Consultation</li>
-    <li>Second Opinion</li>
-    <li>Physiotherapy Services</li>
-    <li>Medical Records Online</li>
-    <li>Sample Collection at Home</li>
-    <li>Parent Care Services</li>
-    <li>Surgery Referral &amp; Coordination</li>
-    <li>Patient Escort Services</li>
-    <li>Lab &amp; Diagnostics</li>
-    <li>Digital X-Ray</li>
-    <li>Other Healthcare Support Services</li>
+    <tr>
+      <td style="padding:8px 0;width:38%;font-size:12px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;color:${EMAIL_MUTED};">${label}</td>
+      <td style="padding:8px 0;font-size:15px;color:${EMAIL_INK};">${content}</td>
+    </tr>
   `;
+}
+
+function emailServicePills(items: string[]): string {
+  return items
+    .map(
+      (item) =>
+        `<td style="padding:0 6px 8px 0;">
+          <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#e8f7f8;color:${EMAIL_INK};font-size:12px;font-weight:600;white-space:nowrap;">${item}</span>
+        </td>`
+    )
+    .join('');
+}
+
+function wrapPatientEmail(input: {
+  preheader: string;
+  eyebrow: string;
+  title: string;
+  intro: string;
+  body: string;
+  buttonLabel?: string;
+  buttonUrl?: string;
+  footerNote: string;
+}): string {
+  const button =
+    input.buttonLabel && input.buttonUrl
+      ? `
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 20px;">
+          <tr>
+            <td style="border-radius:10px;background:${EMAIL_BRAND};">
+              <a href="${input.buttonUrl}" style="display:inline-block;padding:12px 22px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">${input.buttonLabel}</a>
+            </td>
+          </tr>
+        </table>
+      `
+      : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ElixClinix</title>
+</head>
+<body style="margin:0;padding:0;background:#eef4f6;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${input.preheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef4f6;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #d7e4e8;">
+          <tr>
+            <td style="background:${EMAIL_BRAND};padding:22px 28px;">
+              <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#d7f4f6;">ElixClinix</p>
+              <p style="margin:6px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#ffffff;">${input.eyebrow}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;font-family:Arial,Helvetica,sans-serif;color:${EMAIL_INK};">
+              <h1 style="margin:0 0 10px;font-size:22px;line-height:1.3;">${input.title}</h1>
+              <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:${EMAIL_MUTED};">${input.intro}</p>
+              ${input.body}
+              ${button}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 28px 24px;background:#f4fafb;border-top:1px solid #d7e4e8;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.55;color:${EMAIL_MUTED};">
+              ${input.footerNote}
+              <p style="margin:10px 0 0;">ElixClinix · Multispeciality Clinics &amp; Diagnostic Center<br />
+              <a href="https://www.elixclinix.com" style="color:${EMAIL_BRAND};text-decoration:none;">www.elixclinix.com</a></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 function buildClinicAssignmentEmailHtml(input: {
   patientName: string;
   branch: ClinicBranchDetails;
-  login?: { patientId: string; mobile: string; email: string; temporaryPassword: string; appUrl: string };
 }): string {
   const name = escapeHtml(input.patientName.trim() || 'Patient');
   const branchName = escapeHtml(input.branch.name);
   const location = escapeHtml(input.branch.location?.trim() || input.branch.name);
   const phone = escapeHtml(input.branch.phone?.trim() || DEFAULT_CLINIC_INCHARGE_PHONE);
   const email = escapeHtml(input.branch.email?.trim() || HEAD_OFFICE_EMAIL);
-  const login = input.login;
+  const tel = phone.replace(/[^\d+]/g, '');
 
-  return `
-    <div style="font-family: Arial, Helvetica, sans-serif; color: #1f2937; line-height: 1.55; max-width: 640px;">
-      <p>Dear ${name},</p>
-      <p><strong>Welcome to ElixClinix!</strong></p>
-      <p>
-        We are pleased to inform you that your ElixClinix patient profile has been successfully added to
-        <strong>${branchName}</strong> based on your registered address and city.
-      </p>
-      <p>
-        Our local branch team will be available to coordinate and support your healthcare requirements
-        and help you access the services available in your area.
-      </p>
+  const services = [
+    'Home Nursing Services',
+    'Doctor Consultation',
+    'Second Opinion',
+    'Physiotherapy Services',
+    'Medical Records Online',
+    'Sample Collection at Home',
+    'Parent Care Services',
+    'Surgery Referral & Coordination',
+    'Patient Escort Services',
+    'Lab & Diagnostics',
+    'Digital X-Ray',
+    'Other Healthcare Support Services'
+  ];
 
-      ${
-        login
-          ? `
-      <h3 style="margin-bottom: 8px;">Your Registration Details</h3>
-      <p style="margin-top: 0;">
-        Patient ID: ${escapeHtml(login.patientId.trim() || 'Pending')} | Name: ${name}<br />
-        Mobile: ${escapeHtml(login.mobile.trim() || 'Not provided')} | Email: ${escapeHtml(login.email)}
-      </p>
-      <p>
-        <strong>Login ID &amp; Password:</strong><br />
-        Login ID: ${escapeHtml(login.email)}<br />
-        Password: ${escapeHtml(login.temporaryPassword)}
-      </p>
-      <p>Sign in at <a href="${escapeHtml(login.appUrl)}">${escapeHtml(login.appUrl)}</a>. On first login, you will be asked to change your password.</p>
-      `
-          : ''
-      }
-
-      <h3 style="margin-bottom: 8px;">Your ElixClinix Branch Details</h3>
-      <p style="margin-top: 0;">
-        Branch: ${branchName}<br />
-        Location: ${location}<br />
-        Contact Number: ${phone}<br />
-        Email: <a href="mailto:${email}">${email}</a>
-      </p>
-
-      <h3 style="margin-bottom: 8px;">Services Available at This Branch</h3>
-      <p style="margin-top: 0;">The following services are available through your ElixClinix branch:</p>
-      <ul>
-        ${clinicBranchServicesHtml()}
-      </ul>
-      <p>Our team will assist you in selecting and coordinating the appropriate service based on your healthcare needs.</p>
-      <p>You can contact our clinic incharge on Mob No: ${phone}</p>
-      <p>
-        We are happy to have you with us and look forward to providing you and your family with
-        convenient, coordinated and reliable healthcare support.
-      </p>
-      <p>
-        For any grievances, complaints or concerns, please contact our head office on ${HEAD_OFFICE_PHONE}
-        or email us at <a href="mailto:${HEAD_OFFICE_EMAIL}">${HEAD_OFFICE_EMAIL}</a>.
-      </p>
-      <p>
-        Warm regards,<br />
-        Team ElixClinix<br />
-        <em>Your Healthcare. Our Care.</em>
-      </p>
-    </div>
+  const body = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#f7fcfc;border:1px solid #d7e4e8;border-radius:12px;">
+      <tr>
+        <td style="padding:16px 18px;">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${EMAIL_BRAND};">Your branch</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${emailDetailRow('Branch', branchName)}
+            ${emailDetailRow('Location', location)}
+            ${emailDetailRow('Contact', phone, `tel:${tel}`)}
+            ${emailDetailRow('Email', email, `mailto:${email}`)}
+          </table>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 10px;font-size:14px;font-weight:700;">Services available at this branch</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+      <tr>${emailServicePills(services.slice(0, 4))}</tr>
+      <tr>${emailServicePills(services.slice(4, 8))}</tr>
+      <tr>${emailServicePills(services.slice(8))}</tr>
+    </table>
+    <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:${EMAIL_MUTED};">
+      Our team will help you choose and coordinate the right service. Contact the clinic incharge on
+      <a href="tel:${tel}" style="color:${EMAIL_BRAND};font-weight:700;text-decoration:none;">${phone}</a>.
+    </p>
   `;
+
+  return wrapPatientEmail({
+    preheader: `Your ElixClinix profile is now with ${input.branch.name}.`,
+    eyebrow: 'Branch update',
+    title: `Hi ${name}, your profile is with ${branchName}`,
+    intro:
+      'Your ElixClinix patient profile has been added to this branch based on your registered address and city. The local team can coordinate care in your area.',
+    body,
+    footerNote: `For grievances or concerns, call head office on <a href="tel:${HEAD_OFFICE_PHONE}" style="color:${EMAIL_BRAND};text-decoration:none;">${HEAD_OFFICE_PHONE}</a>
+      or email <a href="mailto:${HEAD_OFFICE_EMAIL}" style="color:${EMAIL_BRAND};text-decoration:none;">${HEAD_OFFICE_EMAIL}</a>.<br />Your Healthcare. Our Care.`
+  });
 }
 
-function buildClinicPatientWelcomeEmailHtml(input: {
+function buildRegistrationWelcomeEmailHtml(input: {
   patientName: string;
   patientId: string;
   mobile: string;
   email: string;
   temporaryPassword: string;
   appUrl: string;
-  branch?: ClinicBranchDetails | null;
 }): string {
-  if (input.branch) {
-    return buildClinicAssignmentEmailHtml({
-      patientName: input.patientName,
-      branch: input.branch,
-      login: {
-        patientId: input.patientId,
-        mobile: input.mobile,
-        email: input.email,
-        temporaryPassword: input.temporaryPassword,
-        appUrl: input.appUrl
-      }
-    });
-  }
-
   const name = escapeHtml(input.patientName.trim() || 'Patient');
   const patientId = escapeHtml(input.patientId.trim() || 'Pending');
   const mobile = escapeHtml(input.mobile.trim() || 'Not provided');
@@ -794,52 +843,69 @@ function buildClinicPatientWelcomeEmailHtml(input: {
   const password = escapeHtml(input.temporaryPassword);
   const appUrl = escapeHtml(input.appUrl);
 
-  return `
-    <div style="font-family: Arial, Helvetica, sans-serif; color: #1f2937; line-height: 1.55; max-width: 640px;">
-      <p>Dear ${name},</p>
-      <p><strong>Welcome to ElixClinix!</strong></p>
-      <p>
-        Thank you for registering with the ElixClinix App. We are delighted to have you with us and
-        look forward to supporting you and your family with convenient, coordinated and reliable
-        healthcare services.
-      </p>
+  const services = [
+    'Home Nursing Services',
+    'Doctor Video Consultation',
+    'Second Opinion',
+    'Physiotherapy at Home',
+    'Medical Records Online',
+    'Sample Collection at Home',
+    'Parent Care',
+    'Surgery Referral',
+    'Patient Escort Services',
+    'Homecare &amp; Healthcare Assistance'
+  ];
 
-      <h3 style="margin-bottom: 8px;">Your Registration Details</h3>
-      <p style="margin-top: 0;">
-        Patient ID: ${patientId} | Name: ${name}<br />
-        Mobile: ${mobile} | Email: ${email}
-      </p>
-      <p>
-        <strong>Login ID &amp; Password:</strong><br />
-        Login ID: ${email}<br />
-        Password: ${password}
-      </p>
-      <p>Please keep your Patient ID handy when contacting ElixClinix for any healthcare assistance.</p>
-      <p>Sign in at <a href="${appUrl}">${appUrl}</a>. On first login, you will be asked to change your password.</p>
-
-      <h3 style="margin-bottom: 8px;">Our Services</h3>
-      <p style="margin-top: 0;">Through the ElixClinix App, you can access:</p>
-      <ul>
-        <li>Home Nursing Services – Nursing care including injections, IV care, wound care and minor procedures</li>
-        <li>Doctor Video Consultation – Consult doctors and specialists remotely.</li>
-        <li>Second Opinion – Expert medical opinions from national and international specialists.</li>
-        <li>Physiotherapy at Home – Professional rehabilitation and physiotherapy at home.</li>
-        <li>Medical Records Online – Securely upload and access your health records.</li>
-        <li>Sample Collection at Home – Convenient doorstep collection of laboratory samples.</li>
-        <li>Parent Care – Healthcare coordination and assistance for parents and elderly family members.</li>
-        <li>Surgery Referral – Assistance in identifying suitable surgeons and hospitals.</li>
-        <li>Patient Escort Services – Assistance during hospital and laboratory visits.</li>
-        <li>Homecare &amp; Healthcare Assistance – Coordinated healthcare support for you and your family.</li>
-      </ul>
-
-      <h3 style="margin-bottom: 8px;">Need Assistance?</h3>
-      <p style="margin-top: 0;">
-        ElixClinix – Multispeciality Clinics &amp; Diagnostic Center<br />
-        Email: <a href="mailto:${HEAD_OFFICE_EMAIL}">${HEAD_OFFICE_EMAIL}</a><br />
-        Website: <a href="https://www.elixclinix.com">www.elixclinix.com</a>
-      </p>
-    </div>
+  const body = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;background:#f7fcfc;border:1px solid #d7e4e8;border-radius:12px;">
+      <tr>
+        <td style="padding:16px 18px;">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${EMAIL_BRAND};">Registration details</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${emailDetailRow('Patient ID', patientId)}
+            ${emailDetailRow('Name', name)}
+            ${emailDetailRow('Mobile', mobile)}
+            ${emailDetailRow('Email', email, `mailto:${email}`)}
+          </table>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;background:#fff8e8;border:1px solid #f3de9a;border-radius:12px;">
+      <tr>
+        <td style="padding:16px 18px;">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#9a6b00;">Login</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${emailDetailRow('Login ID', email)}
+            ${emailDetailRow('Password', password)}
+          </table>
+          <p style="margin:10px 0 0;font-size:13px;color:${EMAIL_MUTED};">Keep your Patient ID handy. You will be asked to change this password on first sign-in.</p>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 10px;font-size:14px;font-weight:700;">Available in the ElixClinix app</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+      <tr>${emailServicePills(services.slice(0, 4))}</tr>
+      <tr>${emailServicePills(services.slice(4, 8))}</tr>
+      <tr>${emailServicePills(services.slice(8))}</tr>
+    </table>
+    <p style="margin:0 0 4px;font-size:14px;line-height:1.6;color:${EMAIL_MUTED};">
+      Service locations: Hyderabad · Bangalore · Chennai<br />
+      Hours: 8:00 AM – 8:00 PM
+    </p>
   `;
+
+  return wrapPatientEmail({
+    preheader: 'Your ElixClinix account is ready. Sign in with the login details in this email.',
+    eyebrow: 'Welcome',
+    title: `Hi ${name}, your ElixClinix account is ready`,
+    intro:
+      'Thank you for registering. We can support you and your family with coordinated healthcare through the ElixClinix app.',
+    body,
+    buttonLabel: 'Open ElixClinix',
+    buttonUrl: appUrl,
+    footerNote: `Need help? Call <a href="tel:9449811444" style="color:${EMAIL_BRAND};text-decoration:none;">944-981-1444</a>
+      or email <a href="mailto:${HEAD_OFFICE_EMAIL}" style="color:${EMAIL_BRAND};text-decoration:none;">${HEAD_OFFICE_EMAIL}</a>.`
+  });
 }
 
 async function sendTemporaryPasswordEmail(
@@ -850,8 +916,6 @@ async function sendTemporaryPasswordEmail(
   details?: {
     patientId?: string | null;
     mobile?: string | null;
-    clinicWelcome?: boolean;
-    branch?: ClinicBranchDetails | null;
   }
 ): Promise<{ error?: string }> {
   const apiKey = env.RESEND_API_KEY?.trim();
@@ -865,24 +929,14 @@ async function sendTemporaryPasswordEmail(
   }
 
   const appUrl = env.ALLOWED_ORIGIN?.trim() || 'https://app.elixclinix.com';
-  const safeName = escapeHtml(patientName.trim() || 'Patient');
-  const useClinicWelcome = Boolean(details?.clinicWelcome);
-  const html = useClinicWelcome
-    ? buildClinicPatientWelcomeEmailHtml({
-        patientName,
-        patientId: details?.patientId ?? '',
-        mobile: details?.mobile ?? '',
-        email: toEmail,
-        temporaryPassword,
-        appUrl,
-        branch: details?.branch
-      })
-    : `
-        <p>Hi ${safeName},</p>
-        <p>Your clinic created your ElixClinix account.</p>
-        <p><strong>Temporary password:</strong> ${escapeHtml(temporaryPassword)}</p>
-        <p>Sign in at <a href="${escapeHtml(appUrl)}">${escapeHtml(appUrl)}</a>. On first login, you will be asked to change your password.</p>
-      `;
+  const html = buildRegistrationWelcomeEmailHtml({
+    patientName,
+    patientId: details?.patientId ?? '',
+    mobile: details?.mobile ?? '',
+    email: toEmail,
+    temporaryPassword,
+    appUrl
+  });
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -893,7 +947,7 @@ async function sendTemporaryPasswordEmail(
     body: JSON.stringify({
       from: `${senderName} <${senderEmail}>`,
       to: [toEmail],
-      subject: useClinicWelcome ? 'Welcome to ElixClinix' : 'Your ElixClinix login is ready',
+      subject: 'Welcome to ElixClinix',
       html
     })
   });
@@ -1370,7 +1424,6 @@ async function provisionPatientLogin(profileId: string, env: Env) {
   });
   if (enable.error) return { error: enable.error };
 
-  const branch = profile.clinic_id ? await loadClinicBranch(profile.clinic_id, env) : null;
   const emailResult = await sendTemporaryPasswordEmail(
     profile.email.trim().toLowerCase(),
     profile.full_name,
@@ -1378,13 +1431,7 @@ async function provisionPatientLogin(profileId: string, env: Env) {
     env,
     {
       patientId: profile.elix_id,
-      mobile: profile.phone,
-      clinicWelcome: Boolean(profile.clinic_id),
-      branch:
-        branch ??
-        (profile.clinic_id
-          ? { name: 'ElixClinix branch', location: null, email: null, phone: null }
-          : null)
+      mobile: profile.phone
     }
   );
 
@@ -1468,7 +1515,7 @@ async function sendClinicAssignmentNotification(profileId: string, env: Env): Pr
 
   return sendEmailViaResend({
     toEmail: profile.email.trim().toLowerCase(),
-    subject: 'Welcome to ElixClinix',
+    subject: 'Your ElixClinix branch assignment',
     html: buildClinicAssignmentEmailHtml({
       patientName: profile.full_name,
       branch
