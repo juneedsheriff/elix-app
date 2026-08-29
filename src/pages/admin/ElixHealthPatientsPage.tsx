@@ -385,7 +385,7 @@ export default function ElixHealthPatientsPage() {
     <div className='doctors-mgmt doctors-mgmt-page elixhealth-datatable-page'>
       <PatientsPageHeader
         totalCount={workspaceScopedPatients.length}
-        canEdit={canEdit || canAddPatient}
+        canAddPatient={canAddPatient}
         onOpenFilters={() => setDrawerOpen(true)}
         onExport={handleExport}
         onRefresh={() => void load()}

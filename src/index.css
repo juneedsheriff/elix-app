@@ -2966,11 +2966,46 @@ select {
 
 .doctor-consultation-page__header {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 0.75rem;
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   min-width: 0;
+}
+
+.doctor-consultation-page__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.doctor-consultation-page__join-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.mobile-shell .doctor-consultation-page__header {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.mobile-shell .doctor-consultation-page__header-actions {
+  flex-direction: column;
+  align-items: stretch;
+  margin-left: 0;
+  width: 100%;
+}
+
+.mobile-shell .doctor-consultation-page__join-btn {
+  justify-content: center;
+  width: 100%;
 }
 
 .doctor-consultation-page__back {
@@ -2989,7 +3024,7 @@ select {
   align-items: center;
   gap: 0.65rem;
   min-width: 0;
-  width: 100%;
+  flex: 1 1 auto;
 }
 
 .doctor-consultation-page__heading-titles {

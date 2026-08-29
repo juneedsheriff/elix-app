@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Camera, ClipboardList, FileUp, Loader2, Eraser } from 'lucide-react';
+import { ArrowLeft, Camera, ClipboardList, FileUp, Loader2, Eraser, Video } from 'lucide-react';
 import FollowupDatePicker from '../../components/Consultation/FollowupDatePicker';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
@@ -27,6 +27,7 @@ import {
   getDoctorConsultationRequestId
 } from '../../lib/navigation/doctorConsultationNav';
 import {
+  canJoinConsultationMeeting,
   consultationNotesFileValidationError,
   mergeConsultationSummaryWithDoctorResponse,
   consultationSummaryFromDoctorResponse,
@@ -595,22 +596,35 @@ export default function DoctorConsultationPage({
             ) : null}
           </div>
         </div>
-        <div className='doctor-consultation-page__case-context-action'>
-          <button
-            type='button'
-            className='secondary-btn doctor-consultation-page__case-context-btn'
-            onClick={() => setCaseContextOpen(true)}
-            disabled={loading || !request}
-            aria-haspopup='dialog'
-            aria-expanded={caseContextOpen}
-            aria-describedby='doctor-consultation-case-context-hint'
-          >
-            <ClipboardList size={18} aria-hidden />
-            Patient case details
-          </button>
-          <p id='doctor-consultation-case-context-hint' className='doctor-consultation-page__case-context-hint muted'>
-            Click to view case details
-          </p>
+        <div className='doctor-consultation-page__header-actions'>
+          {request && canJoinConsultationMeeting(request) && request.meeting_link?.trim() ? (
+            <a
+              href={request.meeting_link.trim()}
+              target='_blank'
+              rel='noreferrer'
+              className='primary-btn doctor-consultation-page__join-btn'
+            >
+              <Video size={16} aria-hidden />
+              Join meeting
+            </a>
+          ) : null}
+          <div className='doctor-consultation-page__case-context-action'>
+            <button
+              type='button'
+              className='secondary-btn doctor-consultation-page__case-context-btn'
+              onClick={() => setCaseContextOpen(true)}
+              disabled={loading || !request}
+              aria-haspopup='dialog'
+              aria-expanded={caseContextOpen}
+              aria-describedby='doctor-consultation-case-context-hint'
+            >
+              <ClipboardList size={18} aria-hidden />
+              Patient case details
+            </button>
+            <p id='doctor-consultation-case-context-hint' className='doctor-consultation-page__case-context-hint muted'>
+              Click to view case details
+            </p>
+          </div>
         </div>
       </header>
 

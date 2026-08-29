@@ -10,7 +10,7 @@ import {
 
 type PatientsPageHeaderProps = {
   totalCount: number;
-  canEdit: boolean;
+  canAddPatient: boolean;
   onOpenFilters: () => void;
   onExport: () => void;
   onRefresh: () => void;
@@ -20,7 +20,7 @@ type PatientsPageHeaderProps = {
 
 function PatientsPageHeader({
   totalCount,
-  canEdit,
+  canAddPatient,
   onOpenFilters,
   onExport,
   onRefresh,
@@ -68,7 +68,7 @@ function PatientsPageHeader({
           </Menu.Dropdown>
         </Menu>
 
-        {canEdit ? (
+        {canAddPatient ? (
           <Button
             radius='md'
             className='doctors-mgmt-header__primary'
