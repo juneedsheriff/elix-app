@@ -22,9 +22,9 @@ export default function DoctorIncomingRequests({
       onNavigate={onNavigate}
       doctorReturnScreen='doctor-dashboard'
       title='Patient Requests'
-      subtitle='Pending, assigned, and past requests for you'
+      subtitle='All, pending, and completed requests assigned to you'
       signInHint='Sign in as a doctor to view patient requests.'
-      emptyHint='No assigned requests yet. Pending and past cases will appear here once patients are booked with you.'
+      emptyHint='No requests yet. Assigned pending and completed cases will appear here.'
     />
   );
 }

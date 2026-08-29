@@ -251,9 +251,9 @@ export default function OpinionRequestsPanel({
                     className='doctor-cases-workspace__status-filter'
                     aria-label='Filter cases'
                     data={[
-                      { value: 'all', label: `All assigned (${doctorAllCasesCount})` },
+                      { value: 'all', label: `All (${doctorAllCasesCount})` },
                       { value: 'pending', label: `Pending (${doctorPendingCasesCount})` },
-                      { value: 'completed', label: `Past (${doctorCompletedCasesCount})` }
+                      { value: 'completed', label: `Completed (${doctorCompletedCasesCount})` }
                     ]}
                     value={doctorStatusFilter}
                     onChange={(value) =>
@@ -356,9 +356,9 @@ export default function OpinionRequestsPanel({
               onClearFilters={() => setDoctorSearch('')}
                 emptyHint={
                   doctorStatusFilter === 'completed'
-                    ? 'No past requests yet.'
+                    ? 'No completed requests yet.'
                     : doctorStatusFilter === 'pending'
-                      ? 'No pending assigned requests.'
+                      ? 'No pending requests.'
                       : emptyHint
                 }
               onNavigate={onNavigate}
