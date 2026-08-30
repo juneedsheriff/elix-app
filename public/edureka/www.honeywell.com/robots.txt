@@ -1,0 +1,53 @@
+Sitemap:https://www.honeywell.com/sitemap.xml
+Sitemap:https://www.honeywell.com/sitemap-dz-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ao-en.xml
+Sitemap:https://www.honeywell.com/sitemap-au-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ca-en.xml
+Sitemap:https://www.honeywell.com/sitemap-cz-en.xml
+Sitemap:https://www.honeywell.com/sitemap-in-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ke-en.xml
+Sitemap:https://www.honeywell.com/sitemap-my-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ng-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ph-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ro-en.xml
+Sitemap:https://www.honeywell.com/sitemap-za-en.xml
+Sitemap:https://www.honeywell.com/sitemap-th-en.xml
+Sitemap:https://www.honeywell.com/sitemap-gb-en.xml
+Sitemap:https://www.honeywell.com/sitemap-at-de.xml
+Sitemap:https://www.honeywell.com/sitemap-be-nl.xml
+Sitemap:https://www.honeywell.com/sitemap-be-fr.xml
+Sitemap:https://www.honeywell.com/sitemap-br-pt.xml
+Sitemap:https://www.honeywell.com/sitemap-bg-bg.xml
+Sitemap:https://www.honeywell.com/sitemap-ca-fr.xml
+Sitemap:https://www.honeywell.com/sitemap-dk-da.xml
+Sitemap:https://www.honeywell.com/sitemap-fi-fi.xml
+Sitemap:https://www.honeywell.com/sitemap-fr-fr.xml
+Sitemap:https://www.honeywell.com/sitemap-de-de.xml
+Sitemap:https://www.honeywell.com/sitemap-hu-hu.xml
+Sitemap:https://www.honeywell.com/sitemap-id-id.xml
+Sitemap:https://www.honeywell.com/sitemap-jp-ja.xml
+Sitemap:https://www.honeywell.com/sitemap-kr-ko.xml
+Sitemap:https://www.honeywell.com/sitemap-mx-es.xml
+Sitemap:https://www.honeywell.com/sitemap-ma-fr.xml
+Sitemap:https://www.honeywell.com/sitemap-no-nb.xml
+Sitemap:https://www.honeywell.com/sitemap-pl-pl.xml
+Sitemap:https://www.honeywell.com/sitemap-sk-sk.xml
+Sitemap:https://www.honeywell.com/sitemap-ch-fr.xml
+Sitemap:https://www.honeywell.com/sitemap-ch-de.xml
+Sitemap:https://www.honeywell.com/sitemap-tn-fr.xml
+Sitemap:https://www.honeywell.com/sitemap-tr-tr.xml
+Sitemap:https://www.honeywell.com/sitemap-vn-vi.xml
+Sitemap:https://www.honeywell.com/sitemap-ae-en.xml
+Sitemap:https://www.honeywell.com/sitemap-eg-en.xml
+Sitemap:https://www.honeywell.com/sitemap-sa-en.xml
+Sitemap:https://www.honeywell.com/sitemap-ae-ar.xml
+Sitemap:https://www.honeywell.com/sitemap-sa-ar.xml
+Sitemap:https://www.honeywell.com/sitemap-it-it.xml
+
+User-agent: *
+Disallow: /us/en/search?search=*
+Disallow: /us/en/search?q=*
+Disallow: /content/honeywell/us/en/search.html?search=*
+Disallow: /content/dam/honeywellbt/en/documents/downloads/honeywell-forge/Honeywell_Forge_Terms.pdf
+Disallow: /us/en/error/monitoring-page
+Disallow: /content/honeywellbt/us/en/error/monitoring-page.html

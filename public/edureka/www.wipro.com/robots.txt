@@ -1,0 +1,134 @@
+# Robots_Production.txt for wipro.com
+# robots.txt for wipro.com
+User-agent: *
+
+Disallow: /zh-CN/
+
+Disallow: /sites
+
+Disallow: /newton
+
+Disallow: /search/
+
+Disallow: /investors/AGM-2021/webcast/ 
+Disallow: /investors/AGM-2021/webcast-
+
+
+Disallow: /content/dam/nexus/gated/
+
+## PN-720
+
+Disallow: /content/dam/nexus/en/service-lines/global-infrastructure-services/latest-thinking/State-of-IT-Infrastructure-Report-2020.pdf
+Disallow: /content/dam/nexus/en/industries/network-equipment-providers/solutions/future-of-work-is-now-are-you-ready.pdf
+
+Disallow: /content/dam/nexus/en/service-lines/applications/solutions/wipros-utilities-customer-experience-cx-solution.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-positioned-as-a-leader-in-healthcare-payer-operations-services-2020.pdf
+Disallow: /content/dam/nexus/en/service-lines/applications/solutions/remote-sap-cloud-assessment.pdf
+Disallow: /content/dam/nexus/en/service-lines/product-engineering/case-study/the-highland-council-digital-transformation-allowed-a-sparse-reggion-to-support-5000-people-working-from-home.pdf
+
+Disallow: /content/dam/nexus/en/service-lines/product-engineering/latest-thinking/disrupt-an-engineeringnxt-point-of-view.pdf
+
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-positioned-as-a-leader-in-the-forrester-new-wave-rpa-service-providers-in-healthcare-q3-2020.pdf
+Disallow: /content/dam/nexus/en-JP/pdfs/wipro-testing-service.pdf
+
+
+
+Disallow: /content/dam/nexus/en/service-lines/applications/latest-thinking/how-to-drive-effective-digital-strategy-with-intelligent-process-automation.pdf 
+Disallow: /content/dam/nexus/en/holmes/pdfs/enhancing-sdlc-traceability-using-nlp.pdf 
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/business-strategy-clk-enerji-sets-an-ambitious-tone-for-business-transformation-in-the-turkish-energy-industry.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/canvassing-utilities-digital-transformation.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/digital-utility-as-a-service-nrgi-experience.pdf 
+
+Disallow: /content/dam/nexus/en/newsroom/events/2020/videos/third-party-ecosystem-has-changed-have-you-changed-your-cybersecurity-strategy-v2.mp4
+Disallow: /content/dam/nexus/en/newsroom/events/2020/videos/building-the-smarter-state.mp4 
+
+Disallow: /content/dam/nexus/en/newsroom/events/2020/videos/edgewell-and-carlton-united-breweries-to-learn-how-change-management-improves-trade-promotion-roi.mp4?qas
+Disallow: /content/dam/nexus/en/service-lines/global-infrastructure-services/latest-thinking/everest-group-peak-matrix-for-aware-intelligent-it-infrastructure-services-automation-peak-2021-focus-on-wipro.pdf 
+Disallow: /content/dam/nexus/en/newsroom/events/2020/videos/sap-on-aws-unleash-the-potential-of-sap-applications-with-sap-and-aws-cloud.mp4
+Disallow: /content/dam/nexus/en/newsroom/events/2020/videos/transforming-the-business-experience-by-accelerating-the-modernization-journey-of-the-indian-bfsi-industry.mp4
+
+
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-named-a-leader-in-idc-marketscape-worldwide-managed-security-services-2020-vendor-assessment.pdf
+Disallow: /content/dam/nexus/en/holmes/pdfs/state-of-automation-report-2020.pdf
+
+Disallow: /content/dam/nexus/pt-br/PDF/HFS-ighlight-acquistion-of-IVIA-for-Wipro-PT.pdf
+Disallow: /content/dam/nexus/en/service-lines/applications/solutions/wipros-smart-water-solution.pdf
+
+Disallow: /sites/amd/
+Disallow: /content/nexus/en/sites/amd/
+
+Disallow: /es-MX/site/cemex/
+Disallow: /content/dam/nexus/en-latam/video/wipro-cemex.mp4 
+Disallow: /content/dam/nexus/en-latam/video/cemex-testimonials.mp4  
+
+
+
+Disallow: /sites/newton/
+Disallow: /content/nexus/en/sites/newton/
+
+Disallow: /content/dam/nexus/en/images/sites/pdf/executive-summary-2.pdf
+Disallow: /content/dam/nexus/en/images/sites/pdf/solution-summary-2.pdf
+Disallow: /content/dam/nexus/en/images/sites/pdf/finance-solutions-suite.pdf
+Disallow: /content/dam/nexus/en/images/sites/pdf/procurement-solutions-suite-2.pdf
+Disallow: /content/dam/nexus/en/images/sites/pdf/mdm-solutions-suite.pdf
+Disallow: /content/dam/nexus/en/images/sites/pdf/hr-solution-suite.pdf
+
+
+
+Disallow: /content/dam/nexus/en/service-lines/global-infrastructure-services/latest-thinking/wipro-fluidit-delivering-business-agility-through-hybrid-multicloud-management-services.pdf
+Disallow: /content/dam/nexus/en/service-lines/business-process/solutions/reinvent-hr-to-thrive-in-a-new-age-digital-economy.pdf 
+Disallow: /content/dam/nexus/en/service-lines/business-process/solutions/elevating-employee-experience-transforming-hr-to-create-business-impact.pdf 
+Disallow: /content/dam/nexus/en/service-lines/applications/case-study/ebook-building-enterprises-of-the-future-with-oracle-cloud.pdf 
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/isg-provider-lens-servicenow-ecosystem-partners-2021.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-positioned-as-a-leader-in-idc-marketscape-worldwide-retail-commerce-platform-service-providers-2020-vendor-assessment.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-positioned-as-a-leader-in-idc-marketscape-worldwide-retail-co-innovation-services-providers-2020-vendor-assessment.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/idc-tech-spotlight-managed-multi-cloud-services-accelerating-the-journey-to-hybrid-cloud-and-agile-business-operations.pdf
+Disallow: /content/dam/nexus/en/service-lines/global-infrastructure-services/latest-thinking/how-to-build-the-enterprise-of-the-future.pdf
+Disallow: /content/dam/nexus/en/industries/securities-and-capital-markets/latest-thinking/m-a-landscape-in-capital-markets-the-role-of-it-in-post-merger-integration-org1.pdf
+Disallow: /content/dam/nexus/en/service-lines/product-engineering/latest-thinking/eumdr-quality-management-system-remediation.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-is-positioned-as-a-leader-in-the-neat-vendor-evaluation-by-nelson-hall-for-sap-cloud-migration-overall-240221.pdf
+Disallow: /content/dam/nexus/en/newsroom/events/2020/videos/the-digital-evolution-and-the-future-of-contact-centers-opt.mp4
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/everest-group-peak-matrix-for-artificial-intelligence-ai-services-focus-on-wipro.pdf
+Disallow: /content/dam/nexus/en/service-lines/product-engineering/solutions/intelligent-intralogistics-mobility-platform.pdf
+Disallow: /content/dam/nexus/en/newsroom/events/2021/Videos/innovate-and-optimize-complaints-management-operations-using-intelligent-platforms-webinar-recording.mp4
+Disallow: /content/dam/nexus/en/service-lines/global-infrastructure-services/latest-thinking/wipro-fluidit-delivering-business-agility-through-hybrid-multicloud-management-services.pdf
+Disallow: /content/dam/nexus/en/service-lines/applications/solutions/process-mining-as-a-service.pdf
+Disallow: /content/dam/nexus/en/analyst-speak/pdfs/wipro-positioned-as-a-leader-in-everest-group-peak-matrix-for-intelligent-process-automation-solution-providers-2021.pdf
+
+
+
+
+Disallow: /sites/newton/
+Disallow: /content/dam/nexus/en/images/sites/videos/a-message-from-our-ceo.mp4
+Disallow: /content/dam/nexus/en/images/sites/videos/inclusion-is-way-of-life.mp4
+Disallow: /content/dam/nexus/en/images/sites/videos/spirit-of-giving.mp4
+
+
+Disallow: /wef-davos/
+Disallow: /sites/
+Disallow: /site/
+Disallow: /content/dam/nexus/en/ThierryDelaporteMessageForNordea(2).mp4
+Disallow: /event/
+Disallow: /content/dam/nexus/en/service-lines/business-process/pdfs/visionedge-eula-6.7.1.pdf
+
+
+Disallow: /cybersecurity/advisory-crowdstrike-falcon-sensor-issues
+Disallow: /cybersecurity/advisory-crowdstrike-falcon-sensor-issues/
+
+Disallow: /content/dam/nexus/en/site/explore-india
+Disallow: /content/dam/nexus/en/site/explore-india/
+Disallow: /site/explore-india
+Disallow: /site/explore-india/
+
+Disallow: /content/dam/nexus/en/service-lines/business-process/pdfs/general-tcs-v11-14-august-2024.pdf
+
+Disallow: /lp/
+Disallow: /landingpages/
+Disallow: /mailers/
+Disallow: /ftob/
+Disallow: /mailer2/
+Disallow: /mailer/
+Disallow: /home-new-accessib/
+Disallow: /microsite/.pdf
+
+Sitemap: https://www.wipro.com/sitemap.xml

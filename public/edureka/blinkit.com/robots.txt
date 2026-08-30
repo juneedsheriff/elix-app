@@ -1,0 +1,22 @@
+User-agent: *
+Disallow: /compliance
+Disallow: /account
+Disallow: /checkout
+Disallow: /browser-not-supported
+Disallow: /community-shopping
+Disallow: /society-groups
+Disallow: /cart
+Disallow: /cln/*
+Disallow: /s/*
+Disallow: /brand/*/?cid=
+Disallow: /bct/*
+Allow: /sitemap/*
+Disallow: /sitemap/cn/*.xml
+Disallow: /sitemap/products/sitemap-specials-freebie.xml
+Disallow: /sitemap/products/sitemap-specials-free-store.xml 
+Disallow: /sitemap/products/sitemap-specials-bill-breaker.xml
+Disallow: /tab-layouts
+Disallow: /brand/Zomato
+
+Sitemap: https://blinkit.com/sitemap.xml
+
