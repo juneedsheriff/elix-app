@@ -5,6 +5,7 @@ import {
   writePdfIssuerContactBlock
 } from './pdfBranding';
 import { formatConsultationFollowupDate } from './consultationSummaryFields';
+import { orderFileToPdfImageData } from './consultationOrdersPdf';
 import type { Doctor } from '../types/doctor';
 import type { ConsultationSummary } from '../types/opinionRequest';
 
@@ -24,6 +25,13 @@ export type ConsultationSummaryPdfMeta = {
   issuedAt?: Date;
 };
 
+export type ConsultationSummaryPdfAttachments = {
+  prescriptionFile?: File | Blob | null;
+  prescriptionFileName?: string | null;
+  labOrderFile?: File | Blob | null;
+  labOrderFileName?: string | null;
+};
+
 const CLINICAL_SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'chief_complaint', label: 'Chief complaint' },
   { key: 'history_present_illness', label: 'History of present illness' },
@@ -34,7 +42,7 @@ const CLINICAL_SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }
   { key: 'followup_date', label: 'Follow-up date' }
 ];
 
-/** Full section list (includes orders) — kept for callers that want every filled field. */
+/** Full section list (includes orders). */
 const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   ...CLINICAL_SECTIONS.slice(0, 5),
   { key: 'labs_diagnostics', label: 'Lab Order' },
@@ -42,8 +50,18 @@ const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
   { key: 'prescription', label: 'Prescription' }
 ];
 
+function isUploadedFilePlaceholder(value: string): boolean {
+  return /^\[uploaded file:\s*.+\]$/i.test(value.trim());
+}
+
+function uploadedFileNameFromPlaceholder(value: string): string | null {
+  const match = value.trim().match(/^\[uploaded file:\s*(.+)\]$/i);
+  return match?.[1]?.trim() || null;
+}
+
 function sectionDisplayValue(key: keyof ConsultationSummary, value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return '';
+  if (isUploadedFilePlaceholder(value)) return '';
   if (key === 'followup_date') {
     return formatConsultationFollowupDate(value);
   }
@@ -89,7 +107,8 @@ function shortId(value: string): string {
 
 async function buildConsultationSummaryPdf(
   summary: ConsultationSummary,
-  meta: ConsultationSummaryPdfMeta
+  meta: ConsultationSummaryPdfMeta,
+  attachments?: ConsultationSummaryPdfAttachments
 ) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -188,7 +207,8 @@ async function buildConsultationSummaryPdf(
   addLine('Clinical summary', 13, true);
   y += 4;
 
-  for (const { key, label } of CLINICAL_SECTIONS) {
+  for (const { key, label } of SECTIONS) {
+    if (key === 'prescription' || key === 'labs_diagnostics') continue;
     const value = sectionDisplayValue(key, summary[key]);
     if (!value) continue;
     addLine(label, 11, true);
@@ -196,7 +216,61 @@ async function buildConsultationSummaryPdf(
     y += 8;
   }
 
-  // Prescription and lab orders are generated/shown as separate PDFs.
+  const addOrderSection = async (
+    label: string,
+    typedValue: string | null | undefined,
+    storedFileName: string | null | undefined,
+    file: File | Blob | null | undefined
+  ) => {
+    const raw = typedValue?.trim() ?? '';
+    const placeholderName =
+      raw && isUploadedFilePlaceholder(raw) ? uploadedFileNameFromPlaceholder(raw) : null;
+    const text = raw && !isUploadedFilePlaceholder(raw) ? raw : '';
+    const fileName =
+      storedFileName?.trim() || placeholderName || (file instanceof File ? file.name : null);
+    if (!text && !fileName && !file) return;
+
+    addLine(label, 11, true);
+    if (text) addLine(text, 10);
+    if (fileName && !text) {
+      addLine(`Uploaded file: ${fileName}`, 10);
+    }
+    if (file) {
+      const imageData = await orderFileToPdfImageData(file, fileName);
+      if (imageData) {
+        const imageMaxWidth = contentWidth;
+        const imageMaxHeight = 260;
+        const scale = Math.min(
+          imageMaxWidth / imageData.width,
+          imageMaxHeight / imageData.height,
+          1
+        );
+        const drawWidth = imageData.width * scale;
+        const drawHeight = imageData.height * scale;
+        ensureSpace(drawHeight + 8);
+        doc.addImage(imageData.dataUrl, imageData.format, margin, y, drawWidth, drawHeight);
+        y += drawHeight + 8;
+      } else if (!text) {
+        addLine('This file is also stored as a separate document.', 10);
+      }
+    } else if (fileName && !text) {
+      addLine('This file is also stored as a separate document.', 10);
+    }
+    y += 8;
+  };
+
+  await addOrderSection(
+    'Lab Order',
+    summary.labs_diagnostics,
+    attachments?.labOrderFileName ?? summary.lab_order_file_name,
+    attachments?.labOrderFile
+  );
+  await addOrderSection(
+    'Prescription',
+    summary.prescription,
+    attachments?.prescriptionFileName ?? summary.prescription_file_name,
+    attachments?.prescriptionFile
+  );
 
   ensureSpace(40);
   y += 8;
@@ -248,7 +322,8 @@ export function consultationSummaryPdfMetaFromRequest(
 /** Build consultation summary PDF bytes for upload or preview. */
 export async function generateConsultationSummaryPdfBlob(
   summary: ConsultationSummary,
-  meta: ConsultationSummaryPdfMeta
+  meta: ConsultationSummaryPdfMeta,
+  attachments?: ConsultationSummaryPdfAttachments
 ): Promise<Blob> {
   const clinic = await resolvePdfClinicContext({
     clinicId: meta.clinicId,
@@ -256,20 +331,25 @@ export async function generateConsultationSummaryPdfBlob(
     doctor: meta.doctor,
     patientId: meta.patientId
   });
-  const doc = await buildConsultationSummaryPdf(summary, {
-    ...meta,
-    clinicId: clinic.clinicId,
-    clinicName: clinic.clinicName
-  });
+  const doc = await buildConsultationSummaryPdf(
+    summary,
+    {
+      ...meta,
+      clinicId: clinic.clinicId,
+      clinicName: clinic.clinicName
+    },
+    attachments
+  );
   return doc.output('blob');
 }
 
 /** Build and download a consultation summary PDF (client-side fallback). */
 export async function downloadConsultationSummaryPdf(
   summary: ConsultationSummary,
-  meta: ConsultationSummaryPdfMeta
+  meta: ConsultationSummaryPdfMeta,
+  attachments?: ConsultationSummaryPdfAttachments
 ) {
-  const blob = await generateConsultationSummaryPdfBlob(summary, meta);
+  const blob = await generateConsultationSummaryPdfBlob(summary, meta, attachments);
   const safeName = (meta.patientName ?? 'patient').replace(/[^\w.-]+/g, '_').slice(0, 40);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -280,16 +360,20 @@ export async function downloadConsultationSummaryPdf(
 }
 
 export function getConsultationSummarySections(summary: ConsultationSummary) {
-  return CLINICAL_SECTIONS.map(({ key, label }) => ({
-    label,
-    value: sectionDisplayValue(key, summary[key])
-  })).filter((section) => section.value);
+  return SECTIONS.map(({ key, label }) => {
+    const value = sectionDisplayValue(key, summary[key]);
+    if (value) return { label, value };
+    if (key === 'prescription' && summary.prescription_file_name?.trim()) {
+      return { label, value: `Uploaded file: ${summary.prescription_file_name.trim()}` };
+    }
+    if (key === 'labs_diagnostics' && summary.lab_order_file_name?.trim()) {
+      return { label, value: `Uploaded file: ${summary.lab_order_file_name.trim()}` };
+    }
+    return { label, value: '' };
+  }).filter((section) => section.value);
 }
 
-/** All non-empty fields including prescription / lab order text (not used in summary PDF). */
+/** All non-empty fields including prescription / lab order text. */
 export function getConsultationAllSections(summary: ConsultationSummary) {
-  return SECTIONS.map(({ key, label }) => ({
-    label,
-    value: sectionDisplayValue(key, summary[key])
-  })).filter((section) => section.value);
+  return getConsultationSummarySections(summary);
 }

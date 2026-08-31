@@ -5069,9 +5069,28 @@ export async function saveDoctorConsultation(
     patient_auth_user_id: input.patient_auth_user_id ?? request.patient_id ?? null
   };
 
+  const prescriptionFileNameForPdf =
+    attachments?.prescriptionFile?.name?.trim() ||
+    attachments?.existingPrescriptionFileName?.trim() ||
+    null;
+  const labOrderFileNameForPdf =
+    attachments?.labOrderFile?.name?.trim() ||
+    attachments?.existingLabOrderFileName?.trim() ||
+    null;
+
   const blob = await generateConsultationSummaryPdfBlob(
-    summaryForPdf,
-    consultationSummaryPdfMetaFromRequest(request, doctor)
+    {
+      ...summaryForPdf,
+      prescription_file_name: prescriptionFileNameForPdf,
+      lab_order_file_name: labOrderFileNameForPdf
+    },
+    consultationSummaryPdfMetaFromRequest(request, doctor),
+    {
+      prescriptionFile: attachments?.prescriptionFile ?? null,
+      prescriptionFileName: prescriptionFileNameForPdf,
+      labOrderFile: attachments?.labOrderFile ?? null,
+      labOrderFileName: labOrderFileNameForPdf
+    }
   );
   const file = new File([blob], `consultation-summary-${requestId}.pdf`, {
     type: 'application/pdf'

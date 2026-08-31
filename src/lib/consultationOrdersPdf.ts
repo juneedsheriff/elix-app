@@ -205,7 +205,7 @@ async function buildOrderPdf(
     addLine(fileName, 10);
     y += 8;
 
-    const imageData = await fileToPdfImageData(uploadedFile.blob, uploadedFile.fileName);
+    const imageData = await orderFileToPdfImageData(uploadedFile.blob, uploadedFile.fileName);
     if (imageData) {
       const imageMaxWidth = contentWidth;
       const imageMaxHeight = 260;
@@ -251,7 +251,7 @@ async function buildOrderPdf(
   return doc;
 }
 
-async function fileToPdfImageData(
+export async function orderFileToPdfImageData(
   file: Blob,
   fileName?: string | null
 ): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG'; width: number; height: number } | null> {

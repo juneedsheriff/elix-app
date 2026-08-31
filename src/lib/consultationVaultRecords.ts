@@ -17,6 +17,13 @@ import {
   uploadFileToR2
 } from './r2Storage';
 
+function typedOrderText(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return '';
+  if (/^\[uploaded file:\s*.+\]$/i.test(trimmed)) return '';
+  return trimmed;
+}
+
 type SyncConsultationOrdersInput = {
   request: OpinionRequest;
   doctor?: Doctor | null;
@@ -140,8 +147,8 @@ export async function syncConsultationOrdersToPatientVault(
   }
 
   const meta = orderPdfMeta(input);
-  const prescriptionText = prescription?.trim() ?? '';
-  const labText = labsDiagnostics?.trim() ?? '';
+  const prescriptionText = typedOrderText(prescription);
+  const labText = typedOrderText(labsDiagnostics);
 
   if (prescriptionText) {
     const result = await storeConsultationOrderPdf(request.id, 'prescription', prescriptionText, meta);

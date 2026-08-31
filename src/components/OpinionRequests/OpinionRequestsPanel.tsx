@@ -87,7 +87,7 @@ export default function OpinionRequestsPanel({
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [doctorSearch, setDoctorSearch] = useState('');
-  const [doctorStatusFilter, setDoctorStatusFilter] = useState<DoctorCaseStatusFilter>('all');
+  const [doctorStatusFilter, setDoctorStatusFilter] = useState<DoctorCaseStatusFilter>('pending');
   const hasLoadedOnceRef = useRef(false);
 
   const canLoad = view === 'patient' ? Boolean(patientAuthUserId) : Boolean(doctorId || doctorEmail);
