@@ -91,6 +91,16 @@ function uploadedFileNameFromPlaceholder(value: string | null | undefined): stri
   return match?.[1]?.trim() || null;
 }
 
+function isConsultationOrderStoragePath(
+  storagePath: string | null | undefined,
+  requestId: string,
+  recordCategory: 'prescriptions' | 'lab_results'
+): boolean {
+  const path = storagePath?.trim().toLowerCase() ?? '';
+  if (!path) return false;
+  return path.includes(`/consultation-orders/${requestId.toLowerCase()}/${recordCategory}/`);
+}
+
 function resolveOrderUploadFallback(
   request: OpinionRequest,
   recordCategory: 'prescriptions' | 'lab_results',
@@ -99,21 +109,9 @@ function resolveOrderUploadFallback(
   const records = request.records ?? [];
   if (!records.length) return { path: null, fileName: null };
 
-  const isPrescriptionCategory = recordCategory === 'prescriptions';
-  const categoryKeywords = isPrescriptionCategory
-    ? ['prescription', 'prescriptions']
-    : ['lab_order', 'lab-order', 'lab order', 'lab_results', 'lab-results', 'lab results'];
-
-  const byCategory = records.filter((record) => {
-    const path = record.storage_path?.toLowerCase() ?? '';
-    const summary = record.summary?.toLowerCase() ?? '';
-    if (!path && !summary) return false;
-    if (path.includes(`/consultation-orders/${request.id}/${recordCategory}/`)) return true;
-    if (path.includes(`/consultation-orders/${request.id}/`) && categoryKeywords.some((k) => path.includes(k))) {
-      return true;
-    }
-    return categoryKeywords.some((k) => summary.includes(k));
-  });
+  const byCategory = records.filter((record) =>
+    isConsultationOrderStoragePath(record.storage_path, request.id, recordCategory)
+  );
   if (!byCategory.length) return { path: null, fileName: null };
 
   const preferred = preferredName?.trim().toLowerCase();
@@ -157,6 +155,8 @@ export default function ConsultationSummaryPdfView({
   const labPlaceholderName = uploadedFileNameFromPlaceholder(summary.labs_diagnostics);
   const hasPrescriptionPlaceholder = isUploadedFilePlaceholder(summary.prescription);
   const hasLabOrderPlaceholder = isUploadedFilePlaceholder(summary.labs_diagnostics);
+  const typedPrescription = !hasPrescriptionPlaceholder ? summary.prescription?.trim() || '' : '';
+  const typedLabOrder = !hasLabOrderPlaceholder ? summary.labs_diagnostics?.trim() || '' : '';
   const prescriptionFallback = resolveOrderUploadFallback(
     request,
     'prescriptions',
@@ -168,26 +168,27 @@ export default function ConsultationSummaryPdfView({
     labPlaceholderName ?? summary.lab_order_file_name
   );
   const prescriptionStoragePath =
-    summary.prescription_file_path?.trim() || prescriptionFallback.path || '';
-  const labStoragePath = summary.lab_order_file_path?.trim() || labFallback.path || '';
+    summary.prescription_file_path?.trim() ||
+    (hasPrescriptionPlaceholder ? prescriptionFallback.path : '') ||
+    '';
+  const labStoragePath =
+    summary.lab_order_file_path?.trim() || (hasLabOrderPlaceholder ? labFallback.path : '') || '';
   const prescriptionDisplayFileName =
     summary.prescription_file_name?.trim() ||
-    prescriptionFallback.fileName ||
+    (hasPrescriptionPlaceholder ? prescriptionFallback.fileName : null) ||
     prescriptionPlaceholderName;
   const labDisplayFileName =
-    summary.lab_order_file_name?.trim() || labFallback.fileName || labPlaceholderName;
-  const hasPrescriptionOrder = Boolean(
-    summary.prescription_file_path?.trim() ||
-      prescriptionFallback.path ||
-      (!hasPrescriptionPlaceholder && summary.prescription?.trim()) ||
-      prescriptionPlaceholderName
+    summary.lab_order_file_name?.trim() ||
+    (hasLabOrderPlaceholder ? labFallback.fileName : null) ||
+    labPlaceholderName;
+  const hasUploadedPrescription = Boolean(
+    summary.prescription_file_path?.trim() || prescriptionPlaceholderName || prescriptionStoragePath
   );
-  const hasLabOrder = Boolean(
-    summary.lab_order_file_path?.trim() ||
-      labFallback.path ||
-      (!hasLabOrderPlaceholder && summary.labs_diagnostics?.trim()) ||
-      labPlaceholderName
+  const hasUploadedLabOrder = Boolean(
+    summary.lab_order_file_path?.trim() || labPlaceholderName || labStoragePath
   );
+  const hasPrescriptionOrder = Boolean(hasUploadedPrescription || typedPrescription);
+  const hasLabOrder = Boolean(hasUploadedLabOrder || typedLabOrder);
 
   const resolveOrderUploadPathCandidates = async (
     category: 'prescriptions' | 'lab_results',
@@ -196,14 +197,15 @@ export default function ConsultationSummaryPdfView({
   ): Promise<{ paths: string[]; fileName: string | null }> => {
     const trimmedCurrent = currentPaths
       .map((value) => value?.trim() || '')
-      .filter(Boolean);
+      .filter((path) => isConsultationOrderStoragePath(path, request.id, category));
+
     const latest = await fetchLatestConsultationOrderFile(request.id, category);
     const latestPath = latest.data?.storagePath?.trim() || '';
 
     const unique = new Set<string>();
-    for (const path of [...trimmedCurrent, latestPath]) {
-      if (!path) continue;
-      unique.add(path);
+    for (const path of trimmedCurrent) unique.add(path);
+    if (isConsultationOrderStoragePath(latestPath, request.id, category)) {
+      unique.add(latestPath);
     }
 
     return {
@@ -439,31 +441,43 @@ export default function ConsultationSummaryPdfView({
     const load = async () => {
       setPrescriptionPreview((prev) => ({ ...prev, loading: true, error: null }));
 
-      // Prefer the doctor-uploaded file when present (text + upload are both collected).
-      const resolved = await resolveFirstAccessibleOrderFile(
-        'prescriptions',
-        [summary.prescription_file_path, prescriptionFallback.path, prescriptionStoragePath],
-        prescriptionDisplayFileName
-      );
-      if (resolved.path && resolved.url) {
-        if (cancelled) return;
-        revokeUrl(prescriptionUrlRef);
-        prescriptionUrlRef.current = resolved.url;
-        const fileName = resolved.fileName || resolved.path.split('/').pop() || '';
-        setPrescriptionPreview({
-          url: resolved.url,
-          loading: false,
-          error: null,
-          ...fileKindFromName(fileName)
-        });
-        return;
+      if (hasUploadedPrescription) {
+        const resolved = await resolveFirstAccessibleOrderFile(
+          'prescriptions',
+          [summary.prescription_file_path, prescriptionStoragePath],
+          prescriptionDisplayFileName
+        );
+        if (resolved.path && resolved.url) {
+          if (cancelled) return;
+          revokeUrl(prescriptionUrlRef);
+          prescriptionUrlRef.current = resolved.url;
+          const fileName = resolved.fileName || resolved.path.split('/').pop() || '';
+          setPrescriptionPreview({
+            url: resolved.url,
+            loading: false,
+            error: null,
+            ...fileKindFromName(fileName)
+          });
+          return;
+        }
+        if (hasPrescriptionPlaceholder) {
+          if (cancelled) return;
+          setPrescriptionPreview({
+            url: null,
+            loading: false,
+            error:
+              resolved.errorMessage || 'Uploaded prescription file was not found for this consultation.',
+            isPdf: true,
+            isImage: false
+          });
+          return;
+        }
       }
 
-      const typed = summary.prescription?.trim();
-      if (typed && !isUploadedFilePlaceholder(typed)) {
+      if (typedPrescription) {
         if (!clinicReady) return;
         try {
-          const blob = await generatePrescriptionOrderPdfBlob(typed, orderMeta);
+          const blob = await generatePrescriptionOrderPdfBlob(typedPrescription, orderMeta);
           if (cancelled) return;
           const url = URL.createObjectURL(blob);
           setPreviewUrl(prescriptionUrlRef, setPrescriptionPreview, url, {
@@ -484,17 +498,6 @@ export default function ConsultationSummaryPdfView({
       }
 
       if (!cancelled) {
-        if (typed && isUploadedFilePlaceholder(typed)) {
-          setPrescriptionPreview({
-            url: null,
-            loading: false,
-            error:
-              resolved.errorMessage || 'Uploaded prescription file was not found for this consultation.',
-            isPdf: true,
-            isImage: false
-          });
-          return;
-        }
         setPrescriptionPreview(emptyPreview());
       }
     };
@@ -506,6 +509,9 @@ export default function ConsultationSummaryPdfView({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
   }, [
     hasPrescriptionOrder,
+    hasUploadedPrescription,
+    hasPrescriptionPlaceholder,
+    typedPrescription,
     summary.prescription,
     summary.prescription_file_path,
     summary.prescription_file_name,
@@ -531,31 +537,42 @@ export default function ConsultationSummaryPdfView({
     const load = async () => {
       setLabPreview((prev) => ({ ...prev, loading: true, error: null }));
 
-      // Prefer the doctor-uploaded file when present (text + upload are both collected).
-      const resolved = await resolveFirstAccessibleOrderFile(
-        'lab_results',
-        [summary.lab_order_file_path, labFallback.path, labStoragePath],
-        labDisplayFileName
-      );
-      if (resolved.path && resolved.url) {
-        if (cancelled) return;
-        revokeUrl(labUrlRef);
-        labUrlRef.current = resolved.url;
-        const fileName = resolved.fileName || resolved.path.split('/').pop() || '';
-        setLabPreview({
-          url: resolved.url,
-          loading: false,
-          error: null,
-          ...fileKindFromName(fileName)
-        });
-        return;
+      if (hasUploadedLabOrder) {
+        const resolved = await resolveFirstAccessibleOrderFile(
+          'lab_results',
+          [summary.lab_order_file_path, labStoragePath],
+          labDisplayFileName
+        );
+        if (resolved.path && resolved.url) {
+          if (cancelled) return;
+          revokeUrl(labUrlRef);
+          labUrlRef.current = resolved.url;
+          const fileName = resolved.fileName || resolved.path.split('/').pop() || '';
+          setLabPreview({
+            url: resolved.url,
+            loading: false,
+            error: null,
+            ...fileKindFromName(fileName)
+          });
+          return;
+        }
+        if (hasLabOrderPlaceholder) {
+          if (cancelled) return;
+          setLabPreview({
+            url: null,
+            loading: false,
+            error: resolved.errorMessage || 'Uploaded lab order file was not found for this consultation.',
+            isPdf: true,
+            isImage: false
+          });
+          return;
+        }
       }
 
-      const typed = summary.labs_diagnostics?.trim();
-      if (typed && !isUploadedFilePlaceholder(typed)) {
+      if (typedLabOrder) {
         if (!clinicReady) return;
         try {
-          const blob = await generateLabOrderPdfBlob(typed, orderMeta);
+          const blob = await generateLabOrderPdfBlob(typedLabOrder, orderMeta);
           if (cancelled) return;
           const url = URL.createObjectURL(blob);
           setPreviewUrl(labUrlRef, setLabPreview, url, { isPdf: true, isImage: false });
@@ -573,16 +590,6 @@ export default function ConsultationSummaryPdfView({
       }
 
       if (!cancelled) {
-        if (typed && isUploadedFilePlaceholder(typed)) {
-          setLabPreview({
-            url: null,
-            loading: false,
-            error: resolved.errorMessage || 'Uploaded lab order file was not found for this consultation.',
-            isPdf: true,
-            isImage: false
-          });
-          return;
-        }
         setLabPreview(emptyPreview());
       }
     };
@@ -594,6 +601,9 @@ export default function ConsultationSummaryPdfView({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
   }, [
     hasLabOrder,
+    hasUploadedLabOrder,
+    hasLabOrderPlaceholder,
+    typedLabOrder,
     summary.labs_diagnostics,
     summary.lab_order_file_path,
     summary.lab_order_file_name,
@@ -659,10 +669,10 @@ export default function ConsultationSummaryPdfView({
     try {
       const resolved = await resolveFirstAccessibleOrderFile(
         'prescriptions',
-        [summary.prescription_file_path, prescriptionFallback.path, prescriptionStoragePath],
+        [summary.prescription_file_path, prescriptionStoragePath],
         prescriptionDisplayFileName
       );
-      if (resolved.path) {
+      if (hasUploadedPrescription && resolved.path) {
         await downloadStoredOrderFile(
           resolved.path,
           resolved.fileName ?? prescriptionDisplayFileName,
@@ -670,9 +680,8 @@ export default function ConsultationSummaryPdfView({
         );
         return;
       }
-      const typed = summary.prescription?.trim();
-      if (typed && !isUploadedFilePlaceholder(typed)) {
-        await downloadPrescriptionOrderPdf(typed, orderMeta);
+      if (typedPrescription) {
+        await downloadPrescriptionOrderPdf(typedPrescription, orderMeta);
       }
     } catch (err) {
       setPrescriptionPreview((prev) => ({
@@ -689,10 +698,10 @@ export default function ConsultationSummaryPdfView({
     try {
       const resolved = await resolveFirstAccessibleOrderFile(
         'lab_results',
-        [summary.lab_order_file_path, labFallback.path, labStoragePath],
+        [summary.lab_order_file_path, labStoragePath],
         labDisplayFileName
       );
-      if (resolved.path) {
+      if (hasUploadedLabOrder && resolved.path) {
         await downloadStoredOrderFile(
           resolved.path,
           resolved.fileName ?? labDisplayFileName,
@@ -700,9 +709,8 @@ export default function ConsultationSummaryPdfView({
         );
         return;
       }
-      const typed = summary.labs_diagnostics?.trim();
-      if (typed && !isUploadedFilePlaceholder(typed)) {
-        await downloadLabOrderPdf(typed, orderMeta);
+      if (typedLabOrder) {
+        await downloadLabOrderPdf(typedLabOrder, orderMeta);
       }
     } catch (err) {
       setLabPreview((prev) => ({

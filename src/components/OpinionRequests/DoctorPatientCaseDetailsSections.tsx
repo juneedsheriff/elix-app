@@ -56,7 +56,10 @@ export default function DoctorPatientCaseDetailsSections({
   const prescriptions: PatientAttachedDocument[] =
     profile?.latest_prescription_documents ?? [];
 
-  const recordsKey = request.records.map((record) => record.id).join(',');
+  const caseRecords = request.records.filter(
+    (record) => !record.storage_path?.includes('/consultation-orders/')
+  );
+  const recordsKey = caseRecords.map((record) => record.id).join(',');
   const patientName = profile?.full_name?.trim() || request.patient_name?.trim() || 'Patient';
   const patientPhotoUrl = resolveProfilePhotoUrl(profile?.avatar_url ?? request.patient_avatar_url);
   const patientInitials = displayInitials(patientName);
@@ -143,12 +146,12 @@ export default function DoctorPatientCaseDetailsSections({
         <div className='doctor-patient-case-details-sections__section-head'>
           <h3 className='doctor-patient-case-details-sections__section-title'>Medical records</h3>
           <span className='doctor-patient-case-details-sections__records-count'>
-            {request.records.length} file{request.records.length === 1 ? '' : 's'}
+            {caseRecords.length} file{caseRecords.length === 1 ? '' : 's'}
           </span>
         </div>
         <RequestRecordsGallery
           key={recordsKey}
-          records={request.records}
+          records={caseRecords}
           requestId={request.id}
           onOpenDocument={(path, requestId) => void openDocument(path, requestId)}
           lightboxModalZIndex={lightboxModalZIndex}
