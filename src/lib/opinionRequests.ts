@@ -457,6 +457,11 @@ export function isPatientRequestCompleted(
   return request.status === 'closed';
 }
 
+/** Meeting URLs we can safely expose to patients (https only). */
+export function isHttpsMeetingLink(value: string | null | undefined): boolean {
+  return /^https:\/\//i.test(value?.trim() ?? '');
+}
+
 /** Video join is only for active consultations — hide after the request is completed. */
 export function canJoinConsultationMeeting(
   request: Pick<
@@ -465,7 +470,7 @@ export function canJoinConsultationMeeting(
   >
 ): boolean {
   if (isPatientRequestCompleted(request)) return false;
-  return /^https:\/\//i.test(request.meeting_link?.trim() ?? '');
+  return isHttpsMeetingLink(request.meeting_link);
 }
 
 /** Request submitted by patient but not yet assigned by admin. */

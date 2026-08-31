@@ -47,6 +47,7 @@ import {
   consultationSummaryFromDoctorResponse,
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
+  isHttpsMeetingLink,
   isPatientRequestCompleted,
   isRecommendationOpinionRequest,
   patientConfirmSchedule,
@@ -253,6 +254,7 @@ export default function PatientConsultationWizard({
   }, [request.scheduled_at]);
 
   const requestCompleted = isPatientRequestCompleted(request);
+  const validMeetingLink = isHttpsMeetingLink(request.meeting_link) ? request.meeting_link!.trim() : null;
   const showMeetingLink = canJoinConsultationMeeting(request);
   const joinMeetingAvailable =
     showMeetingLink && isJoinMeetingAvailable(request.scheduled_at, nowTick);
@@ -1023,7 +1025,7 @@ export default function PatientConsultationWizard({
                   </div>
                 ) : null}
 
-                {request.meeting_link?.trim() && !requestCompleted ? (
+                {validMeetingLink && !requestCompleted ? (
                   <div className='patient-appointment-detail-card__row'>
                     <span className='patient-appointment-detail-card__icon' aria-hidden>
                       <Link2 size={18} />
@@ -1032,12 +1034,12 @@ export default function PatientConsultationWizard({
                       <span className='patient-appointment-detail-card__label'>Meeting link</span>
                       {request.payment_status === 'paid' ? (
                         <a
-                          href={request.meeting_link}
+                          href={validMeetingLink}
                           target='_blank'
                           rel='noreferrer'
                           className='patient-appointment-detail-card__link'
                         >
-                          {request.meeting_link}
+                          {validMeetingLink}
                         </a>
                       ) : (
                         <p className='muted patient-appointment-detail-card__pending'>
@@ -1056,7 +1058,7 @@ export default function PatientConsultationWizard({
                       downloadAppointmentIcs({
                         scheduledAt: request.scheduled_at!,
                         title: `Consultation with ${request.doctor_name ?? 'your doctor'}`,
-                        meetingLink: request.meeting_link?.trim() || null
+                        meetingLink: validMeetingLink
                       })
                     }
                   >
@@ -1068,7 +1070,7 @@ export default function PatientConsultationWizard({
                 {showMeetingLink && request.payment_status === 'paid' && request.scheduled_at ? (
                   joinMeetingAvailable ? (
                     <a
-                      href={request.meeting_link}
+                      href={validMeetingLink ?? undefined}
                       target='_blank'
                       rel='noreferrer'
                       className='primary-btn patient-appointment-step__join-btn'

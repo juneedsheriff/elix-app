@@ -16,6 +16,7 @@ import { formatPatientAvailability } from '../../lib/doctorSchedule';
 import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
   canJoinConsultationMeeting,
+  isHttpsMeetingLink,
   isRecommendationOpinionRequest,
   patientRequestStatusLabel,
   patientRequestTitle
@@ -117,7 +118,9 @@ export default function PatientRequestListCard({
     !showAppointmentBadge ||
     !['Appointment scheduled', 'Ready for consultation', 'Consultation complete'].includes(statusLabel);
 
-  const meetingLink = request.meeting_link?.trim() || null;
+  const meetingLink = isHttpsMeetingLink(request.meeting_link)
+    ? request.meeting_link!.trim()
+    : null;
   const scheduledAt = request.scheduled_at?.trim() || null;
   const canJoinMeeting =
     listVariant === 'upcoming' &&
