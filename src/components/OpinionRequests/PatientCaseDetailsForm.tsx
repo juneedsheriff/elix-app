@@ -100,7 +100,7 @@ export default function PatientCaseDetailsForm({
   const reasonFields = (
     <>
       <label className='opinion-message-label'>
-        Reason for Seeking a Doctor Consultation
+        Reason for Seeking a Doctor
         <select
           className='opinion-select'
           value={value.reasonForSecondOpinion}

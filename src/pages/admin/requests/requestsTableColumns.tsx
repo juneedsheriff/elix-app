@@ -11,7 +11,7 @@ import {
 import { IconEye, IconTrash } from '@tabler/icons-react';
 import type { MRT_ColumnDef } from 'mantine-react-table';
 import { formatPatientAvailability } from '../../../lib/doctorSchedule';
-import { homeCareServicesFromRequest } from '../../../lib/homeCareServices';
+import { homeCareOtherNoteFromRequest, homeCareServicesFromRequest } from '../../../lib/homeCareServices';
 import { staffRequestStatusLabel } from '../../../lib/opinionRequests';
 import { avatarColorFromName, displayInitials } from '../../../lib/avatarDisplay';
 import type { OpinionRequest } from '../../../types/opinionRequest';
@@ -100,7 +100,8 @@ export function useRequestsTableColumns({
               enableColumnActions: false,
               Cell: ({ row }: { row: { original: OpinionRequest } }) => {
                 const services = homeCareServicesFromRequest(row.original);
-                if (!services.length) {
+                const otherNote = homeCareOtherNoteFromRequest(row.original);
+                if (!services.length && !otherNote) {
                   return (
                     <Text size='sm' c='dimmed'>
                       Home Care
@@ -108,13 +109,22 @@ export function useRequestsTableColumns({
                   );
                 }
                 return (
-                  <Group gap={6} wrap='wrap'>
-                    {services.map((service) => (
-                      <Badge key={service} size='sm' variant='light' color='teal' radius='sm'>
-                        {service}
-                      </Badge>
-                    ))}
-                  </Group>
+                  <Stack gap={4}>
+                    {services.length ? (
+                      <Group gap={6} wrap='wrap'>
+                        {services.map((service) => (
+                          <Badge key={service} size='sm' variant='light' color='teal' radius='sm'>
+                            {service}
+                          </Badge>
+                        ))}
+                      </Group>
+                    ) : null}
+                    {otherNote ? (
+                      <Text size='xs' c='dimmed' style={{ whiteSpace: 'pre-wrap' }}>
+                        Other: {otherNote}
+                      </Text>
+                    ) : null}
+                  </Stack>
                 );
               }
             }

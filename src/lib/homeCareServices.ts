@@ -99,3 +99,30 @@ export function homeCareServicesFromRequest(request: {
         !line.toLowerCase().startsWith('other details')
     );
 }
+
+function parseOtherDetailsFromMessage(message: string | null | undefined): string | null {
+  if (!message?.trim()) return null;
+  const match = message.match(/other details:\s*([\s\S]+)/i);
+  const note = match?.[1]?.trim();
+  return note || null;
+}
+
+/** Description entered when the patient/PSE selects Home Care → Others. */
+export function homeCareOtherNoteFromRequest(request: {
+  patient_case_details?: unknown | null;
+  message?: string | null;
+}): string | null {
+  const details = request.patient_case_details;
+  if (details && typeof details === 'object' && !Array.isArray(details)) {
+    const stored = (details as { homeCareOtherNote?: unknown }).homeCareOtherNote;
+    if (typeof stored === 'string' && stored.trim()) return stored.trim();
+
+    const concern = (details as { primaryHealthConcern?: unknown }).primaryHealthConcern;
+    if (typeof concern === 'string') {
+      const fromConcern = parseOtherDetailsFromMessage(concern);
+      if (fromConcern) return fromConcern;
+    }
+  }
+
+  return parseOtherDetailsFromMessage(request.message);
+}

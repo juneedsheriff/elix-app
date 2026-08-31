@@ -21,7 +21,7 @@ import {
   writePseWizardStoredStep,
   type WizardProgressContext
 } from '../../../lib/consultationWizard';
-import { homeCareServicesFromRequest } from '../../../lib/homeCareServices';
+import { homeCareOtherNoteFromRequest, homeCareServicesFromRequest } from '../../../lib/homeCareServices';
 import {
   fetchConsultationSummary,
   consultationSummaryFromDoctorResponse,
@@ -806,6 +806,7 @@ export default function RequestWorkflowWizard({
     if (isHomeCare) {
       if (index === 0) {
         const services = homeCareServicesFromRequest(request);
+        const otherNote = homeCareOtherNoteFromRequest(request);
         return (
           <Stack gap='sm' className='request-workflow-step'>
             <Text fw={600} size='sm'>
@@ -827,6 +828,16 @@ export default function RequestWorkflowWizard({
                     • {service}
                   </Text>
                 ))}
+              </Stack>
+            ) : null}
+            {otherNote ? (
+              <Stack gap={4}>
+                <Text size='sm' fw={600}>
+                  Other service details
+                </Text>
+                <Text size='sm' style={{ whiteSpace: 'pre-wrap' }}>
+                  {otherNote}
+                </Text>
               </Stack>
             ) : null}
             <Text size='sm' c='dimmed'>
@@ -956,6 +967,7 @@ export default function RequestWorkflowWizard({
     switch (contentIndex) {
       case 0: {
         const services = homeCareServicesFromRequest(request);
+        const otherNote = homeCareOtherNoteFromRequest(request);
         return (
           <Stack gap='sm' className='request-workflow-step'>
             <Text fw={600} size='sm'>
@@ -979,6 +991,16 @@ export default function RequestWorkflowWizard({
                         • {service}
                       </Text>
                     ))}
+                  </Stack>
+                ) : null}
+                {otherNote ? (
+                  <Stack gap={4}>
+                    <Text size='sm' fw={600}>
+                      Other service details
+                    </Text>
+                    <Text size='sm' style={{ whiteSpace: 'pre-wrap' }}>
+                      {otherNote}
+                    </Text>
                   </Stack>
                 ) : null}
               </>

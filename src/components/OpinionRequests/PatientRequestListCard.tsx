@@ -13,7 +13,7 @@ import {
   resolveProfilePhotoUrl
 } from '../../lib/avatarDisplay';
 import { formatPatientAvailability } from '../../lib/doctorSchedule';
-import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
+import { homeCareOtherNoteFromRequest, isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
   canJoinConsultationMeeting,
   isHttpsMeetingLink,
@@ -105,6 +105,7 @@ export default function PatientRequestListCard({
   const isPaid = request.payment_status === 'paid';
   const statusLabel = patientRequestStatusLabel(request);
   const isHomeCare = isHomeCareOpinionRequest(request);
+  const homeCareOtherNote = isHomeCare ? homeCareOtherNoteFromRequest(request) : null;
   const awaitingRecommendation = isRecommendationOpinionRequest(request) && !request.doctor_name;
   const doctorName = patientRequestTitle(request);
   const specialtyLine = isHomeCare
@@ -169,6 +170,11 @@ export default function PatientRequestListCard({
                 <div className='pmr-card__identity'>
                   <h4 className='pmr-card__name'>{doctorName}</h4>
                   {specialtyLine ? <p className='pmr-card__specialty'>{specialtyLine}</p> : null}
+                  {homeCareOtherNote ? (
+                    <p className='pmr-card__specialty' style={{ whiteSpace: 'pre-wrap' }}>
+                      Other: {homeCareOtherNote}
+                    </p>
+                  ) : null}
                 </div>
                 <ChevronRight size={18} className='pmr-card__chevron' aria-hidden />
               </div>

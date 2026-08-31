@@ -63,7 +63,7 @@ export default function PatientCaseDetailsReadOnlyView({
           value={formatCaseDetailValue(details.primaryHealthConcern || request.message)}
         />
         <DetailField label='Specialty Required' value={formatCaseDetailValue(specialty)} />
-        <DetailField label='Reason for Seeking a Doctor Consultation' value={reason} />
+        <DetailField label='Reason for Seeking a Doctor' value={reason} />
       </div>
 
       <SectionHeading title='2. Current Medical Condition' />

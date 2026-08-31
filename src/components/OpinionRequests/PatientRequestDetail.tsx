@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import ConsultationPatientWorkflow from './ConsultationPatientWorkflow';
 import OpinionRequestAuditLink from './OpinionRequestAuditLink';
 import RequestChatPanel from './RequestChatPanel';
-import { homeCareServicesFromRequest, isHomeCareOpinionRequest } from '../../lib/homeCareServices';
+import { homeCareOtherNoteFromRequest, homeCareServicesFromRequest, isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
   isRecommendationOpinionRequest,
   patientRequestStatusLabel,
@@ -64,6 +64,7 @@ export default function PatientRequestDetail({
   const statusText = patientRequestStatusLabel(request);
   const isHomeCare = isHomeCareOpinionRequest(request);
   const homeCareServices = isHomeCare ? homeCareServicesFromRequest(request) : [];
+  const homeCareOtherNote = isHomeCare ? homeCareOtherNoteFromRequest(request) : null;
   const awaitingRecommendation = isRecommendationOpinionRequest(request) && !request.doctor_name;
   const headline = patientRequestTitle(request);
 
@@ -140,6 +141,19 @@ export default function PatientRequestDetail({
                       )}
                     </div>
                   </div>
+                  {homeCareOtherNote ? (
+                    <div className='patient-request-detail-summary__row' style={{ marginTop: '0.75rem' }}>
+                      <span className='patient-request-detail-summary__icon' aria-hidden>
+                        <MessageCircle size={18} />
+                      </span>
+                      <div className='patient-request-detail-summary__content'>
+                        <span className='patient-request-detail-summary__label'>Other service details</span>
+                        <p className='patient-request-detail-summary__value' style={{ whiteSpace: 'pre-wrap' }}>
+                          {homeCareOtherNote}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
                   {request.home_care_remarks?.trim() || request.home_care_followup_date ? (
                     <div className='patient-request-detail-summary__row' style={{ marginTop: '0.75rem' }}>
                       <span className='patient-request-detail-summary__icon' aria-hidden>

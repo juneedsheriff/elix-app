@@ -58,7 +58,7 @@ import {
   subscribeOpinionRequestLiveUpdates,
   type SavedPatientCaseDetailsPatch
 } from '../../lib/opinionRequests';
-import { homeCareServicesFromRequest } from '../../lib/homeCareServices';
+import { homeCareOtherNoteFromRequest, homeCareServicesFromRequest } from '../../lib/homeCareServices';
 import { fetchDoctorSpecialties } from '../../lib/doctors';
 import PatientCaseDetailsEditor from '../OpinionRequests/PatientCaseDetailsEditor';
 import MedicalRecordsChoicePrompt from '../OpinionRequests/MedicalRecordsChoicePrompt';
@@ -216,7 +216,7 @@ export default function PatientConsultationWizard({
   );
   const [expandedStep, setExpandedStep] = useState<number | null>(() => {
     const stored = readPatientWizardStoredStep(request.id);
-    return stored ?? 0;
+    return stored;
   });
   const lastSuggestedStepRef = useRef(getSuggestedActiveStep(initialProgressCtx, 'patient'));
   const lastRequestIdRef = useRef(request.id);
@@ -320,8 +320,7 @@ export default function PatientConsultationWizard({
     if (lastRequestIdRef.current !== request.id) {
       lastRequestIdRef.current = request.id;
       const stored = readPatientWizardStoredStep(request.id);
-      const initial = stored ?? 0;
-      setExpandedStep(initial);
+      setExpandedStep(stored);
       lastSuggestedStepRef.current = suggestedStep;
       return;
     }
@@ -539,6 +538,7 @@ export default function PatientConsultationWizard({
     if (isPatientHomeCareWizard(request)) {
       if (index === 0) {
         const services = homeCareServicesFromRequest(request);
+        const otherNote = homeCareOtherNoteFromRequest(request);
         return (
           <div className='doctor-response-block patient-view patient-request-case-details-step'>
             <p className='muted patient-request-case-details-step__intro'>
@@ -559,6 +559,16 @@ export default function PatientConsultationWizard({
             ) : (
               <p className='muted'>{request.message}</p>
             )}
+            {otherNote ? (
+              <div className='patient-docs-verification__box' style={{ marginTop: '0.85rem' }}>
+                <p className='patient-docs-verification__text' style={{ fontWeight: 600, marginBottom: '0.35rem' }}>
+                  Other service details
+                </p>
+                <p className='patient-docs-verification__text' style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                  {otherNote}
+                </p>
+              </div>
+            ) : null}
             {request.home_care_remarks?.trim() || request.home_care_followup_date ? (
               <div
                 className='patient-docs-verification__box'
