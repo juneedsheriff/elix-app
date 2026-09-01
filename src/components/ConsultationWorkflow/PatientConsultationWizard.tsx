@@ -29,7 +29,6 @@ import {
   isPatientAppointmentPhase,
   isPatientPaymentConfirmed,
   isPaymentAccessible,
-  readPatientWizardStoredStep,
   writePatientWizardStoredStep,
   type WizardProgressContext
 } from '../../lib/consultationWizard';
@@ -123,6 +122,10 @@ function formatAppointmentDisplay(iso: string): string {
 
 const JOIN_MEETING_LEAD_MS = 5 * 60 * 1000;
 
+function defaultExpandedWizardStep(request: OpinionRequest): number | null {
+  return isPatientHomeCareWizard(request) ? 0 : null;
+}
+
 function isJoinMeetingAvailable(scheduledAt: string | null | undefined, now = Date.now()): boolean {
   if (!scheduledAt?.trim()) return false;
   const start = new Date(scheduledAt).getTime();
@@ -206,19 +209,9 @@ export default function PatientConsultationWizard({
   onOpenRecord,
   liveTick = 0
 }: PatientConsultationWizardProps) {
-  const initialProgressCtx: WizardProgressContext = useMemo(
-    () => ({
-      request,
-      recommendationsCount: 0,
-      hasSummary: false
-    }),
-    [request]
+  const [expandedStep, setExpandedStep] = useState<number | null>(() =>
+    defaultExpandedWizardStep(request)
   );
-  const [expandedStep, setExpandedStep] = useState<number | null>(() => {
-    const stored = readPatientWizardStoredStep(request.id);
-    return stored;
-  });
-  const lastSuggestedStepRef = useRef(getSuggestedActiveStep(initialProgressCtx, 'patient'));
   const lastRequestIdRef = useRef(request.id);
   const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [summary, setSummary] = useState<ConsultationSummary | null>(null);
@@ -317,20 +310,10 @@ export default function PatientConsultationWizard({
     !doctorsShared;
 
   useEffect(() => {
-    if (lastRequestIdRef.current !== request.id) {
-      lastRequestIdRef.current = request.id;
-      const stored = readPatientWizardStoredStep(request.id);
-      setExpandedStep(stored);
-      lastSuggestedStepRef.current = suggestedStep;
-      return;
-    }
-
-    if (suggestedStep > lastSuggestedStepRef.current) {
-      setExpandedStep(suggestedStep);
-      writePatientWizardStoredStep(request.id, suggestedStep);
-      lastSuggestedStepRef.current = suggestedStep;
-    }
-  }, [request.id, suggestedStep]);
+    if (lastRequestIdRef.current === request.id) return;
+    lastRequestIdRef.current = request.id;
+    setExpandedStep(defaultExpandedWizardStep(request));
+  }, [request]);
 
   const setExpandedStepTracked = (step: number | null) => {
     if (step !== null) {
