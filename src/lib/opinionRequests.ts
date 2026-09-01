@@ -4392,7 +4392,9 @@ export async function pseSendInvoiceAndPaymentLink(
     payment_status: 'pending' as const,
     consultation_stage: 'payment_pending' as const,
     payment_amount: uploaded.data.totals.total,
-    payment_currency: uploaded.data.currency
+    payment_currency: uploaded.data.currency,
+    status: 'in_review' as const,
+    doctor_id: request.doctor_id || request.selected_doctor_id || input.doctor.id
   };
 
   let { data, error } = await supabase
@@ -4442,7 +4444,8 @@ export async function pseSendPaymentLink(
       payment_status: 'pending',
       consultation_stage: 'payment_pending',
       payment_amount: input.amount ?? null,
-      payment_currency: input.currency?.trim() || null
+      payment_currency: input.currency?.trim() || null,
+      status: 'in_review'
     })
     .eq('id', requestId)
     .select('id, payment_link, payment_status, consultation_stage, payment_amount, payment_currency')
@@ -4456,18 +4459,21 @@ export async function pseSendPaymentLink(
 
 export async function pseScheduleAppointment(
   requestId: string,
-  input: { scheduledAt: string; meetingLink?: string | null }
+  input: { scheduledAt: string; meetingLink?: string | null; doctorId?: string | null }
 ) {
   const trimmedMeetingLink = input.meetingLink?.trim() || null;
+  const assignedDoctorId = input.doctorId?.trim() || null;
   const { data, error } = await supabase
     .from('opinion_requests')
     .update({
       scheduled_at: input.scheduledAt,
       meeting_link: trimmedMeetingLink,
-      consultation_stage: 'scheduled'
+      consultation_stage: 'scheduled',
+      status: 'in_review',
+      ...(assignedDoctorId ? { doctor_id: assignedDoctorId } : {})
     })
     .eq('id', requestId)
-    .select('id, scheduled_at, meeting_link, consultation_stage')
+    .select('id, scheduled_at, meeting_link, consultation_stage, status, doctor_id')
     .single();
   if (error) return { data: null, error };
   await logRequestAudit(requestId, 'appointment_scheduled', 'pse', {
@@ -4564,7 +4570,8 @@ export async function pseConfirmPayment(
       payment_currency: input.currency?.trim() || null,
       payment_reference: input.reference?.trim() || null,
       payment_confirmed_at: new Date().toISOString(),
-      consultation_stage: 'paid'
+      consultation_stage: 'paid',
+      status: 'in_review'
     })
     .eq('id', requestId)
     .select('id, payment_status, consultation_stage, payment_confirmed_at')

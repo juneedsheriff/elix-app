@@ -678,11 +678,24 @@ export default function ElixHealthRequestsPage() {
         : `${analytics.pendingQueue} awaiting coordination · ${analytics.total} assigned to you`;
 
   if (error && !loading && requests.length === 0) {
+    const recursionHint = error.toLowerCase().includes('infinite recursion');
     return (
       <Alert color='red' radius='md' title='Could not load requests' className='doctors-mgmt'>
-        {error}. Run <code>npm run db:apply-staff-roles</code> and{' '}
-        <code>npm run db:apply-consultation-workflow</code>, or apply{' '}
-        <code>supabase/migrations/019_consultation_workflow.sql</code> in the Supabase SQL Editor.
+        {error}.{' '}
+        {recursionHint ? (
+          <>
+            Run <code>npm run db:apply-doctor-request-visibility</code>, or apply{' '}
+            <code>supabase/migrations/086_doctor_workspace_request_visibility.sql</code> in the
+            Supabase SQL Editor.
+          </>
+        ) : (
+          <>
+            Run <code>npm run db:apply-staff-roles</code> and{' '}
+            <code>npm run db:apply-consultation-workflow</code>, or apply{' '}
+            <code>supabase/migrations/019_consultation_workflow.sql</code> in the Supabase SQL
+            Editor.
+          </>
+        )}
       </Alert>
     );
   }

@@ -1,7 +1,10 @@
--- Ensure doctors can access requests assigned via selected_doctor_id
--- (patient/PSE selection flow) in addition to legacy doctor_id assignment.
--- Recommendation membership is checked via a security-definer helper so this
--- policy does not recurse through opinion_request_recommendations RLS.
+-- Doctors must see assigned cases on /elixhealth/workspace the same way PSE sees them
+-- in Request coordination. Legacy policy 058 only allowed doctor_id + stages
+-- scheduled/paid/completed (or status in_review/closed), so scheduled-via-selected_doctor_id
+-- and payment_pending / schedule_confirmed cases were invisible to the doctor.
+--
+-- Do not SELECT opinion_request_recommendations from this policy: that table's RLS
+-- queries opinion_requests, which Postgres reports as infinite recursion.
 
 create or replace function public.doctor_recommended_on_request(p_request_id uuid)
 returns boolean
@@ -23,7 +26,6 @@ comment on function public.doctor_recommended_on_request(uuid) is
 
 revoke all on function public.doctor_recommended_on_request(uuid) from public;
 grant execute on function public.doctor_recommended_on_request(uuid) to authenticated;
-alter function public.doctor_recommended_on_request(uuid) owner to postgres;
 
 drop policy if exists "opinion_requests_select_doctor" on public.opinion_requests;
 create policy "opinion_requests_select_doctor"
@@ -59,39 +61,25 @@ create policy "opinion_requests_update_doctor"
     )
   );
 
-drop policy if exists "uploaded_files_select_doctor_request" on public.uploaded_files;
-create policy "uploaded_files_select_doctor_request"
-  on public.uploaded_files
-  for select
-  to authenticated
-  using (
-    exists (
-      select 1
-      from public.opinion_requests oreq
-      where oreq.id = uploaded_files.request_id
-        and (
-          oreq.doctor_id = public.current_doctor_id()
-          or oreq.selected_doctor_id = public.current_doctor_id()
-        )
-    )
+-- Keep doctor_id in sync so older clients and FK embeds resolve.
+update public.opinion_requests
+set doctor_id = selected_doctor_id
+where doctor_id is null
+  and selected_doctor_id is not null;
+
+-- Legacy 058 also required in_review/closed unless stage was scheduled/paid/completed.
+update public.opinion_requests
+set status = 'in_review'
+where status = 'submitted'
+  and (doctor_id is not null or selected_doctor_id is not null)
+  and consultation_stage in (
+    'schedule_confirmed',
+    'scheduled',
+    'payment_pending',
+    'paid'
   );
 
-drop policy if exists "medical_records_storage_select_doctor" on storage.objects;
-create policy "medical_records_storage_select_doctor"
-  on storage.objects
-  for select
-  to authenticated
-  using (
-    bucket_id = 'medical-records'
-    and exists (
-      select 1
-      from public.medical_records mr
-      join public.opinion_request_records orr on orr.record_id = mr.id
-      join public.opinion_requests oreq on oreq.id = orr.request_id
-      where mr.storage_path = name
-        and (
-          oreq.doctor_id = public.current_doctor_id()
-          or oreq.selected_doctor_id = public.current_doctor_id()
-        )
-    )
-  );
+comment on policy "opinion_requests_select_doctor" on public.opinion_requests is
+  'Assigned doctors see their cases at every workflow stage, including selected_doctor_id.';
+
+alter function public.doctor_recommended_on_request(uuid) owner to postgres;

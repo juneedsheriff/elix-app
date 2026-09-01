@@ -528,7 +528,8 @@ export default function RequestWorkflowWizard({
     const savedMeetingLink = meetingLinkForSave(meetingLink);
     const { error } = await pseScheduleAppointment(request.id, {
       scheduledAt: scheduledAt.toISOString(),
-      meetingLink: savedMeetingLink
+      meetingLink: savedMeetingLink,
+      doctorId: request.selected_doctor_id ?? request.doctor_id
     });
     setBusy(false);
     if (error) {
