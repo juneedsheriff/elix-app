@@ -457,6 +457,55 @@ export function isPatientRequestCompleted(
   return request.status === 'closed';
 }
 
+/**
+ * Doctor workspace queue: stay pending until the doctor actually finishes.
+ * Elapsed appointment time (or draft notes) must not hide the request.
+ */
+export function isDoctorWorkspaceRequestCompleted(
+  request: Pick<OpinionRequest, 'consultation_stage' | 'status'>
+): boolean {
+  return request.consultation_stage === 'completed' || request.status === 'closed';
+}
+
+export function doctorScheduledAtMs(
+  request: Pick<OpinionRequest, 'scheduled_at'>
+): number | null {
+  const iso = request.scheduled_at?.trim();
+  if (!iso) return null;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** True once the booked slot start has passed and the doctor has not completed the case. */
+export function isDoctorAppointmentOverdue(
+  request: Pick<OpinionRequest, 'scheduled_at' | 'consultation_stage' | 'status'>,
+  now = Date.now()
+): boolean {
+  if (isDoctorWorkspaceRequestCompleted(request)) return false;
+  const start = doctorScheduledAtMs(request);
+  if (start == null) return false;
+  return now >= start;
+}
+
+export function compareDoctorWorkspacePending(
+  a: Pick<OpinionRequest, 'scheduled_at' | 'consultation_stage' | 'status' | 'created_at'>,
+  b: Pick<OpinionRequest, 'scheduled_at' | 'consultation_stage' | 'status' | 'created_at'>,
+  now = Date.now()
+): number {
+  const aOverdue = isDoctorAppointmentOverdue(a, now);
+  const bOverdue = isDoctorAppointmentOverdue(b, now);
+  if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+
+  const aStart = doctorScheduledAtMs(a);
+  const bStart = doctorScheduledAtMs(b);
+  if (aStart != null && bStart != null && aStart !== bStart) {
+    return aStart - bStart;
+  }
+  if (aStart != null && bStart == null) return -1;
+  if (aStart == null && bStart != null) return 1;
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+}
+
 /** Meeting URLs we can safely expose to patients (https only). */
 export function isHttpsMeetingLink(value: string | null | undefined): boolean {
   return /^https:\/\//i.test(value?.trim() ?? '');
@@ -469,7 +518,7 @@ export function canJoinConsultationMeeting(
     'meeting_link' | 'consultation_stage' | 'doctor_response' | 'status'
   >
 ): boolean {
-  if (isPatientRequestCompleted(request)) return false;
+  if (isDoctorWorkspaceRequestCompleted(request)) return false;
   return isHttpsMeetingLink(request.meeting_link);
 }
 

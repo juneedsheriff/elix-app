@@ -10,7 +10,10 @@ import {
   canDoctorGiveConsultation,
   hasPatientConsultationNotes
 } from '../../lib/doctorConsultation';
-import { canJoinConsultationMeeting } from '../../lib/opinionRequests';
+import {
+  canJoinConsultationMeeting,
+  isDoctorAppointmentOverdue
+} from '../../lib/opinionRequests';
 import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import { formatRequestDate } from '../../pages/admin/requests/requestsUtils';
 import type { OpinionRequest } from '../../types/opinionRequest';
@@ -36,9 +39,10 @@ type DoctorIncomingRequestsCardListProps = {
   emptyHint?: string;
 };
 
-function doctorStatusLabel(status: string): string {
-  if (status === 'in_review') return 'In review';
-  if (status === 'closed') return 'Completed';
+function doctorStatusLabel(request: OpinionRequest): string {
+  if (request.status === 'closed' || request.consultation_stage === 'completed') return 'Completed';
+  if (isDoctorAppointmentOverdue(request)) return 'Time passed';
+  if (request.status === 'in_review') return 'In review';
   return 'Submitted';
 }
 
@@ -159,6 +163,7 @@ export default function DoctorIncomingRequestsCardList({
             const meetingLink = request.meeting_link?.trim() || null;
             const canJoinMeeting = canJoinConsultationMeeting(request);
             const scheduledAt = request.scheduled_at?.trim();
+            const appointmentOverdue = isDoctorAppointmentOverdue(request);
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);
             const followupDate =
@@ -181,7 +186,7 @@ export default function DoctorIncomingRequestsCardList({
                 key={request.id}
                 className={`doctor-request-card doctor-incoming-card${
                   isWorkspace ? ' doctor-incoming-card--workspace' : ''
-                }`}
+                }${appointmentOverdue ? ' doctor-incoming-card--overdue' : ''}`}
               >
                 <div className='doctor-request-head'>
                   <div className='doctor-incoming-card__patient'>
@@ -204,8 +209,12 @@ export default function DoctorIncomingRequestsCardList({
                     )}
                     <strong>{patientName}</strong>
                   </div>
-                  <span className={`tag status-${request.status}`}>
-                    {doctorStatusLabel(request.status)}
+                  <span
+                    className={`tag ${
+                      appointmentOverdue ? 'status-overdue' : `status-${request.status}`
+                    }`}
+                  >
+                    {doctorStatusLabel(request)}
                   </span>
                 </div>
 
@@ -229,6 +238,11 @@ export default function DoctorIncomingRequestsCardList({
                               Join meeting
                             </a>
                           </>
+                        ) : null}
+                        {appointmentOverdue ? (
+                          <span className='doctor-incoming-card__overdue-hint'>
+                            Appointment time passed — complete consultation
+                          </span>
                         ) : null}
                       </span>
                     </div>

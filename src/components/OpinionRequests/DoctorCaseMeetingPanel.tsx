@@ -1,5 +1,5 @@
 import { Calendar, Video } from 'lucide-react';
-import { canJoinConsultationMeeting, isPatientRequestCompleted } from '../../lib/opinionRequests';
+import { canJoinConsultationMeeting, isDoctorWorkspaceRequestCompleted } from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
 
 type DoctorCaseMeetingPanelProps = {
@@ -13,7 +13,7 @@ function isGoogleMeetLink(url: string): boolean {
 export default function DoctorCaseMeetingPanel({ request }: DoctorCaseMeetingPanelProps) {
   const meetingLink = request.meeting_link?.trim();
   const showJoin = canJoinConsultationMeeting(request);
-  if (!meetingLink || isPatientRequestCompleted(request)) return null;
+  if (!meetingLink || isDoctorWorkspaceRequestCompleted(request)) return null;
 
   const joinLabel = isGoogleMeetLink(meetingLink) ? 'Join Google Meet' : 'Join meeting';
 

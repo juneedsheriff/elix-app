@@ -7,10 +7,11 @@ import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
 import DoctorIncomingRequestsCardList from './DoctorIncomingRequestsCardList';
 import { canDoctorGiveConsultation } from '../../lib/doctorConsultation';
 import {
+  compareDoctorWorkspacePending,
   fetchDoctorOpinionRequests,
   fetchPatientOpinionRequests,
   isAwaitingDoctorReply,
-  isPatientRequestCompleted,
+  isDoctorWorkspaceRequestCompleted,
   patientRequestStatusLabel,
   subscribeDoctorOpinionRequestUpdates
 } from '../../lib/opinionRequests';
@@ -106,16 +107,19 @@ export default function OpinionRequestsPanel({
     let list = kindFilteredRequests;
     if (view === 'doctor' && isElixHealthWorkspace) {
       if (doctorStatusFilter === 'completed') {
-        list = list.filter(isPatientRequestCompleted);
+        list = list.filter(isDoctorWorkspaceRequestCompleted);
       } else if (doctorStatusFilter === 'pending') {
-        list = list.filter((request) => !isPatientRequestCompleted(request));
+        list = list
+          .filter((request) => !isDoctorWorkspaceRequestCompleted(request))
+          .sort(compareDoctorWorkspacePending);
       }
     }
     if (view === 'doctor' && isElixHealthWorkspace && doctorStatusFilter === 'all') {
       list = [...list].sort((a, b) => {
-        const aDone = isPatientRequestCompleted(a) ? 1 : 0;
-        const bDone = isPatientRequestCompleted(b) ? 1 : 0;
+        const aDone = isDoctorWorkspaceRequestCompleted(a) ? 1 : 0;
+        const bDone = isDoctorWorkspaceRequestCompleted(b) ? 1 : 0;
         if (aDone !== bDone) return aDone - bDone;
+        if (!aDone) return compareDoctorWorkspacePending(a, b);
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
     }
@@ -127,9 +131,11 @@ export default function OpinionRequestsPanel({
     view === 'doctor' ? kindFilteredRequests.filter(canDoctorGiveConsultation) : [];
   const doctorPendingCount = doctorConsultationQueue.filter(isAwaitingDoctorReply).length;
   const doctorPendingCasesCount = kindFilteredRequests.filter(
-    (request) => !isPatientRequestCompleted(request)
+    (request) => !isDoctorWorkspaceRequestCompleted(request)
   ).length;
-  const doctorCompletedCasesCount = kindFilteredRequests.filter(isPatientRequestCompleted).length;
+  const doctorCompletedCasesCount = kindFilteredRequests.filter(
+    isDoctorWorkspaceRequestCompleted
+  ).length;
   const doctorAllCasesCount = kindFilteredRequests.length;
 
   const load = useCallback(
@@ -358,7 +364,7 @@ export default function OpinionRequestsPanel({
                   doctorStatusFilter === 'completed'
                     ? 'No completed requests yet.'
                     : doctorStatusFilter === 'pending'
-                      ? 'No pending requests.'
+                      ? 'No pending requests. Appointments stay here until you complete the consultation, even after the scheduled time.'
                       : emptyHint
                 }
               onNavigate={onNavigate}

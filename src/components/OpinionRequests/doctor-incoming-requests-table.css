@@ -658,6 +658,23 @@
   text-decoration: underline;
 }
 
+.doctor-incoming-card--overdue {
+  border-color: color-mix(in srgb, #c2410c 35%, var(--border));
+}
+
+.doctor-incoming-card__overdue-hint {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #c2410c;
+}
+
+.tag.status-overdue {
+  background: color-mix(in srgb, #c2410c 14%, transparent);
+  color: #9a3412;
+}
+
 .doctor-incoming-card--workspace .doctor-incoming-card__actions {
   flex-direction: row;
   flex-wrap: wrap;
