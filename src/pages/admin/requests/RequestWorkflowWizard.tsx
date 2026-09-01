@@ -133,6 +133,19 @@ function withPaymentLinkAmount(link: string, amount: number): string {
   return trimmed;
 }
 
+const MEETING_LINK_HTTPS_PREFIX = 'https://';
+
+function meetingLinkForForm(stored: string | null | undefined): string {
+  const trimmed = stored?.trim() ?? '';
+  return trimmed || MEETING_LINK_HTTPS_PREFIX;
+}
+
+function meetingLinkForSave(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === MEETING_LINK_HTTPS_PREFIX || trimmed === 'http://') return null;
+  return trimmed;
+}
+
 function resolveInvoiceDoctor(request: OpinionRequest, doctors: Doctor[]): Doctor | null {
   const doctorId = request.selected_doctor_id ?? request.doctor_id;
   if (!doctorId) return null;
@@ -180,7 +193,7 @@ export default function RequestWorkflowWizard({
   const [recommendations, setRecommendations] = useState<OpinionRequestRecommendation[]>([]);
   const [summary, setSummary] = useState<ConsultationSummary | null>(null);
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
-  const [meetingLink, setMeetingLink] = useState('');
+  const [meetingLink, setMeetingLink] = useState(() => meetingLinkForForm(request.meeting_link));
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentLink, setPaymentLink] = useState(() => {
     const stored = request.payment_link?.trim() ?? '';
@@ -254,7 +267,7 @@ export default function RequestWorkflowWizard({
     } else {
       setScheduledAt(null);
     }
-    setMeetingLink(request.meeting_link ?? '');
+    setMeetingLink(meetingLinkForForm(request.meeting_link));
     setPaymentReference(request.payment_reference ?? '');
     void loadMeta();
   }, [request, loadMeta]);
@@ -512,9 +525,10 @@ export default function RequestWorkflowWizard({
       return;
     }
     setBusy(true);
+    const savedMeetingLink = meetingLinkForSave(meetingLink);
     const { error } = await pseScheduleAppointment(request.id, {
       scheduledAt: scheduledAt.toISOString(),
-      meetingLink: meetingLink.trim() || null
+      meetingLink: savedMeetingLink
     });
     setBusy(false);
     if (error) {
@@ -522,7 +536,7 @@ export default function RequestWorkflowWizard({
       return;
     }
     onSuccess(
-      meetingLink.trim()
+      savedMeetingLink
         ? 'Appointment scheduled. The patient will see the meeting link after payment is confirmed.'
         : 'Appointment scheduled.'
     );
@@ -1245,10 +1259,13 @@ export default function RequestWorkflowWizard({
             />
             <TextInput
               label='Meeting link'
-              description='Optional — leave blank if this consultation has no video meeting.'
+              description='Optional — leave as https:// if this consultation has no video meeting.'
               placeholder='https://meet.google.com/...'
               value={meetingLink}
               onChange={(e) => setMeetingLink(e.currentTarget.value)}
+              onBlur={() => {
+                if (!meetingLink.trim()) setMeetingLink(MEETING_LINK_HTTPS_PREFIX);
+              }}
             />
             <Button
               className='doctors-mgmt-header__primary'
@@ -1256,7 +1273,7 @@ export default function RequestWorkflowWizard({
               loading={busy}
               onClick={() => void handleSchedule()}
             >
-              {meetingLink.trim() ? 'Save schedule & meeting link' : 'Save schedule'}
+              {meetingLinkForSave(meetingLink) ? 'Save schedule & meeting link' : 'Save schedule'}
             </Button>
             {request.scheduled_at ? (
               <Text size='sm' c='dimmed'>

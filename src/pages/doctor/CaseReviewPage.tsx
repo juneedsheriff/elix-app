@@ -8,6 +8,7 @@ export default function CaseReviewPage({ doctorProfile, dbConnected, onNavigate 
       doctorEmail={doctorProfile?.email}
       configured={dbConnected}
       onNavigate={onNavigate}
+      consultationHours={doctorProfile?.consultation_hours}
     />
   );
 }

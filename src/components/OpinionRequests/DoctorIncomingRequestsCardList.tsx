@@ -14,9 +14,11 @@ import {
   canJoinConsultationMeeting,
   isDoctorAppointmentOverdue
 } from '../../lib/opinionRequests';
+import { isScheduledOutsideWeeklyAvailability } from '../../lib/doctorSchedule';
 import { formatConsultationFollowupDate } from '../../lib/consultationSummaryFields';
 import { formatRequestDate } from '../../pages/admin/requests/requestsUtils';
 import type { OpinionRequest } from '../../types/opinionRequest';
+import type { ConsultationHours } from '../../types/doctor';
 import DoctorCaseDetailsModal from './DoctorCaseDetailsModal';
 import DoctorConsultationNotesModal from './DoctorConsultationNotesModal';
 import DoctorGiveConsultationButton from './DoctorGiveConsultationButton';
@@ -37,11 +39,18 @@ type DoctorIncomingRequestsCardListProps = {
   /** Hide the local search toolbar when search lives in the page header. */
   hideSearch?: boolean;
   emptyHint?: string;
+  consultationHours?: ConsultationHours | null;
 };
 
-function doctorStatusLabel(request: OpinionRequest): string {
+function doctorStatusLabel(
+  request: OpinionRequest,
+  consultationHours?: ConsultationHours | null
+): string {
   if (request.status === 'closed' || request.consultation_stage === 'completed') return 'Completed';
   if (isDoctorAppointmentOverdue(request)) return 'Time passed';
+  if (isScheduledOutsideWeeklyAvailability(consultationHours, request.scheduled_at)) {
+    return 'Outside hours';
+  }
   if (request.status === 'in_review') return 'In review';
   return 'Submitted';
 }
@@ -78,7 +87,8 @@ export default function DoctorIncomingRequestsCardList({
   onRequestUpdated,
   layout = 'default',
   hideSearch = false,
-  emptyHint
+  emptyHint,
+  consultationHours = null
 }: DoctorIncomingRequestsCardListProps) {
   const [caseDetailsRequest, setCaseDetailsRequest] = useState<OpinionRequest | null>(null);
   const [consultationNotesRequest, setConsultationNotesRequest] = useState<OpinionRequest | null>(null);
@@ -164,6 +174,11 @@ export default function DoctorIncomingRequestsCardList({
             const canJoinMeeting = canJoinConsultationMeeting(request);
             const scheduledAt = request.scheduled_at?.trim();
             const appointmentOverdue = isDoctorAppointmentOverdue(request);
+            const outsideWeeklyHours = isScheduledOutsideWeeklyAvailability(
+              consultationHours,
+              request.scheduled_at
+            );
+            const keepUntilComplete = appointmentOverdue || outsideWeeklyHours;
             const showConsultation = canDoctorGiveConsultation(request);
             const hasNotes = hasPatientConsultationNotes(request);
             const followupDate =
@@ -186,7 +201,7 @@ export default function DoctorIncomingRequestsCardList({
                 key={request.id}
                 className={`doctor-request-card doctor-incoming-card${
                   isWorkspace ? ' doctor-incoming-card--workspace' : ''
-                }${appointmentOverdue ? ' doctor-incoming-card--overdue' : ''}`}
+                }${keepUntilComplete ? ' doctor-incoming-card--overdue' : ''}`}
               >
                 <div className='doctor-request-head'>
                   <div className='doctor-incoming-card__patient'>
@@ -211,10 +226,10 @@ export default function DoctorIncomingRequestsCardList({
                   </div>
                   <span
                     className={`tag ${
-                      appointmentOverdue ? 'status-overdue' : `status-${request.status}`
+                      keepUntilComplete ? 'status-overdue' : `status-${request.status}`
                     }`}
                   >
-                    {doctorStatusLabel(request)}
+                    {doctorStatusLabel(request, consultationHours)}
                   </span>
                 </div>
 
@@ -242,6 +257,10 @@ export default function DoctorIncomingRequestsCardList({
                         {appointmentOverdue ? (
                           <span className='doctor-incoming-card__overdue-hint'>
                             Appointment time passed — complete consultation
+                          </span>
+                        ) : outsideWeeklyHours ? (
+                          <span className='doctor-incoming-card__overdue-hint'>
+                            Outside weekly availability — complete consultation
                           </span>
                         ) : null}
                       </span>

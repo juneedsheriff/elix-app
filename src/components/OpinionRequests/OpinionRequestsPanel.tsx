@@ -16,7 +16,9 @@ import {
   subscribeDoctorOpinionRequestUpdates
 } from '../../lib/opinionRequests';
 import { isHomeCareOpinionRequest } from '../../lib/homeCareServices';
+import { isDoctorAvailableAt } from '../../lib/doctorSchedule';
 import type { OpinionRequest } from '../../types/opinionRequest';
+import type { ConsultationHours } from '../../types/doctor';
 
 const DOCTOR_CASES_POLL_MS = 25_000;
 
@@ -60,6 +62,8 @@ type OpinionRequestsPanelProps = {
   signInHint: string;
   onNavigate?: (screenId: string) => void;
   doctorReturnScreen?: string;
+  /** Weekly availability — used for messaging only; never hides pending cases. */
+  doctorConsultationHours?: ConsultationHours | null;
   /** Request filter mode. */
   requestKind?: 'consultations' | 'homecare' | 'all';
 };
@@ -76,6 +80,7 @@ export default function OpinionRequestsPanel({
   signInHint,
   onNavigate,
   doctorReturnScreen = 'case-review',
+  doctorConsultationHours = null,
   requestKind = 'all'
 }: OpinionRequestsPanelProps) {
   const location = useLocation();
@@ -106,6 +111,7 @@ export default function OpinionRequestsPanel({
   const visibleRequests = useMemo(() => {
     let list = kindFilteredRequests;
     if (view === 'doctor' && isElixHealthWorkspace) {
+      // Weekly availability (Unavailable days / outside hours) must not hide cases.
       if (doctorStatusFilter === 'completed') {
         list = list.filter(isDoctorWorkspaceRequestCompleted);
       } else if (doctorStatusFilter === 'pending') {
@@ -137,6 +143,10 @@ export default function OpinionRequestsPanel({
     isDoctorWorkspaceRequestCompleted
   ).length;
   const doctorAllCasesCount = kindFilteredRequests.length;
+  const doctorCurrentlyUnavailable =
+    isElixHealthWorkspace &&
+    view === 'doctor' &&
+    !isDoctorAvailableAt(doctorConsultationHours);
 
   const load = useCallback(
     async (options?: { silent?: boolean; manual?: boolean }) => {
@@ -354,6 +364,12 @@ export default function OpinionRequestsPanel({
 
         {!loading && !error && canLoad && view === 'doctor' && isElixHealthWorkspace ? (
           <div className='doctor-cases-cards doctor-cases-workspace__cards-area'>
+            {doctorCurrentlyUnavailable && doctorStatusFilter !== 'completed' ? (
+              <p className='doctor-cases-workspace__availability-note muted' role='status'>
+                Weekly availability is off right now (day marked Unavailable, or outside your hours).
+                Pending requests still appear here until you complete the consultation.
+              </p>
+            ) : null}
             <DoctorIncomingRequestsCardList
               data={visibleRequests}
               search={doctorSearch}
@@ -364,7 +380,7 @@ export default function OpinionRequestsPanel({
                   doctorStatusFilter === 'completed'
                     ? 'No completed requests yet.'
                     : doctorStatusFilter === 'pending'
-                      ? 'No pending requests. Appointments stay here until you complete the consultation, even after the scheduled time.'
+                      ? 'No pending requests. Cases stay here until you complete the consultation, including after the appointment time and when weekly availability is Unavailable.'
                       : emptyHint
                 }
               onNavigate={onNavigate}
@@ -373,6 +389,7 @@ export default function OpinionRequestsPanel({
               onRequestUpdated={patchDoctorRequest}
               layout='workspace'
               hideSearch
+              consultationHours={doctorConsultationHours}
             />
           </div>
         ) : null}

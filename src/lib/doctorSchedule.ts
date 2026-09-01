@@ -88,6 +88,42 @@ export function isConsultationDateAvailable(
   return dayIntervals(hours[consultationHoursKeyForDate(date)]).length > 0;
 }
 
+function minutesOfDay(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+/**
+ * Whether `at` falls on an enabled weekday and inside a weekly interval.
+ * Unconfigured hours are treated as available (do not hide the doctor queue).
+ */
+export function isDoctorAvailableAt(
+  hours: ConsultationHours | null | undefined,
+  at = new Date()
+): boolean {
+  if (!hours || !hasConfiguredConsultationHours(hours)) return true;
+  const intervals = dayIntervals(hours[consultationHoursKeyForDate(at)]);
+  if (intervals.length === 0) return false;
+  const minutes = minutesOfDay(at);
+  return intervals.some((interval) => {
+    const start = timeToMinutes(interval.start);
+    const end = timeToMinutes(interval.end);
+    return minutes >= start && minutes < end;
+  });
+}
+
+/** Booked appointment sits on a day/time the weekly schedule does not cover. */
+export function isScheduledOutsideWeeklyAvailability(
+  hours: ConsultationHours | null | undefined,
+  scheduledAt: string | null | undefined
+): boolean {
+  const iso = scheduledAt?.trim();
+  if (!iso) return false;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return false;
+  if (!hours || !hasConfiguredConsultationHours(hours)) return false;
+  return !isDoctorAvailableAt(hours, at);
+}
+
 /**
  * Bookable start times for a date from weekly availability.
  * Interval end is exclusive (e.g. 09:00–17:00 with 30m → last slot 16:30).

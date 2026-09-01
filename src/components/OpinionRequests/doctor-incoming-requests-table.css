@@ -80,6 +80,13 @@
   margin: 0.4rem 0 0;
 }
 
+.doctor-cases-workspace__availability-note {
+  flex: 0 0 auto;
+  margin: 0.55rem 1.15rem 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
 /* Override elixhealth-datatable-card > * flex for non-table children */
 .doctor-cases-workspace__card.elixhealth-datatable-card > .section-head,
 .doctor-cases-workspace__card.elixhealth-datatable-card > .case-review-consultation-banner,

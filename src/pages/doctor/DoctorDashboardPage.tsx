@@ -52,6 +52,7 @@ export default function DoctorDashboardPage({
         doctorEmail={doctorProfile?.email}
         configured={dbConnected}
         onNavigate={onNavigate}
+        consultationHours={doctorProfile?.consultation_hours}
       />
     </div>
   );
