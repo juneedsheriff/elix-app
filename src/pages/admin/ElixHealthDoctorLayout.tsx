@@ -8,7 +8,7 @@ import {
   resolveProfilePhotoUrl
 } from '../../lib/avatarDisplay';
 import { fetchDoctorWorkspaceGrantsForDoctor } from '../../lib/clinicDoctorRequests';
-import { fetchClinicLinkedDoctors, fetchDoctors, fetchDoctorsInClinicRoster } from '../../lib/doctors';
+import { fetchDoctorsForDoctorWorkspace } from '../../lib/doctors';
 import type { Doctor } from '../../types/doctor';
 import {
   doctorNavIdFromPathname,
@@ -113,37 +113,12 @@ export default function ElixHealthDoctorLayout({
           clinicId = grantsRes.data?.[0]?.clinicId?.trim() || '';
         }
 
-        // Primary source: browse-visible doctors, then scoped to the same clinic.
-        const browseRes = await fetchDoctors(300, { patientClinicId: clinicId || null });
-        let doctors = (browseRes.data ?? []).filter((candidate) => {
-          const sameClinicId = Boolean(clinicId) && candidate.clinic_id === clinicId;
-          const sameClinicName =
-            Boolean(doctor.clinic_name?.trim()) &&
-            candidate.clinic_name?.trim().toLowerCase() === doctor.clinic_name?.trim().toLowerCase();
-          const samePseClinicName =
-            Boolean(doctor.pse_clinic_name?.trim()) &&
-            candidate.pse_clinic_name?.trim().toLowerCase() === doctor.pse_clinic_name?.trim().toLowerCase();
-          return sameClinicId || sameClinicName || samePseClinicName;
+        const rosterRes = await fetchDoctorsForDoctorWorkspace({
+          clinicId,
+          clinicName: doctor.clinic_name,
+          pseClinicName: doctor.pse_clinic_name
         });
-
-        // Fallback 1: direct clinic-roster queries.
-        if (!doctors.length) {
-          const rosterRes = await fetchDoctorsInClinicRoster({
-            clinicId,
-            clinicName: doctor.clinic_name,
-            pseClinicName: doctor.pse_clinic_name
-          });
-          doctors = rosterRes.data ?? [];
-        }
-
-        // Fallback 2: linked-clinic lookup.
-        if (!doctors.length && clinicId) {
-          const linkedRes = await fetchClinicLinkedDoctors(clinicId);
-          doctors = linkedRes.data ?? [];
-        }
-
-        // Exclude the currently logged-in doctor from the sidebar list.
-        doctors = doctors.filter((candidate) => candidate.id !== doctor.id);
+        const doctors = (rosterRes.data ?? []).filter((candidate) => candidate.id !== doctor.id);
 
         if (!cancelled) {
           setClinicDoctors(doctors);
@@ -160,7 +135,7 @@ export default function ElixHealthDoctorLayout({
     return () => {
       cancelled = true;
     };
-  }, [doctor.clinic_id, doctor.id]);
+  }, [doctor.clinic_id, doctor.clinic_name, doctor.id, doctor.pse_clinic_name]);
 
   return (
     <div className='elixhealth-app'>
@@ -253,7 +228,14 @@ export default function ElixHealthDoctorLayout({
                             {initials}
                           </span>
                         )}
-                        <span className='elixhealth-sidebar-doctors-name'>{doctorName}</span>
+                        <span className='elixhealth-sidebar-doctors-text'>
+                          <span className='elixhealth-sidebar-doctors-name'>{doctorName}</span>
+                          {linkedDoctor.specialty?.trim() ? (
+                            <span className='elixhealth-sidebar-doctors-specialty'>
+                              {linkedDoctor.specialty.trim()}
+                            </span>
+                          ) : null}
+                        </span>
                       </li>
                     );
                   })}

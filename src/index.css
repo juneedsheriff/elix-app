@@ -884,10 +884,26 @@ select {
   letter-spacing: 0.02em;
 }
 
+.sidebar-clinic-doctors__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
 .sidebar-clinic-doctors__name {
   font-size: 0.84rem;
   line-height: 1.2;
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-clinic-doctors__specialty {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4551,10 +4567,27 @@ body:has(.elixhealth-app),
   letter-spacing: 0.02em;
 }
 
+.elixhealth-sidebar-doctors-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
 .elixhealth-sidebar-doctors-name {
   min-width: 0;
   font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elixhealth-sidebar-doctors-specialty {
+  min-width: 0;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.55);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

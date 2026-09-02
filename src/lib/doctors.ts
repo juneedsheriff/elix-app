@@ -41,15 +41,19 @@ function applyPatientBrowseVisibilityFilter<T extends { or: (filters: string) =>
   return query.or('is_visible.is.null,is_visible.eq.true');
 }
 
-function isMissingBrowseDoctorsRpc(error: { message?: string; code?: string } | null) {
+function isMissingRpc(error: { message?: string; code?: string } | null, functionName: string) {
   const msg = error?.message?.toLowerCase() ?? '';
   const code = error?.code ?? '';
   return (
     code === 'PGRST202' ||
     code === '42883' ||
-    msg.includes('list_doctors_for_patient_browse') ||
+    msg.includes(functionName) ||
     msg.includes('could not find the function')
   );
+}
+
+function isMissingBrowseDoctorsRpc(error: { message?: string; code?: string } | null) {
+  return isMissingRpc(error, 'list_doctors_for_patient_browse');
 }
 
 export async function fetchDoctors(limit = 50, options?: { patientClinicId?: string | null }) {
@@ -348,6 +352,60 @@ export async function fetchDoctorsInClinicRoster(options: {
 
   return {
     data: [...deduped.values()].sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    error: null
+  };
+}
+
+const DOCTOR_WORKSPACE_SIDEBAR_HIDDEN_IDS = new Set([
+  '675683b0-ae39-418c-9fc8-31a1e9ff22b8'
+]);
+
+function doctorsVisibleInWorkspaceSidebar(doctors: Doctor[]) {
+  return doctors.filter((doctor) => !DOCTOR_WORKSPACE_SIDEBAR_HIDDEN_IDS.has(doctor.id));
+}
+
+/** Clinic roster for the signed-in doctor's workspace (owned + granted colleagues). */
+export async function fetchDoctorsForDoctorWorkspace(options?: {
+  clinicId?: string | null;
+  clinicName?: string | null;
+  pseClinicName?: string | null;
+}) {
+  const rpcResult = await supabase.rpc('list_doctors_for_doctor_workspace', { p_limit: 300 });
+
+  if (!rpcResult.error && rpcResult.data) {
+    return {
+      data: doctorsVisibleInWorkspaceSidebar((rpcResult.data as Doctor[]).map((row) => normalizeDoctor(row))),
+      error: null
+    };
+  }
+
+  if (!isMissingRpc(rpcResult.error, 'list_doctors_for_doctor_workspace')) {
+    return { data: null, error: rpcResult.error };
+  }
+
+  const clinicId = options?.clinicId?.trim() || '';
+  const [rosterRes, linkedRes] = await Promise.all([
+    fetchDoctorsInClinicRoster({
+      clinicId,
+      clinicName: options?.clinicName,
+      pseClinicName: options?.pseClinicName
+    }),
+    clinicId ? fetchClinicLinkedDoctors(clinicId) : Promise.resolve({ data: [] as Doctor[], error: null })
+  ]);
+
+  if (!rosterRes.data?.length && !linkedRes.data?.length) {
+    return { data: [], error: rosterRes.error ?? linkedRes.error ?? null };
+  }
+
+  const deduped = new Map<string, Doctor>();
+  for (const doctor of [...(rosterRes.data ?? []), ...(linkedRes.data ?? [])]) {
+    deduped.set(doctor.id, doctor);
+  }
+
+  return {
+    data: doctorsVisibleInWorkspaceSidebar(
+      [...deduped.values()].sort((a, b) => a.full_name.localeCompare(b.full_name))
+    ),
     error: null
   };
 }

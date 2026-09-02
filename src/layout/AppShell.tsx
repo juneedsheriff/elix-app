@@ -12,7 +12,7 @@ import {
   displayInitials,
   resolveProfilePhotoUrl
 } from '../lib/avatarDisplay';
-import { fetchClinicLinkedDoctors } from '../lib/doctors';
+import { fetchDoctorsForDoctorWorkspace } from '../lib/doctors';
 import { fetchDoctorWorkspaceGrantsForDoctor } from '../lib/clinicDoctorRequests';
 import type { BottomTab } from '../lib/navigation/bottomTabs';
 import type { Doctor } from '../types/doctor';
@@ -95,18 +95,14 @@ export default function AppShell({
         clinicId = grantsRes.data?.[0]?.clinicId?.trim() || '';
       }
 
-      if (!clinicId) {
-        if (!cancelled) {
-          setDoctorClinicId(null);
-          setClinicDoctors([]);
-        }
-        return;
-      }
-
-      const { data } = await fetchClinicLinkedDoctors(clinicId);
+      const { data } = await fetchDoctorsForDoctorWorkspace({
+        clinicId,
+        clinicName: doctorProfile.clinic_name,
+        pseClinicName: doctorProfile.pse_clinic_name
+      });
       if (!cancelled) {
-        setDoctorClinicId(clinicId);
-        setClinicDoctors(data ?? []);
+        setDoctorClinicId(clinicId || null);
+        setClinicDoctors((data ?? []).filter((candidate) => candidate.id !== doctorProfile.id));
       }
     })();
 
@@ -214,7 +210,12 @@ export default function AppShell({
                               {initials}
                             </span>
                           )}
-                          <span className='sidebar-clinic-doctors__name'>{doctor.full_name}</span>
+                          <span className='sidebar-clinic-doctors__text'>
+                            <span className='sidebar-clinic-doctors__name'>{doctor.full_name}</span>
+                            {doctor.specialty?.trim() ? (
+                              <span className='sidebar-clinic-doctors__specialty'>{doctor.specialty.trim()}</span>
+                            ) : null}
+                          </span>
                         </li>
                       );
                     })}
