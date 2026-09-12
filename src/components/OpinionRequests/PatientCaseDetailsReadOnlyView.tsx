@@ -1,3 +1,4 @@
+import { calculateBmi, formatBmi } from '../../lib/bmi';
 import {
   caseDetailsFromRequest,
   formatCaseDetailList,
@@ -94,6 +95,12 @@ export default function PatientCaseDetailsReadOnlyView({
         <DetailField label='SpO₂' value={formatCaseDetailValue(details.vitalSigns.spo2)} />
         <DetailField label='Height' value={formatCaseDetailValue(details.vitalSigns.height)} />
         <DetailField label='Weight' value={formatCaseDetailValue(details.vitalSigns.weight)} />
+        <DetailField
+          label='BMI'
+          value={formatCaseDetailValue(
+            formatBmi(calculateBmi(details.vitalSigns.height, details.vitalSigns.weight))
+          )}
+        />
       </div>
 
       <SectionHeading title='3. Medical History' />

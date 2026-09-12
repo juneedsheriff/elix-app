@@ -740,8 +740,12 @@ export function hasConsultationSummary(summary: ConsultationSummary | null | und
       summary.vital_signs?.trim() ||
       summary.current_medications?.trim() ||
       summary.past_medical_history?.trim() ||
+      summary.review_of_systems?.trim() ||
+      summary.physical_examination?.trim() ||
       summary.labs_diagnostics?.trim() ||
       summary.assessment_plan?.trim() ||
+      summary.advise_food_lifestyle?.trim() ||
+      summary.refer_to?.trim() ||
       summary.followup_date?.trim() ||
       summary.prescription?.trim() ||
       summary.prescription_file_path?.trim() ||

@@ -4811,8 +4811,12 @@ export async function fetchPatientConsultationSummaries(patientAuthUserId: strin
         vital_signs,
         current_medications,
         past_medical_history,
+        review_of_systems,
+        physical_examination,
         labs_diagnostics,
         assessment_plan,
+        advise_food_lifestyle,
+        refer_to,
         followup_date,
         prescription,
         prescription_file_path,
@@ -4852,8 +4856,12 @@ const CONSULTATION_SUMMARY_SELECT = `
   vital_signs,
   current_medications,
   past_medical_history,
+  review_of_systems,
+  physical_examination,
   labs_diagnostics,
   assessment_plan,
+  advise_food_lifestyle,
+  refer_to,
   followup_date,
   prescription,
   prescription_file_path,
@@ -4879,6 +4887,10 @@ function mapConsultationSummaryRow(row: ConsultationSummaryRow): ConsultationSum
   const { doctor, ...summary } = row;
   return {
     ...summary,
+    review_of_systems: summary.review_of_systems ?? null,
+    physical_examination: summary.physical_examination ?? null,
+    advise_food_lifestyle: summary.advise_food_lifestyle ?? null,
+    refer_to: summary.refer_to ?? null,
     doctor_name: doctor?.full_name ?? summary.doctor_name ?? null,
     doctor_specialty: doctor?.specialty ?? summary.doctor_specialty ?? null,
     doctor_qualification: doctor?.qualification ?? summary.doctor_qualification ?? null,
@@ -4889,6 +4901,12 @@ function mapConsultationSummaryRow(row: ConsultationSummaryRow): ConsultationSum
 export async function fetchConsultationSummary(requestId: string) {
   // Keep trying schema-compatible variants, but prefer ones that retain
   // prescription/lab attachment columns so consultation modals can show files.
+  const stripNewClinicalCols = (value: string) =>
+    value
+      .replace(/,\s*review_of_systems/, '')
+      .replace(/,\s*physical_examination/, '')
+      .replace(/,\s*advise_food_lifestyle/, '')
+      .replace(/,\s*refer_to/, '');
   const withoutFollowup = CONSULTATION_SUMMARY_SELECT.replace(/,\s*followup_date/, '');
   const withoutPastHistory = CONSULTATION_SUMMARY_SELECT.replace(
     /,\s*past_medical_history/,
@@ -4901,7 +4919,7 @@ export async function fetchConsultationSummary(requestId: string) {
       ''
     );
 
-  const selects = [
+  const baseSelects = [
     CONSULTATION_SUMMARY_SELECT,
     withoutFollowup,
     withoutPastHistory,
@@ -4910,6 +4928,10 @@ export async function fetchConsultationSummary(requestId: string) {
     stripAttachmentCols(withoutFollowup),
     stripAttachmentCols(withoutPastHistory),
     stripAttachmentCols(withoutFollowupAndPast)
+  ];
+  const selects = [
+    ...baseSelects,
+    ...baseSelects.map(stripNewClinicalCols)
   ];
 
   let lastError: { message: string; code?: string } | null = null;
@@ -4933,7 +4955,11 @@ export async function fetchConsultationSummary(requestId: string) {
       msg.includes('prescription_file') ||
       msg.includes('lab_order_file') ||
       msg.includes('followup_date') ||
-      msg.includes('past_medical_history');
+      msg.includes('past_medical_history') ||
+      msg.includes('review_of_systems') ||
+      msg.includes('physical_examination') ||
+      msg.includes('advise_food_lifestyle') ||
+      msg.includes('refer_to');
     if (!missingColumn) break;
   }
 
@@ -4945,10 +4971,18 @@ const LEGACY_RESPONSE_SECTION_TO_FIELD: Record<string, keyof ConsultationSummary
   'Chief Complaint': 'chief_complaint',
   'History of Present Illness': 'history_present_illness',
   'Past Medical History': 'past_medical_history',
+  'Past Medical/Surgical/Social History': 'past_medical_history',
+  'Review of Systems (ROS)': 'review_of_systems',
+  'Review of Systems': 'review_of_systems',
   'Current Medications': 'current_medications',
   'Vital Signs': 'vital_signs',
+  'Physical Examination (PE)': 'physical_examination',
+  'Physical Examination': 'physical_examination',
   'Lab Order': 'labs_diagnostics',
   'Assessment & Plan': 'assessment_plan',
+  'Assessment/Plan': 'assessment_plan',
+  'Advise on Food/Lifestyle': 'advise_food_lifestyle',
+  'Refer To': 'refer_to',
   'Follow-up Date': 'followup_date',
   Prescription: 'prescription'
 };
@@ -5001,8 +5035,12 @@ export function consultationSummaryFromDoctorResponse(
     vital_signs: parsed.vital_signs ?? null,
     current_medications: parsed.current_medications ?? null,
     past_medical_history: parsed.past_medical_history ?? null,
+    review_of_systems: parsed.review_of_systems ?? null,
+    physical_examination: parsed.physical_examination ?? null,
     labs_diagnostics: parsed.labs_diagnostics ?? null,
     assessment_plan: parsed.assessment_plan ?? (hasParsedSections ? null : trimmed),
+    advise_food_lifestyle: parsed.advise_food_lifestyle ?? null,
+    refer_to: parsed.refer_to ?? null,
     followup_date: parsed.followup_date ?? null,
     prescription: parsed.prescription ?? null,
     prescription_file_path: null,
@@ -5038,8 +5076,12 @@ export function mergeConsultationSummaryWithDoctorResponse(
     vital_signs: fill(summary.vital_signs, parsed.vital_signs),
     current_medications: fill(summary.current_medications, parsed.current_medications),
     past_medical_history: fill(summary.past_medical_history, parsed.past_medical_history),
+    review_of_systems: fill(summary.review_of_systems, parsed.review_of_systems),
+    physical_examination: fill(summary.physical_examination, parsed.physical_examination),
     labs_diagnostics: fill(summary.labs_diagnostics, parsed.labs_diagnostics),
     assessment_plan: fill(summary.assessment_plan, parsed.assessment_plan),
+    advise_food_lifestyle: fill(summary.advise_food_lifestyle, parsed.advise_food_lifestyle),
+    refer_to: fill(summary.refer_to, parsed.refer_to),
     followup_date: fill(summary.followup_date, parsed.followup_date),
     prescription: fill(summary.prescription, parsed.prescription)
   };
@@ -5235,8 +5277,12 @@ export async function saveDoctorConsultation(
     vital_signs: input.vital_signs,
     current_medications: input.current_medications,
     past_medical_history: input.past_medical_history,
+    review_of_systems: input.review_of_systems ?? null,
+    physical_examination: input.physical_examination ?? null,
     labs_diagnostics: input.labs_diagnostics,
     assessment_plan: input.assessment_plan,
+    advise_food_lifestyle: input.advise_food_lifestyle ?? null,
+    refer_to: input.refer_to ?? null,
     followup_date: input.followup_date,
     prescription: input.prescription,
     prescription_file_path: prescriptionFilePath,
@@ -5273,9 +5319,34 @@ export async function saveDoctorConsultation(
     error = retry.error;
   }
 
+  if (error && isMissingNewConsultationClinicalColumnsError(error)) {
+    const fallbackPayload = { ...summaryPayload };
+    delete fallbackPayload.review_of_systems;
+    delete fallbackPayload.physical_examination;
+    delete fallbackPayload.advise_food_lifestyle;
+    delete fallbackPayload.refer_to;
+    const retry = await supabase
+      .from('consultation_summaries')
+      .upsert(fallbackPayload, { onConflict: 'request_id' })
+      .select(
+        CONSULTATION_SUMMARY_SELECT.replace(/,\s*review_of_systems/, '')
+          .replace(/,\s*physical_examination/, '')
+          .replace(/,\s*advise_food_lifestyle/, '')
+          .replace(/,\s*refer_to/, '')
+      )
+      .single<ConsultationSummaryRow>();
+    data = retry.data;
+    error = retry.error;
+  }
+
   if (error) {
     const hint =
-      error.message?.includes('followup_date')
+      error.message?.includes('review_of_systems') ||
+      error.message?.includes('physical_examination') ||
+      error.message?.includes('advise_food_lifestyle') ||
+      error.message?.includes('refer_to')
+        ? ' Run supabase/migrations/088_consultation_summary_clinical_fields.sql in the Supabase SQL Editor.'
+        : error.message?.includes('followup_date')
         ? ' Run npm run db:apply-consultation-summary-followup (migration 075).'
         : error.message?.includes('past_medical_history')
         ? ' Run supabase/migrations/066_consultation_summary_past_medical_history.sql in the Supabase SQL Editor.'
@@ -5355,6 +5426,19 @@ function isMissingPrescriptionLabOrderColumnsError(error: { message?: string; co
     msg.includes('prescription_file_name') ||
     msg.includes('lab_order_file_path') ||
     msg.includes('lab_order_file_name')
+  );
+}
+
+function isMissingNewConsultationClinicalColumnsError(error: {
+  message?: string;
+  code?: string;
+} | null) {
+  const msg = error?.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('review_of_systems') ||
+    msg.includes('physical_examination') ||
+    msg.includes('advise_food_lifestyle') ||
+    msg.includes('refer_to')
   );
 }
 
@@ -5652,8 +5736,12 @@ export async function saveDoctorConsultationUpload(
     vital_signs: null,
     current_medications: null,
     past_medical_history: null,
+    review_of_systems: null,
+    physical_examination: null,
     labs_diagnostics: null,
     assessment_plan: null,
+    advise_food_lifestyle: null,
+    refer_to: null,
     followup_date: null,
     prescription: null,
     pdf_storage_path: uploadTarget.storagePath,

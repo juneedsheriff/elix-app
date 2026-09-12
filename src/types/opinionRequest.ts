@@ -57,10 +57,15 @@ export type ConsultationSummary = {
   chief_complaint: string | null;
   history_present_illness: string | null;
   vital_signs: string | null;
+  /** @deprecated Prefer prescription; kept for legacy rows. */
   current_medications: string | null;
   past_medical_history: string | null;
+  review_of_systems: string | null;
+  physical_examination: string | null;
   labs_diagnostics: string | null;
   assessment_plan: string | null;
+  advise_food_lifestyle: string | null;
+  refer_to: string | null;
   /** YYYY-MM-DD when set. */
   followup_date: string | null;
   prescription: string | null;

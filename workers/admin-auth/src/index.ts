@@ -742,8 +742,8 @@ function buildClinicAssignmentEmailHtml(input: {
       <li>Medical Records Online</li>
       <li>Sample Collection at Home</li>
       <li>Parent Care Services</li>
+      <li>Post-Surgery Care</li>
       <li>Surgery Referral &amp; Coordination</li>
-      <li>Patient Escort Services</li>
       <li>Lab &amp; Diagnostics</li>
       <li>Digital X-Ray</li>
       <li>Other Healthcare Support Services</li>
@@ -812,8 +812,8 @@ function buildRegistrationWelcomeEmailHtml(input: {
       <li>Medical Records Online – Securely upload and access your health records.</li>
       <li>Sample Collection at Home – Convenient doorstep collection of laboratory samples.</li>
       <li>Parent Care – Healthcare coordination and assistance for parents and elderly family members.</li>
+      <li>Post-Surgery Care – Supportive care and coordination after surgical procedures.</li>
       <li>Surgery Referral – Assistance in identifying suitable surgeons and hospitals.</li>
-      <li>Patient Escort Services – Assistance during hospital and laboratory visits.</li>
       <li>Homecare &amp; Healthcare Assistance – Coordinated healthcare support for you and your family.</li>
     </ul>
     <p style="margin:0 0 8px;"><strong>ElixClinix Healthcare Network</strong></p>

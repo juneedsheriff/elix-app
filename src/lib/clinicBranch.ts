@@ -8,8 +8,8 @@ export const CLINIC_BRANCH_SERVICES = [
   'Medical Records Online',
   'Sample Collection at Home',
   'Parent Care Services',
+  'Post-Surgery Care',
   'Surgery Referral & Coordination',
-  'Patient Escort Services',
   'Lab & Diagnostics',
   'Digital X-Ray',
   'Other Healthcare Support Services'

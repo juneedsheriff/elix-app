@@ -3,12 +3,18 @@ export const HOME_CARE_SERVICE_OPTIONS = [
   { id: 'physiotherapy', label: 'Physiotherapy Services' },
   { id: 'sample_collection', label: 'Sample Collection at Home' },
   { id: 'parent_care', label: 'Parent Care' },
-  { id: 'patient_escort', label: 'Patient Escort Services' },
+  { id: 'post_surgery_care', label: 'Post-Surgery Care' },
+  { id: 'second_opinion', label: 'Second Opinion Service' },
   { id: 'surgery_referral', label: 'Surgery Referral' },
   { id: 'others', label: 'Others' }
 ] as const;
 
 export type HomeCareServiceId = (typeof HOME_CARE_SERVICE_OPTIONS)[number]['id'];
+
+/** Legacy service ids that may still appear on older requests. */
+const LEGACY_HOME_CARE_SERVICE_LABELS: Record<string, string> = {
+  patient_escort: 'Patient Escort Services'
+};
 
 export const HOME_CARE_REQUESTED_SPECIALTY = 'Home Care';
 
@@ -17,8 +23,12 @@ export type HomeCareServiceSelection = {
   otherNote: string;
 };
 
-export function homeCareServiceLabel(id: HomeCareServiceId): string {
-  return HOME_CARE_SERVICE_OPTIONS.find((option) => option.id === id)?.label ?? id;
+export function homeCareServiceLabel(id: string): string {
+  return (
+    HOME_CARE_SERVICE_OPTIONS.find((option) => option.id === id)?.label ??
+    LEGACY_HOME_CARE_SERVICE_LABELS[id] ??
+    id
+  );
 }
 
 export function formatHomeCareServicesMessage(selection: HomeCareServiceSelection): string {

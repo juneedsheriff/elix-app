@@ -8,6 +8,7 @@ import DoctorCaseDetailsModal from '../../components/OpinionRequests/DoctorCaseD
 import DoctorPatientCaseDetailsSections from '../../components/OpinionRequests/DoctorPatientCaseDetailsSections';
 import PatientCameraCaptureModal from '../../components/patient/PatientCameraCaptureModal';
 import '../../components/OpinionRequests/doctor-patient-case-details-sections.css';
+import { calculateBmi, formatBmi } from '../../lib/bmi';
 import {
   CONSULTATION_SUMMARY_FIELDS,
   consultationSummaryToFormValues,
@@ -137,13 +138,20 @@ function parseVitalSignsText(text: string): VitalSignsDraft {
 }
 
 function stringifyVitalSigns(draft: VitalSignsDraft): string {
-  return VITAL_SIGN_FIELDS.map((field) => {
+  const lines = VITAL_SIGN_FIELDS.map((field) => {
     const value = draft[field.key].trim();
     if (!value) return null;
     return `${field.label}: ${value}`;
-  })
-    .filter((line): line is string => Boolean(line))
-    .join('\n');
+  }).filter((line): line is string => Boolean(line));
+
+  const bmi = formatBmi(calculateBmi(draft.height, draft.weight));
+  if (bmi) lines.push(`BMI: ${bmi}`);
+
+  return lines.join('\n');
+}
+
+function caseDetailsCurrentMedications(request: OpinionRequest): string {
+  return caseDetailsFromRequest(request).currentMedications?.trim() ?? '';
 }
 
 function vitalSignsDraftFromCaseDetails(request: OpinionRequest): VitalSignsDraft {
@@ -299,20 +307,28 @@ export default function DoctorConsultationPage({
     );
     setLabOrderEntryMode(summaryRes.data?.lab_order_file_path?.trim() ? 'upload' : 'type');
     const fallbackVitalSigns = stringifyVitalSigns(vitalSignsDraftFromCaseDetails(match));
+    const pseMedications = caseDetailsCurrentMedications(match);
     const hasSummary = Object.values(fromSummary).some(Boolean);
     if (hasSummary) {
       setValues({
         ...fromSummary,
-        vital_signs: fromSummary.vital_signs.trim() || fallbackVitalSigns
+        vital_signs: fromSummary.vital_signs.trim() || fallbackVitalSigns,
+        // PSE current medications prefill Prescription when doctor has not entered one yet.
+        prescription: fromSummary.prescription.trim() || pseMedications
       });
     } else if (match.doctor_response?.trim()) {
       setValues({
         ...emptyConsultationSummaryValues(),
         vital_signs: fallbackVitalSigns,
-        assessment_plan: match.doctor_response.trim()
+        assessment_plan: match.doctor_response.trim(),
+        prescription: pseMedications
       });
     } else {
-      setValues({ ...emptyConsultationSummaryValues(), vital_signs: fallbackVitalSigns });
+      setValues({
+        ...emptyConsultationSummaryValues(),
+        vital_signs: fallbackVitalSigns,
+        prescription: pseMedications
+      });
     }
 
     if (summaryRes.data?.pdf_storage_path && !hasSummary) {
@@ -433,10 +449,14 @@ export default function DoctorConsultationPage({
       chief_complaint: values.chief_complaint.trim(),
       history_present_illness: values.history_present_illness.trim() || null,
       vital_signs: values.vital_signs.trim() || null,
-      current_medications: values.current_medications.trim() || null,
+      current_medications: null,
       past_medical_history: values.past_medical_history.trim() || null,
+      review_of_systems: values.review_of_systems.trim() || null,
+      physical_examination: values.physical_examination.trim() || null,
       labs_diagnostics: labOrderEntryMode === 'type' ? labOrderText : null,
       assessment_plan: values.assessment_plan.trim(),
+      advise_food_lifestyle: values.advise_food_lifestyle.trim() || null,
+      refer_to: values.refer_to.trim() || null,
       followup_date: values.followup_date.trim() || null,
       prescription: prescriptionEntryMode === 'type' ? prescriptionText : null
     };
@@ -824,6 +844,20 @@ export default function DoctorConsultationPage({
                                 />
                               </label>
                             ))}
+                            <label className='doctor-consultation-vital-item'>
+                              <span>BMI</span>
+                              <input
+                                type='text'
+                                className='doctor-consultation-vital-input'
+                                value={formatBmi(
+                                  calculateBmi(vitalSignsDraft.height, vitalSignsDraft.weight)
+                                )}
+                                readOnly
+                                disabled
+                                placeholder='Auto'
+                                aria-label='Body Mass Index (calculated)'
+                              />
+                            </label>
                           </div>
                         </label>
                       );

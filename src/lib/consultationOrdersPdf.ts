@@ -1,8 +1,9 @@
 import {
   ELIX_BRAND,
   loadElixLogoDataUrl,
+  PDF_SIGNATURE_RESERVE_PT,
   resolvePdfClinicContext,
-  writePdfIssuerContactBlock
+  writePdfDoctorSignatureBlock
 } from './pdfBranding';
 import type { Doctor } from '../types/doctor';
 
@@ -21,6 +22,7 @@ export type ConsultationOrderPdfMeta = {
   /** When set, request belongs to a PSE clinic workspace (not global PSE). */
   clinicId?: string | null;
   clinicName?: string | null;
+  clinicAddressLines?: string[] | null;
   issuedAt?: Date;
 };
 
@@ -96,11 +98,12 @@ async function buildOrderPdf(
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - margin * 2;
+  const contentBottom = pageHeight - margin - PDF_SIGNATURE_RESERVE_PT;
   let y = margin;
   const issuedAt = meta.issuedAt ?? new Date();
 
   const ensureSpace = (height: number) => {
-    if (y + height > pageHeight - margin) {
+    if (y + height > contentBottom) {
       doc.addPage();
       y = margin;
     }
@@ -118,41 +121,43 @@ async function buildOrderPdf(
   };
 
   const logo = await loadElixLogoDataUrl();
+  const logoTop = y;
   if (logo) {
     try {
       doc.addImage(logo, 'PNG', margin, y - 6, 96, 32);
+      y += 30;
     } catch {
-      addLine(ELIX_BRAND.legalName, 18, true);
+      addLine(ELIX_BRAND.legalName, 16, true);
     }
   } else {
-    addLine(ELIX_BRAND.legalName, 18, true);
+    addLine(ELIX_BRAND.legalName, 16, true);
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text(title, pageWidth - margin, y + 8, { align: 'right' });
-  y += 36;
+  const clinicAddress = (meta.clinicAddressLines ?? [])
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (clinicAddress.length) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    for (const line of clinicAddress) {
+      const lines = doc.splitTextToSize(line, contentWidth * 0.55);
+      for (const wrapped of lines) {
+        doc.text(wrapped, margin, y);
+        y += 11;
+      }
+    }
+    doc.setTextColor(0, 0, 0);
+  }
 
-  doc.setDrawColor(220, 228, 236);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 16;
-
-  const leftColWidth = contentWidth * 0.52;
-  writePdfIssuerContactBlock(addLine, {
-    margin,
-    leftColWidth,
-    clinicId: meta.clinicId,
-    clinicName: meta.clinicName,
-    doctor: meta.doctor
-  });
-
-  let rightY = margin + 52;
+  let rightY = logoTop + 8;
   const writeRight = (text: string, size: number, bold = false) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
     doc.setFontSize(size);
     doc.text(text, pageWidth - margin, rightY, { align: 'right' });
     rightY += size * 1.35;
   };
+  writeRight(title, 14, true);
   writeRight(
     `Date & Time: ${
       meta.scheduledAt
@@ -165,34 +170,38 @@ async function buildOrderPdf(
     writeRight(`Request ID: ${shortId(meta.requestId)}`, 9);
   }
 
-  y = Math.max(y, rightY) + 12;
+  y = Math.max(y, rightY) + 10;
 
-  addLine('Patient', 11, true);
+  doc.setDrawColor(220, 228, 236);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 14;
+
+  addLine('Patient', 10, true);
   const patientDisplayName = withPatientHonorific(meta.patientName, meta.patientGender);
   if (patientDisplayName) addLine(patientDisplayName, 11);
-  if (meta.patientEmail?.trim()) addLine(meta.patientEmail.trim(), 10);
-  if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 10);
-  y += 8;
+  if (meta.patientEmail?.trim()) addLine(meta.patientEmail.trim(), 9);
+  if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 9);
+  y += 6;
 
-  addLine('Consultation provider', 11, true);
+  addLine('Consultation provider', 10, true);
   const doctorDisplayName = withDoctorHonorific(meta.doctor?.full_name ?? meta.doctorName);
   const specialty = meta.doctor?.specialty?.trim() || meta.doctorSpecialty?.trim() || null;
   if (doctorDisplayName) {
     addLine(`${doctorDisplayName}${specialty ? ` · ${specialty}` : ''}`, 11);
   }
   const qualification = meta.doctor?.qualification?.trim() || meta.doctorQualification?.trim();
-  if (qualification) addLine(qualification, 10);
+  if (qualification) addLine(qualification, 9);
   const license =
     meta.doctor?.medical_license_no?.trim() || meta.doctorMedicalLicenseNo?.trim();
   if (license) {
-    addLine(`License: ${license}`, 10);
+    addLine(`License: ${license}`, 9);
   }
-  y += 12;
+  y += 10;
 
   doc.setDrawColor(220, 228, 236);
   ensureSpace(20);
   doc.line(margin, y, pageWidth - margin, y);
-  y += 16;
+  y += 14;
 
   addLine(title === 'PRESCRIPTION' ? 'Prescription details' : 'Lab order details', 13, true);
   y += 4;
@@ -208,7 +217,7 @@ async function buildOrderPdf(
     const imageData = await orderFileToPdfImageData(uploadedFile.blob, uploadedFile.fileName);
     if (imageData) {
       const imageMaxWidth = contentWidth;
-      const imageMaxHeight = 260;
+      const imageMaxHeight = 220;
       const scale = Math.min(
         imageMaxWidth / imageData.width,
         imageMaxHeight / imageData.height,
@@ -236,9 +245,10 @@ async function buildOrderPdf(
     addLine('No order details were provided.', 11);
   }
 
-  y += 18;
+  ensureSpace(28);
+  y += 10;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
   doc.text(
     `This ${title.toLowerCase()} was generated from the consultation notes recorded by your doctor on ElixClinix.`,
@@ -247,6 +257,15 @@ async function buildOrderPdf(
     { maxWidth: contentWidth }
   );
   doc.setTextColor(0, 0, 0);
+  y += 18;
+
+  writePdfDoctorSignatureBlock(doc, {
+    margin,
+    pageWidth,
+    pageHeight,
+    doctorName: doctorDisplayName,
+    y: Math.max(y + 12, pageHeight - margin - 58)
+  });
 
   return doc;
 }
@@ -328,7 +347,8 @@ export async function generatePrescriptionOrderPdfBlob(
   const doc = await buildOrderPdf('PRESCRIPTION', prescriptionText, null, {
     ...meta,
     clinicId: clinic.clinicId,
-    clinicName: clinic.clinicName
+    clinicName: clinic.clinicName,
+    clinicAddressLines: clinic.clinicAddressLines
   });
   return doc.output('blob');
 }
@@ -346,7 +366,8 @@ export async function generateLabOrderPdfBlob(
   const doc = await buildOrderPdf('LAB ORDER', labOrderText, null, {
     ...meta,
     clinicId: clinic.clinicId,
-    clinicName: clinic.clinicName
+    clinicName: clinic.clinicName,
+    clinicAddressLines: clinic.clinicAddressLines
   });
   return doc.output('blob');
 }
@@ -365,7 +386,8 @@ export async function generatePrescriptionOrderPdfFromUploadBlob(
   const doc = await buildOrderPdf('PRESCRIPTION', '', { blob: uploadBlob, fileName }, {
     ...meta,
     clinicId: clinic.clinicId,
-    clinicName: clinic.clinicName
+    clinicName: clinic.clinicName,
+    clinicAddressLines: clinic.clinicAddressLines
   });
   return doc.output('blob');
 }
@@ -384,7 +406,8 @@ export async function generateLabOrderPdfFromUploadBlob(
   const doc = await buildOrderPdf('LAB ORDER', '', { blob: uploadBlob, fileName }, {
     ...meta,
     clinicId: clinic.clinicId,
-    clinicName: clinic.clinicName
+    clinicName: clinic.clinicName,
+    clinicAddressLines: clinic.clinicAddressLines
   });
   return doc.output('blob');
 }

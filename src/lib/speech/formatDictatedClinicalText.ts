@@ -22,20 +22,6 @@ function capitalizeSentences(text: string): string {
   });
 }
 
-function formatMedicationList(text: string): string {
-  const normalized = normalizeSpokenPunctuation(text);
-  const parts = normalized
-    .split(/\n|(?:,\s*)|\s+and\s+/i)
-    .map((part) => part.trim().replace(/^•\s*/, ''))
-    .filter(Boolean);
-
-  if (parts.length <= 1) {
-    return capitalizeSentences(normalized);
-  }
-
-  return parts.map((part) => `• ${capitalizeSentences(part)}`).join('\n');
-}
-
 function formatVitalSigns(text: string): string {
   let formatted = normalizeSpokenPunctuation(text)
     .replace(/\bb p\b/gi, 'BP')
@@ -87,8 +73,6 @@ export function formatDictatedClinicalText(
   switch (fieldKey) {
     case 'vital_signs':
       return formatVitalSigns(trimmed);
-    case 'current_medications':
-      return formatMedicationList(trimmed);
     case 'prescription':
       return formatPrescription(trimmed);
     case 'labs_diagnostics':

@@ -1,8 +1,9 @@
 import {
   ELIX_BRAND,
   loadElixLogoDataUrl,
+  PDF_SIGNATURE_RESERVE_PT,
   resolvePdfClinicContext,
-  writePdfIssuerContactBlock
+  writePdfDoctorSignatureBlock
 } from './pdfBranding';
 import { formatConsultationFollowupDate } from './consultationSummaryFields';
 import { orderFileToPdfImageData } from './consultationOrdersPdf';
@@ -22,6 +23,7 @@ export type ConsultationSummaryPdfMeta = {
   /** When set, request belongs to a PSE clinic workspace (not global PSE). */
   clinicId?: string | null;
   clinicName?: string | null;
+  clinicAddressLines?: string[] | null;
   issuedAt?: Date;
 };
 
@@ -32,22 +34,25 @@ export type ConsultationSummaryPdfAttachments = {
   labOrderFileName?: string | null;
 };
 
+/** Clinical summary section order (matches doctor dashboard). */
 const CLINICAL_SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
-  { key: 'chief_complaint', label: 'Chief complaint' },
-  { key: 'history_present_illness', label: 'History of present illness' },
-  { key: 'past_medical_history', label: 'Past medical history' },
-  { key: 'current_medications', label: 'Current medications' },
-  { key: 'vital_signs', label: 'Vital signs' },
-  { key: 'assessment_plan', label: 'Assessment & plan' },
-  { key: 'followup_date', label: 'Follow-up date' }
+  { key: 'chief_complaint', label: 'Chief Complaint' },
+  { key: 'history_present_illness', label: 'History of Present Illness' },
+  { key: 'past_medical_history', label: 'Past Medical/Surgical/Social History' },
+  { key: 'review_of_systems', label: 'Review of Systems (ROS)' },
+  { key: 'vital_signs', label: 'Vital Signs' },
+  { key: 'physical_examination', label: 'Physical Examination (PE)' },
+  { key: 'assessment_plan', label: 'Assessment/Plan' },
+  { key: 'prescription', label: 'Prescription' },
+  { key: 'advise_food_lifestyle', label: 'Advise on Food/Lifestyle' },
+  { key: 'refer_to', label: 'Refer To' },
+  { key: 'followup_date', label: 'Follow-up Date' }
 ];
 
-/** Full section list (includes orders). */
+/** Full section list including lab order (shown after clinical block when present). */
 const SECTIONS: Array<{ key: keyof ConsultationSummary; label: string }> = [
-  ...CLINICAL_SECTIONS.slice(0, 5),
-  { key: 'labs_diagnostics', label: 'Lab Order' },
-  ...CLINICAL_SECTIONS.slice(5),
-  { key: 'prescription', label: 'Prescription' }
+  ...CLINICAL_SECTIONS,
+  { key: 'labs_diagnostics', label: 'Lab Order' }
 ];
 
 function isUploadedFilePlaceholder(value: string): boolean {
@@ -116,11 +121,12 @@ async function buildConsultationSummaryPdf(
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = pageWidth - margin * 2;
+  const contentBottom = pageHeight - margin - PDF_SIGNATURE_RESERVE_PT;
   let y = margin;
   const issuedAt = meta.issuedAt ?? new Date();
 
   const ensureSpace = (height: number) => {
-    if (y + height > pageHeight - margin) {
+    if (y + height > contentBottom) {
       doc.addPage();
       y = margin;
     }
@@ -138,35 +144,36 @@ async function buildConsultationSummaryPdf(
   };
 
   const logo = await loadElixLogoDataUrl();
+  const logoTop = y;
   if (logo) {
     try {
       doc.addImage(logo, 'PNG', margin, y - 6, 96, 32);
+      y += 30;
     } catch {
-      addLine(ELIX_BRAND.legalName, 18, true);
+      addLine(ELIX_BRAND.legalName, 16, true);
     }
   } else {
-    addLine(ELIX_BRAND.legalName, 18, true);
+    addLine(ELIX_BRAND.legalName, 16, true);
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text('CONSULTATION NOTES', pageWidth - margin, y + 8, { align: 'right' });
-  y += 36;
+  const clinicAddress = (meta.clinicAddressLines ?? [])
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (clinicAddress.length) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    for (const line of clinicAddress) {
+      const lines = wrapText(doc, line, contentWidth * 0.55);
+      for (const wrapped of lines) {
+        doc.text(wrapped, margin, y);
+        y += 11;
+      }
+    }
+    doc.setTextColor(0, 0, 0);
+  }
 
-  doc.setDrawColor(220, 228, 236);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 16;
-
-  const leftColWidth = contentWidth * 0.52;
-  writePdfIssuerContactBlock(addLine, {
-    margin,
-    leftColWidth,
-    clinicId: meta.clinicId,
-    clinicName: meta.clinicName,
-    doctor: meta.doctor
-  });
-
-  let rightY = margin + 52;
+  let rightY = logoTop + 8;
   const writeRight = (text: string, size: number, bold = false) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
     doc.setFontSize(size);
@@ -178,37 +185,88 @@ async function buildConsultationSummaryPdf(
     writeRight(`Request ID: ${meta.requestId.slice(0, 8).toUpperCase()}`, 9);
   }
 
-  y = Math.max(y, rightY) + 12;
+  y = Math.max(y, rightY) + 10;
 
-  addLine('Patient', 11, true);
+  doc.setDrawColor(220, 228, 236);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 18;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Consultation Summary', margin, y);
+  y += 16;
+
+  doc.setDrawColor(220, 228, 236);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 14;
+
   const patientName = withPatientHonorific(meta.patientName ?? null, meta.patientGender);
-  if (patientName) addLine(patientName, 11);
-  if (meta.patientEmail?.trim()) addLine(meta.patientEmail.trim(), 10);
-  if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 10);
-  y += 8;
-
-  addLine('Consultation provider', 11, true);
-  const name = withDoctorHonorific(doctorDisplayName(meta));
+  const providerName = withDoctorHonorific(doctorDisplayName(meta));
   const specialty = doctorSpecialty(meta);
-  if (name) {
-    addLine(`${name}${specialty ? ` · ${specialty}` : ''}`, 11);
+
+  addLine('Patient', 10, true);
+  if (patientName) addLine(patientName, 11);
+  if (meta.patientEmail?.trim()) addLine(meta.patientEmail.trim(), 9);
+  if (meta.patientId) addLine(`Patient ID: ${shortId(meta.patientId)}`, 9);
+  y += 6;
+
+  addLine('Consultation provider', 10, true);
+  if (providerName) {
+    addLine(`${providerName}${specialty ? ` · ${specialty}` : ''}`, 11);
   }
-  if (meta.doctor?.qualification?.trim()) addLine(meta.doctor.qualification.trim(), 10);
+  if (meta.doctor?.qualification?.trim()) addLine(meta.doctor.qualification.trim(), 9);
   if (meta.doctor?.medical_license_no?.trim()) {
-    addLine(`Medical license: ${meta.doctor.medical_license_no.trim()}`, 10);
+    addLine(`Medical license: ${meta.doctor.medical_license_no.trim()}`, 9);
   }
-  y += 12;
+  y += 10;
 
   doc.setDrawColor(220, 228, 236);
   ensureSpace(20);
   doc.line(margin, y, pageWidth - margin, y);
-  y += 16;
+  y += 14;
 
-  addLine('Clinical summary', 13, true);
-  y += 4;
+  for (const { key, label } of CLINICAL_SECTIONS) {
+    if (key === 'prescription') {
+      const raw = summary.prescription?.trim() ?? '';
+      const placeholderName =
+        raw && isUploadedFilePlaceholder(raw) ? uploadedFileNameFromPlaceholder(raw) : null;
+      const text = raw && !isUploadedFilePlaceholder(raw) ? raw : '';
+      const fileName =
+        summary.prescription_file_name?.trim() ||
+        placeholderName ||
+        (attachments?.prescriptionFile instanceof File ? attachments.prescriptionFile.name : null);
+      if (!text && !fileName && !attachments?.prescriptionFile) continue;
 
-  for (const { key, label } of SECTIONS) {
-    if (key === 'prescription' || key === 'labs_diagnostics') continue;
+      addLine(label, 11, true);
+      if (text) addLine(text, 10);
+      if (fileName && !text) addLine(`Uploaded file: ${fileName}`, 10);
+      if (attachments?.prescriptionFile) {
+        const imageData = await orderFileToPdfImageData(
+          attachments.prescriptionFile,
+          fileName
+        );
+        if (imageData) {
+          const imageMaxWidth = contentWidth;
+          const imageMaxHeight = 220;
+          const scale = Math.min(
+            imageMaxWidth / imageData.width,
+            imageMaxHeight / imageData.height,
+            1
+          );
+          const drawWidth = imageData.width * scale;
+          const drawHeight = imageData.height * scale;
+          ensureSpace(drawHeight + 8);
+          doc.addImage(imageData.dataUrl, imageData.format, margin, y, drawWidth, drawHeight);
+          y += drawHeight + 8;
+        } else if (!text) {
+          addLine('This file is also stored as a separate document.', 10);
+        }
+      }
+      y += 8;
+      continue;
+    }
+
     const value = sectionDisplayValue(key, summary[key]);
     if (!value) continue;
     addLine(label, 11, true);
@@ -216,30 +274,24 @@ async function buildConsultationSummaryPdf(
     y += 8;
   }
 
-  const addOrderSection = async (
-    label: string,
-    typedValue: string | null | undefined,
-    storedFileName: string | null | undefined,
-    file: File | Blob | null | undefined
-  ) => {
-    const raw = typedValue?.trim() ?? '';
-    const placeholderName =
-      raw && isUploadedFilePlaceholder(raw) ? uploadedFileNameFromPlaceholder(raw) : null;
-    const text = raw && !isUploadedFilePlaceholder(raw) ? raw : '';
-    const fileName =
-      storedFileName?.trim() || placeholderName || (file instanceof File ? file.name : null);
-    if (!text && !fileName && !file) return;
-
-    addLine(label, 11, true);
-    if (text) addLine(text, 10);
-    if (fileName && !text) {
-      addLine(`Uploaded file: ${fileName}`, 10);
-    }
-    if (file) {
-      const imageData = await orderFileToPdfImageData(file, fileName);
+  const labRaw = summary.labs_diagnostics?.trim() ?? '';
+  const labPlaceholder =
+    labRaw && isUploadedFilePlaceholder(labRaw) ? uploadedFileNameFromPlaceholder(labRaw) : null;
+  const labText = labRaw && !isUploadedFilePlaceholder(labRaw) ? labRaw : '';
+  const labFileName =
+    attachments?.labOrderFileName?.trim() ||
+    summary.lab_order_file_name?.trim() ||
+    labPlaceholder ||
+    (attachments?.labOrderFile instanceof File ? attachments.labOrderFile.name : null);
+  if (labText || labFileName || attachments?.labOrderFile) {
+    addLine('Lab Order', 11, true);
+    if (labText) addLine(labText, 10);
+    if (labFileName && !labText) addLine(`Uploaded file: ${labFileName}`, 10);
+    if (attachments?.labOrderFile) {
+      const imageData = await orderFileToPdfImageData(attachments.labOrderFile, labFileName);
       if (imageData) {
         const imageMaxWidth = contentWidth;
-        const imageMaxHeight = 260;
+        const imageMaxHeight = 220;
         const scale = Math.min(
           imageMaxWidth / imageData.width,
           imageMaxHeight / imageData.height,
@@ -250,32 +302,17 @@ async function buildConsultationSummaryPdf(
         ensureSpace(drawHeight + 8);
         doc.addImage(imageData.dataUrl, imageData.format, margin, y, drawWidth, drawHeight);
         y += drawHeight + 8;
-      } else if (!text) {
+      } else if (!labText) {
         addLine('This file is also stored as a separate document.', 10);
       }
-    } else if (fileName && !text) {
-      addLine('This file is also stored as a separate document.', 10);
     }
     y += 8;
-  };
+  }
 
-  await addOrderSection(
-    'Lab Order',
-    summary.labs_diagnostics,
-    attachments?.labOrderFileName ?? summary.lab_order_file_name,
-    attachments?.labOrderFile
-  );
-  await addOrderSection(
-    'Prescription',
-    summary.prescription,
-    attachments?.prescriptionFileName ?? summary.prescription_file_name,
-    attachments?.prescriptionFile
-  );
-
-  ensureSpace(40);
-  y += 8;
+  ensureSpace(28);
+  y += 6;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
   doc.text(
     'This document was generated by ElixClinix for the patient consultation record.',
@@ -284,6 +321,15 @@ async function buildConsultationSummaryPdf(
     { maxWidth: contentWidth }
   );
   doc.setTextColor(0, 0, 0);
+  y += 18;
+
+  writePdfDoctorSignatureBlock(doc, {
+    margin,
+    pageWidth,
+    pageHeight,
+    doctorName: withDoctorHonorific(doctorDisplayName(meta)),
+    y: Math.max(y + 12, pageHeight - margin - 58)
+  });
 
   return doc;
 }
@@ -336,7 +382,8 @@ export async function generateConsultationSummaryPdfBlob(
     {
       ...meta,
       clinicId: clinic.clinicId,
-      clinicName: clinic.clinicName
+      clinicName: clinic.clinicName,
+      clinicAddressLines: clinic.clinicAddressLines
     },
     attachments
   );

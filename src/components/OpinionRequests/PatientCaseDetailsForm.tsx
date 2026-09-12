@@ -1,5 +1,6 @@
 import PreferredLanguageMultiSelect from '../patient/PreferredLanguageMultiSelect';
 import PatientBirthDatePicker from '../patient/PatientBirthDatePicker';
+import { calculateBmi, formatBmi } from '../../lib/bmi';
 import { DOCTOR_SPECIALTY_OPTIONS } from '../../lib/doctorSpecialtyOptions';
 import {
   CONSULTATION_MODE_OPTIONS,
@@ -254,6 +255,18 @@ export default function PatientCaseDetailsForm({
             />
           </label>
         ))}
+        <label className='opinion-message-label'>
+          BMI
+          <input
+            className='opinion-select'
+            type='text'
+            value={formatBmi(calculateBmi(value.vitalSigns.height, value.vitalSigns.weight))}
+            placeholder='Auto-calculated'
+            readOnly
+            disabled
+            aria-label='Body Mass Index (calculated from height and weight)'
+          />
+        </label>
       </div>
 
       <SectionTitle>3. Medical History</SectionTitle>
