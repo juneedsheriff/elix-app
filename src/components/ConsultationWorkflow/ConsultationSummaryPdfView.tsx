@@ -746,7 +746,39 @@ export default function ConsultationSummaryPdfView({
       {sections.map((section) => (
         <section key={section.label} className='consultation-summary-pdf__section'>
           <h6>{section.label}</h6>
-          <p>{section.value}</p>
+          {section.label === 'Past Medical/Surgical/Social History' ? (
+            <div className='consultation-summary-pdf__history'>
+              {section.value.split('\n').map((line, index) => {
+                const trimmed = line.trim();
+                if (!trimmed) return <br key={`blank-${index}`} />;
+                const labeled = trimmed.match(
+                  /^(Past medical history|Surgical history|Family history|Social history)\s*:\s*(.*)$/i
+                );
+                if (labeled) {
+                  return (
+                    <p key={`${section.label}-${index}`}>
+                      <strong>{labeled[1]}:</strong>
+                      {labeled[2]?.trim() ? ` ${labeled[2].trim()}` : null}
+                    </p>
+                  );
+                }
+                if (
+                  /^(Past medical history|Surgical history|Family history|Social history)\s*:?\s*$/i.test(
+                    trimmed
+                  )
+                ) {
+                  return (
+                    <p key={`${section.label}-${index}`}>
+                      <strong>{trimmed.replace(/:?\s*$/, '')}:</strong>
+                    </p>
+                  );
+                }
+                return <p key={`${section.label}-${index}`}>{line}</p>;
+              })}
+            </div>
+          ) : (
+            <p>{section.value}</p>
+          )}
         </section>
       ))}
     </div>

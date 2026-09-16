@@ -4070,6 +4070,7 @@ async function uploadConsultationInvoicePdf(
     totals,
     clinicId: request.clinic_id,
     clinicName: request.clinic_name,
+    patientId: request.patient_id,
     kind,
     lineItemDescription,
     feeLabel: input.feeLabel ?? (kind === 'home_care' ? 'Home care fee' : 'Consultation fee')

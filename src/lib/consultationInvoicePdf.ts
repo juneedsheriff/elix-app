@@ -5,9 +5,9 @@ import {
 } from './consultationCurrency';
 import {
   ELIX_BRAND,
+  formatPdfClinicHeaderLines,
   loadElixLogoDataUrl,
-  resolvePdfClinicContext,
-  writePdfIssuerContactBlock
+  resolvePdfClinicContext
 } from './pdfBranding';
 
 export type ConsultationInvoiceTotals = {
@@ -32,6 +32,9 @@ export type ConsultationInvoicePdfInput = {
   /** When set, request belongs to a PSE clinic workspace (not global PSE). */
   clinicId?: string | null;
   clinicName?: string | null;
+  clinicAddressLines?: string[] | null;
+  clinicEmail?: string | null;
+  clinicPhone?: string | null;
   /** Override line-item text (home care services, etc.). */
   lineItemDescription?: string | null;
   /** Totals row label — defaults to "Consultation fee". */
@@ -124,40 +127,43 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   };
 
   const logo = await loadElixLogoDataUrl();
+  const logoTop = y;
+  const logoHeight = 32;
   if (logo) {
     try {
-      doc.addImage(logo, 'PNG', margin, y - 6, 96, 32);
+      doc.addImage(logo, 'PNG', margin, y - 4, 96, logoHeight);
+      y = logoTop + logoHeight + 14;
     } catch {
-      addLine(ELIX_BRAND.legalName, 18, true);
+      addLine(ELIX_BRAND.legalName, 16, true);
+      y += 4;
     }
   } else {
-    addLine(ELIX_BRAND.legalName, 18, true);
+    addLine(ELIX_BRAND.legalName, 16, true);
+    y += 4;
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.text('INVOICE', pageWidth - margin, y + 8, { align: 'right' });
-  y += 36;
-
-  doc.setDrawColor(220, 228, 236);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 16;
-
-  const leftColWidth = contentWidth * 0.52;
-  const isHomeCare = input.kind === 'home_care';
-  const doctorDisplayName = withDoctorHonorific(input.doctor?.full_name) ?? input.doctor?.full_name ?? null;
-  const patientDisplayName = withPatientHonorific(input.patientName, input.patientGender);
-
-  writePdfIssuerContactBlock(addLine, {
-    margin,
-    leftColWidth,
-    clinicId: input.clinicId,
+  const clinicAddress = formatPdfClinicHeaderLines({
     clinicName: input.clinicName,
-    doctor: input.doctor
+    clinicAddressLines: input.clinicAddressLines,
+    clinicEmail: input.clinicEmail,
+    clinicPhone: input.clinicPhone
   });
+  if (clinicAddress.length) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    for (const line of clinicAddress) {
+      const lines = wrapText(doc, line, contentWidth * 0.58);
+      for (const wrapped of lines) {
+        doc.text(wrapped, margin, y);
+        y += 12;
+      }
+    }
+    doc.setTextColor(0, 0, 0);
+    y += 4;
+  }
 
-  const rightStartY = y - 4 * 10 * 1.35;
-  let rightY = Math.max(margin + 52, rightStartY);
+  let rightY = logoTop + 10;
   const writeRight = (text: string, size: number, bold = false) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
     doc.setFontSize(size);
@@ -169,6 +175,24 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
   writeRight(`Request ID: ${input.requestId.slice(0, 8).toUpperCase()}`, 9);
 
   y = Math.max(y, rightY) + 12;
+
+  doc.setDrawColor(220, 228, 236);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 20;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Invoice', pageWidth / 2, y, { align: 'center' });
+  y += 16;
+
+  doc.setDrawColor(220, 228, 236);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 14;
+
+  const isHomeCare = input.kind === 'home_care';
+  const doctorDisplayName = withDoctorHonorific(input.doctor?.full_name) ?? input.doctor?.full_name ?? null;
+  const patientDisplayName = withPatientHonorific(input.patientName, input.patientGender);
 
   addLine('Bill to', 11, true);
   if (patientDisplayName) addLine(patientDisplayName, 11);
@@ -265,17 +289,21 @@ async function buildConsultationInvoicePdf(input: ConsultationInvoicePdfInput) {
 }
 
 export async function generateConsultationInvoicePdfBlob(
-  input: ConsultationInvoicePdfInput
+  input: ConsultationInvoicePdfInput & { patientId?: string | null }
 ): Promise<Blob> {
   const clinic = await resolvePdfClinicContext({
     clinicId: input.clinicId,
     clinicName: input.clinicName,
-    doctor: input.doctor
+    doctor: input.doctor,
+    patientId: input.patientId
   });
   const doc = await buildConsultationInvoicePdf({
     ...input,
     clinicId: clinic.clinicId,
-    clinicName: clinic.clinicName
+    clinicName: clinic.clinicName,
+    clinicAddressLines: clinic.clinicAddressLines,
+    clinicEmail: clinic.clinicEmail,
+    clinicPhone: clinic.clinicPhone
   });
   return doc.output('blob');
 }

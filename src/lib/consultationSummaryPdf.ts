@@ -1,5 +1,6 @@
 import {
   ELIX_BRAND,
+  formatPdfClinicHeaderLines,
   loadElixLogoDataUrl,
   PDF_SIGNATURE_RESERVE_PT,
   resolvePdfClinicContext,
@@ -24,6 +25,8 @@ export type ConsultationSummaryPdfMeta = {
   clinicId?: string | null;
   clinicName?: string | null;
   clinicAddressLines?: string[] | null;
+  clinicEmail?: string | null;
+  clinicPhone?: string | null;
   issuedAt?: Date;
 };
 
@@ -166,9 +169,12 @@ async function buildConsultationSummaryPdf(
     y += 4;
   }
 
-  const clinicAddress = (meta.clinicAddressLines ?? [])
-    .map((line) => line.trim())
-    .filter((line) => line && !/^clinic\s+workspace$/i.test(line));
+  const clinicAddress = formatPdfClinicHeaderLines({
+    clinicName: meta.clinicName,
+    clinicAddressLines: meta.clinicAddressLines,
+    clinicEmail: meta.clinicEmail,
+    clinicPhone: meta.clinicPhone
+  });
   if (clinicAddress.length) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -291,7 +297,57 @@ async function buildConsultationSummaryPdf(
 
     const value = sectionDisplayValue(key, summary[key]);
     addLine(label, 11, true);
-    addLine(value || EMPTY_SECTION_PLACEHOLDER, 10);
+    if (key === 'past_medical_history' && value) {
+      const historyLines = value.split('\n');
+      for (const rawLine of historyLines) {
+        const line = rawLine.trimEnd();
+        if (!line.trim()) {
+          y += 6;
+          continue;
+        }
+        const labeled = line.match(
+          /^(Past medical history|Surgical history|Family history|Social history)\s*:\s*(.*)$/i
+        );
+        if (labeled) {
+          const heading = `${labeled[1]}:`;
+          const rest = (labeled[2] ?? '').trim();
+          ensureSpace(14);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.text(heading, margin, y);
+          if (rest) {
+            const headingWidth = doc.getTextWidth(`${heading} `);
+            doc.setFont('helvetica', 'normal');
+            const wrapped = wrapText(doc, rest, Math.max(40, contentWidth - headingWidth));
+            if (wrapped.length) {
+              doc.text(wrapped[0]!, margin + headingWidth, y);
+              y += 10 * 1.35;
+              for (const extra of wrapped.slice(1)) {
+                ensureSpace(14);
+                doc.text(extra, margin, y);
+                y += 10 * 1.35;
+              }
+            } else {
+              y += 10 * 1.35;
+            }
+          } else {
+            y += 10 * 1.35;
+          }
+          continue;
+        }
+        if (
+          /^(Past medical history|Surgical history|Family history|Social history)\s*:?\s*$/i.test(
+            line.trim()
+          )
+        ) {
+          addLine(line.trim().replace(/:?\s*$/, '') + ':', 10, true);
+          continue;
+        }
+        addLine(line, 10);
+      }
+    } else {
+      addLine(value || EMPTY_SECTION_PLACEHOLDER, 10);
+    }
     y += 8;
   }
 
@@ -369,7 +425,9 @@ export async function generateConsultationSummaryPdfBlob(
       ...meta,
       clinicId: clinic.clinicId,
       clinicName: clinic.clinicName,
-      clinicAddressLines: clinic.clinicAddressLines
+      clinicAddressLines: clinic.clinicAddressLines,
+      clinicEmail: clinic.clinicEmail,
+      clinicPhone: clinic.clinicPhone
     },
     attachments
   );

@@ -23,9 +23,9 @@ export const SECOND_OPINION_QUESTION_OPTIONS = [
 
 export type SecondOpinionQuestion = (typeof SECOND_OPINION_QUESTION_OPTIONS)[number];
 
-export const CONSULTATION_MODE_OPTIONS = ['Video Call', 'Audio Call', 'Written Review'] as const;
+export const CONSULTATION_MODE_OPTIONS = ['Video Call'] as const;
 
-export type ConsultationMode = (typeof CONSULTATION_MODE_OPTIONS)[number];
+export type ConsultationMode = (typeof CONSULTATION_MODE_OPTIONS)[number] | 'Audio Call' | 'Written Review';
 
 export type PreferredTimeSlot = {
   date: string;

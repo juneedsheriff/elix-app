@@ -140,9 +140,9 @@ export async function resolvePdfClinicName(
 }
 
 /**
- * Resolve clinic id/name/address for PDF issuer blocks (PSE clinic requests only).
+ * Resolve clinic id/name/address/contact for PDF issuer blocks (PSE clinic requests only).
  * Falls back to the doctor's clinic workspace, then the patient's clinic.
- * Under-logo address prefers the clinic profile location once (no doctor-address merge).
+ * Under-logo contact prefers the clinic profile location/email/phone from Admin → Staff.
  */
 export async function resolvePdfClinicContext(input: {
   clinicId?: string | null;
@@ -153,6 +153,8 @@ export async function resolvePdfClinicContext(input: {
   clinicId: string | null;
   clinicName: string | null;
   clinicAddressLines: string[];
+  clinicEmail: string | null;
+  clinicPhone: string | null;
 }> {
   let clinicId =
     input.clinicId?.trim() ||
@@ -163,20 +165,32 @@ export async function resolvePdfClinicContext(input: {
     input.doctor?.pse_clinic_name?.trim() ||
     null;
   let clinicLocation: string | null = null;
+  let clinicEmail: string | null = null;
+  let clinicPhone: string | null = null;
 
   if (!clinicId && input.patientId?.trim()) {
     const patientAuthId = input.patientId.trim();
     const withJoin = await supabase
       .from('patients')
-      .select('clinic_id, pse_clinics(name, location)')
+      .select('clinic_id, pse_clinics(name, location, email, phone)')
       .eq('auth_user_id', patientAuthId)
       .maybeSingle();
 
     let row = withJoin.data as {
       clinic_id?: string | null;
       pse_clinics?:
-        | { name?: string | null; location?: string | null }
-        | { name?: string | null; location?: string | null }[]
+        | {
+            name?: string | null;
+            location?: string | null;
+            email?: string | null;
+            phone?: string | null;
+          }
+        | {
+            name?: string | null;
+            location?: string | null;
+            email?: string | null;
+            phone?: string | null;
+          }[]
         | null;
     } | null;
 
@@ -195,22 +209,32 @@ export async function resolvePdfClinicContext(input: {
       const clinicRef = Array.isArray(ref) ? ref[0] : ref;
       clinicName = clinicName || clinicRef?.name?.trim() || null;
       clinicLocation = clinicRef?.location?.trim() || null;
+      clinicEmail = clinicRef?.email?.trim() || null;
+      clinicPhone = clinicRef?.phone?.trim() || null;
     }
   }
 
   if (!clinicId) {
-    return { clinicId: null, clinicName: null, clinicAddressLines: [] };
+    return {
+      clinicId: null,
+      clinicName: null,
+      clinicAddressLines: [],
+      clinicEmail: null,
+      clinicPhone: null
+    };
   }
 
-  if (!clinicLocation) {
+  if (!clinicLocation || !clinicEmail || !clinicPhone) {
     const { data } = await supabase
       .from('pse_clinics')
-      .select('name, location')
+      .select('name, location, email, phone')
       .eq('id', clinicId)
       .maybeSingle();
     if (data) {
       clinicName = clinicName || (data.name as string | null)?.trim() || null;
-      clinicLocation = (data.location as string | null)?.trim() || null;
+      clinicLocation = clinicLocation || (data.location as string | null)?.trim() || null;
+      clinicEmail = clinicEmail || (data.email as string | null)?.trim() || null;
+      clinicPhone = clinicPhone || (data.phone as string | null)?.trim() || null;
     }
   }
 
@@ -226,7 +250,36 @@ export async function resolvePdfClinicContext(input: {
 
   const clinicAddressLines = uniquePdfAddressLines(addressSource);
 
-  return { clinicId, clinicName, clinicAddressLines };
+  return {
+    clinicId,
+    clinicName,
+    clinicAddressLines,
+    clinicEmail: clinicEmail?.trim() || null,
+    clinicPhone: clinicPhone?.trim() || null
+  };
+}
+
+/** Lines shown under the Elix logo on printed reports. */
+export function formatPdfClinicHeaderLines(input: {
+  clinicName?: string | null;
+  clinicAddressLines?: string[] | null;
+  clinicEmail?: string | null;
+  clinicPhone?: string | null;
+}): string[] {
+  const lines: string[] = [];
+  const name = input.clinicName?.trim();
+  if (name && !isPlaceholderClinicLabel(name)) lines.push(name);
+  for (const line of input.clinicAddressLines ?? []) {
+    const trimmed = line.trim();
+    if (!trimmed || isPlaceholderClinicLabel(trimmed)) continue;
+    if (name && normalizeAddressCompareKey(trimmed) === normalizeAddressCompareKey(name)) continue;
+    lines.push(trimmed);
+  }
+  const phone = input.clinicPhone?.trim();
+  if (phone) lines.push(`Phone: ${phone}`);
+  const email = input.clinicEmail?.trim();
+  if (email) lines.push(email);
+  return uniquePdfAddressLines(lines);
 }
 
 /**

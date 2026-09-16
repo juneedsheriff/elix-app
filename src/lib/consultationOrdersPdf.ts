@@ -1,5 +1,6 @@
 import {
   ELIX_BRAND,
+  formatPdfClinicHeaderLines,
   loadElixLogoDataUrl,
   PDF_SIGNATURE_RESERVE_PT,
   resolvePdfClinicContext,
@@ -23,6 +24,8 @@ export type ConsultationOrderPdfMeta = {
   clinicId?: string | null;
   clinicName?: string | null;
   clinicAddressLines?: string[] | null;
+  clinicEmail?: string | null;
+  clinicPhone?: string | null;
   issuedAt?: Date;
 };
 
@@ -136,9 +139,12 @@ async function buildOrderPdf(
     y += 4;
   }
 
-  const clinicAddress = (meta.clinicAddressLines ?? [])
-    .map((line) => line.trim())
-    .filter((line) => line && !/^clinic\s+workspace$/i.test(line));
+  const clinicAddress = formatPdfClinicHeaderLines({
+    clinicName: meta.clinicName,
+    clinicAddressLines: meta.clinicAddressLines,
+    clinicEmail: meta.clinicEmail,
+    clinicPhone: meta.clinicPhone
+  });
   if (clinicAddress.length) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -161,7 +167,6 @@ async function buildOrderPdf(
     doc.text(text, pageWidth - margin, rightY, { align: 'right' });
     rightY += size * 1.35;
   };
-  writeRight(title, 14, true);
   writeRight(
     `Date & Time: ${
       meta.scheduledAt
@@ -175,6 +180,17 @@ async function buildOrderPdf(
   }
 
   y = Math.max(y, rightY) + 12;
+
+  doc.setDrawColor(220, 228, 236);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 20;
+
+  const centeredTitle = title === 'PRESCRIPTION' ? 'Prescription' : 'Lab Order';
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(15, 23, 42);
+  doc.text(centeredTitle, pageWidth / 2, y, { align: 'center' });
+  y += 16;
 
   doc.setDrawColor(220, 228, 236);
   doc.line(margin, y, pageWidth - margin, y);
@@ -207,8 +223,6 @@ async function buildOrderPdf(
   doc.line(margin, y, pageWidth - margin, y);
   y += 14;
 
-  addLine(title === 'PRESCRIPTION' ? 'Prescription details' : 'Lab order details', 13, true);
-  y += 4;
   const trimmedText = bodyText.trim();
   if (trimmedText) {
     addLine(trimmedText, 11);
@@ -352,7 +366,9 @@ export async function generatePrescriptionOrderPdfBlob(
     ...meta,
     clinicId: clinic.clinicId,
     clinicName: clinic.clinicName,
-    clinicAddressLines: clinic.clinicAddressLines
+    clinicAddressLines: clinic.clinicAddressLines,
+    clinicEmail: clinic.clinicEmail,
+    clinicPhone: clinic.clinicPhone
   });
   return doc.output('blob');
 }
@@ -371,7 +387,9 @@ export async function generateLabOrderPdfBlob(
     ...meta,
     clinicId: clinic.clinicId,
     clinicName: clinic.clinicName,
-    clinicAddressLines: clinic.clinicAddressLines
+    clinicAddressLines: clinic.clinicAddressLines,
+    clinicEmail: clinic.clinicEmail,
+    clinicPhone: clinic.clinicPhone
   });
   return doc.output('blob');
 }
@@ -391,7 +409,9 @@ export async function generatePrescriptionOrderPdfFromUploadBlob(
     ...meta,
     clinicId: clinic.clinicId,
     clinicName: clinic.clinicName,
-    clinicAddressLines: clinic.clinicAddressLines
+    clinicAddressLines: clinic.clinicAddressLines,
+    clinicEmail: clinic.clinicEmail,
+    clinicPhone: clinic.clinicPhone
   });
   return doc.output('blob');
 }
@@ -411,7 +431,9 @@ export async function generateLabOrderPdfFromUploadBlob(
     ...meta,
     clinicId: clinic.clinicId,
     clinicName: clinic.clinicName,
-    clinicAddressLines: clinic.clinicAddressLines
+    clinicAddressLines: clinic.clinicAddressLines,
+    clinicEmail: clinic.clinicEmail,
+    clinicPhone: clinic.clinicPhone
   });
   return doc.output('blob');
 }
