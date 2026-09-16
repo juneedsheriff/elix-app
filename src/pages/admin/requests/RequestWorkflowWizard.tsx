@@ -42,7 +42,7 @@ import {
   canPseManageRequestRecords,
   pseDeleteRequestRecord,
   subscribeOpinionRequestLiveUpdates,
-  canJoinConsultationMeeting,
+  hasActiveConsultationMeetingLink,
   isPatientRequestCompleted
 } from '../../../lib/opinionRequests';
 import {
@@ -1279,7 +1279,7 @@ export default function RequestWorkflowWizard({
             {request.scheduled_at ? (
               <Text size='sm' c='dimmed'>
                 Current: {new Date(request.scheduled_at).toLocaleString()}
-                {canJoinConsultationMeeting(request) && request.meeting_link
+                {hasActiveConsultationMeetingLink(request) && request.meeting_link
                   ? ` · ${request.meeting_link}`
                   : ''}
               </Text>
@@ -1293,7 +1293,7 @@ export default function RequestWorkflowWizard({
             {request.scheduled_at ? (
               <Text size='sm'>
                 {new Date(request.scheduled_at).toLocaleString()}
-                {canJoinConsultationMeeting(request) && request.meeting_link ? (
+                {hasActiveConsultationMeetingLink(request) && request.meeting_link ? (
                   <>
                     {' '}
                     ·{' '}

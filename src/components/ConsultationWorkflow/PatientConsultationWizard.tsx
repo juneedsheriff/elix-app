@@ -8,7 +8,6 @@ import {
   CreditCard,
   FileText,
   Home,
-  Link2,
   Lock,
   ShieldCheck,
   Users
@@ -46,6 +45,9 @@ import {
   consultationSummaryFromDoctorResponse,
   fetchConsultationSummary,
   fetchOpinionRequestRecommendations,
+  formatConsultationJoinCountdown,
+  getMillisecondsUntilConsultationJoinOpens,
+  hasActiveConsultationMeetingLink,
   isHttpsMeetingLink,
   isPatientRequestCompleted,
   isRecommendationOpinionRequest,
@@ -120,47 +122,8 @@ function formatAppointmentDisplay(iso: string): string {
   return `${day} • ${time}`;
 }
 
-const JOIN_MEETING_LEAD_MS = 5 * 60 * 1000;
-
 function defaultExpandedWizardStep(request: OpinionRequest): number | null {
   return isPatientHomeCareWizard(request) ? 0 : null;
-}
-
-function isJoinMeetingAvailable(scheduledAt: string | null | undefined, now = Date.now()): boolean {
-  if (!scheduledAt?.trim()) return false;
-  const start = new Date(scheduledAt).getTime();
-  if (Number.isNaN(start)) return false;
-  return now >= start - JOIN_MEETING_LEAD_MS;
-}
-
-function getMillisecondsUntilMeetingStart(
-  scheduledAt: string | null | undefined,
-  now = Date.now()
-): number | null {
-  if (!scheduledAt?.trim()) return null;
-  const start = new Date(scheduledAt).getTime();
-  if (Number.isNaN(start)) return null;
-  return Math.max(0, start - now);
-}
-
-function getMillisecondsUntilJoinOpens(
-  scheduledAt: string | null | undefined,
-  now = Date.now()
-): number | null {
-  const untilMeeting = getMillisecondsUntilMeetingStart(scheduledAt, now);
-  if (untilMeeting === null) return null;
-  return Math.max(0, untilMeeting - JOIN_MEETING_LEAD_MS);
-}
-
-function formatAppointmentCountdown(remainingMs: number): string {
-  const totalSeconds = Math.ceil(remainingMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  }
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function downloadAppointmentIcs(input: {
@@ -248,10 +211,10 @@ export default function PatientConsultationWizard({
 
   const requestCompleted = isPatientRequestCompleted(request);
   const validMeetingLink = isHttpsMeetingLink(request.meeting_link) ? request.meeting_link!.trim() : null;
-  const showMeetingLink = canJoinConsultationMeeting(request);
-  const joinMeetingAvailable =
-    showMeetingLink && isJoinMeetingAvailable(request.scheduled_at, nowTick);
-  const joinOpensInMs = getMillisecondsUntilJoinOpens(request.scheduled_at, nowTick);
+  const showMeetingControls =
+    hasActiveConsultationMeetingLink(request) && !requestCompleted;
+  const joinMeetingAvailable = canJoinConsultationMeeting(request, nowTick);
+  const joinOpensInMs = getMillisecondsUntilConsultationJoinOpens(request.scheduled_at, nowTick);
 
   const loadExtras = useCallback(async () => {
     const [recRes, summaryRes] = await Promise.all([
@@ -1018,31 +981,6 @@ export default function PatientConsultationWizard({
                   </div>
                 ) : null}
 
-                {validMeetingLink && !requestCompleted ? (
-                  <div className='patient-appointment-detail-card__row'>
-                    <span className='patient-appointment-detail-card__icon' aria-hidden>
-                      <Link2 size={18} />
-                    </span>
-                    <div className='patient-appointment-detail-card__content'>
-                      <span className='patient-appointment-detail-card__label'>Meeting link</span>
-                      {request.payment_status === 'paid' ? (
-                        <a
-                          href={validMeetingLink}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='patient-appointment-detail-card__link'
-                        >
-                          {validMeetingLink}
-                        </a>
-                      ) : (
-                        <p className='muted patient-appointment-detail-card__pending'>
-                          Meeting link activates after payment is confirmed.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-
                 {request.scheduled_at ? (
                   <button
                     type='button'
@@ -1060,7 +998,7 @@ export default function PatientConsultationWizard({
                   </button>
                 ) : null}
 
-                {showMeetingLink && request.payment_status === 'paid' && request.scheduled_at ? (
+                {showMeetingControls && request.payment_status === 'paid' && request.scheduled_at ? (
                   joinMeetingAvailable ? (
                     <a
                       href={validMeetingLink ?? undefined}
@@ -1080,9 +1018,9 @@ export default function PatientConsultationWizard({
                         Join meeting
                       </button>
                       <p className='patient-appointment-step__countdown' aria-live='polite'>
-                        {joinOpensInMs !== null
-                          ? `Meeting Starts in ${formatAppointmentCountdown(joinOpensInMs)}`
-                          : 'Meeting Starts 5 minutes before your appointment.'}
+                        {joinOpensInMs !== null && joinOpensInMs > 0
+                          ? `Join opens in ${formatConsultationJoinCountdown(joinOpensInMs)}`
+                          : 'Join meeting opens 10 minutes before your appointment.'}
                       </p>
                     </div>
                   )

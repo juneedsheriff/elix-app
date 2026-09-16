@@ -7,6 +7,7 @@ import {
   Home,
   Video
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import {
   avatarColorFromName,
   displayInitials,
@@ -16,6 +17,9 @@ import { formatPatientAvailability } from '../../lib/doctorSchedule';
 import { homeCareOtherNoteFromRequest, isHomeCareOpinionRequest } from '../../lib/homeCareServices';
 import {
   canJoinConsultationMeeting,
+  formatConsultationJoinCountdown,
+  getMillisecondsUntilConsultationJoinOpens,
+  hasActiveConsultationMeetingLink,
   isHttpsMeetingLink,
   isRecommendationOpinionRequest,
   patientRequestStatusLabel,
@@ -123,18 +127,29 @@ export default function PatientRequestListCard({
     ? request.meeting_link!.trim()
     : null;
   const scheduledAt = request.scheduled_at?.trim() || null;
-  const canJoinMeeting =
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const showMeetingPanel =
     listVariant === 'upcoming' &&
     !isHomeCare &&
     isPaid &&
-    canJoinConsultationMeeting(request);
+    hasActiveConsultationMeetingLink(request) &&
+    Boolean(meetingLink);
+  const canJoinMeeting = showMeetingPanel && canJoinConsultationMeeting(request, nowTick);
+  const joinOpensInMs = getMillisecondsUntilConsultationJoinOpens(scheduledAt, nowTick);
+
+  useEffect(() => {
+    if (!showMeetingPanel || !scheduledAt || canJoinMeeting) return;
+    setNowTick(Date.now());
+    const intervalId = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [showMeetingPanel, scheduledAt, canJoinMeeting]);
 
   const doctorPhotoUrl = resolveProfilePhotoUrl(request.doctor_image_url);
   const doctorInitials = displayInitials(doctorName);
   const doctorAvatarBg = avatarColorFromName(doctorName);
 
   return (
-    <li className={`pmr-card pmr-card--${listVariant}${canJoinMeeting ? ' pmr-card--has-meeting' : ''}`}>
+    <li className={`pmr-card pmr-card--${listVariant}${showMeetingPanel ? ' pmr-card--has-meeting' : ''}`}>
       <article className='pmr-card__shell'>
         <span className={statusAccentClass(request, listVariant)} aria-hidden />
         <div className='pmr-card__body'>
@@ -258,7 +273,7 @@ export default function PatientRequestListCard({
             </div>
           </button>
 
-          {canJoinMeeting && meetingLink ? (
+          {showMeetingPanel && meetingLink ? (
             <div className='pmr-card__meeting' role='region' aria-label='Video consultation'>
               <div className='pmr-card__meeting-copy'>
                 <p className='pmr-card__meeting-label'>
@@ -273,9 +288,22 @@ export default function PatientRequestListCard({
                   </p>
                 ) : null}
               </div>
-              <a href={meetingLink} target='_blank' rel='noreferrer' className='pmr-card__join'>
-                Join meeting
-              </a>
+              {canJoinMeeting ? (
+                <a href={meetingLink} target='_blank' rel='noreferrer' className='pmr-card__join'>
+                  Join meeting
+                </a>
+              ) : (
+                <div className='pmr-card__join-wrap'>
+                  <button type='button' className='pmr-card__join pmr-card__join--disabled' disabled>
+                    Join meeting
+                  </button>
+                  <p className='pmr-card__join-countdown' aria-live='polite'>
+                    {joinOpensInMs !== null && joinOpensInMs > 0
+                      ? `Join opens in ${formatConsultationJoinCountdown(joinOpensInMs)}`
+                      : 'Join opens 10 minutes before the appointment'}
+                  </p>
+                </div>
+              )}
             </div>
           ) : null}
 

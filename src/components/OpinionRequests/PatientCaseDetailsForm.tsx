@@ -234,7 +234,7 @@ export default function PatientCaseDetailsForm({
             ['Pulse Rate', 'pulseRate', 'bpm'],
             ['Respiratory Rate', 'respiratoryRate', 'breaths/min'],
             ['Temperature', 'temperature', '°C / °F'],
-            ['SpO₂', 'spo2', '%'],
+            ['SpO2', 'spo2', '%'],
             ['Height', 'height', 'cm'],
             ['Weight', 'weight', 'kg']
           ] as const

@@ -1,6 +1,13 @@
 import { Calendar, Video } from 'lucide-react';
-import { canJoinConsultationMeeting, isDoctorWorkspaceRequestCompleted } from '../../lib/opinionRequests';
+import {
+  canJoinConsultationMeeting,
+  formatConsultationJoinCountdown,
+  getMillisecondsUntilConsultationJoinOpens,
+  hasActiveConsultationMeetingLink,
+  isDoctorWorkspaceRequestCompleted
+} from '../../lib/opinionRequests';
 import type { OpinionRequest } from '../../types/opinionRequest';
+import { useEffect, useState } from 'react';
 
 type DoctorCaseMeetingPanelProps = {
   request: OpinionRequest;
@@ -12,7 +19,18 @@ function isGoogleMeetLink(url: string): boolean {
 
 export default function DoctorCaseMeetingPanel({ request }: DoctorCaseMeetingPanelProps) {
   const meetingLink = request.meeting_link?.trim();
-  const showJoin = canJoinConsultationMeeting(request);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const hasLink = Boolean(meetingLink) && hasActiveConsultationMeetingLink(request);
+  const showJoin = canJoinConsultationMeeting(request, nowTick);
+  const joinOpensInMs = getMillisecondsUntilConsultationJoinOpens(request.scheduled_at, nowTick);
+
+  useEffect(() => {
+    if (!hasLink || showJoin || !request.scheduled_at) return;
+    setNowTick(Date.now());
+    const intervalId = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [hasLink, showJoin, request.scheduled_at]);
+
   if (!meetingLink || isDoctorWorkspaceRequestCompleted(request)) return null;
 
   const joinLabel = isGoogleMeetLink(meetingLink) ? 'Join Google Meet' : 'Join meeting';
@@ -32,27 +50,28 @@ export default function DoctorCaseMeetingPanel({ request }: DoctorCaseMeetingPan
       ) : null}
 
       {showJoin ? (
-        <>
-          <a
-            href={meetingLink}
-            target='_blank'
-            rel='noreferrer'
-            className='primary-btn case-review-meeting-panel__join'
-          >
+        <a
+          href={meetingLink}
+          target='_blank'
+          rel='noreferrer'
+          className='primary-btn case-review-meeting-panel__join'
+        >
+          <Video size={16} aria-hidden />
+          {joinLabel}
+        </a>
+      ) : (
+        <div className='case-review-meeting-panel__join-wrap'>
+          <button type='button' className='primary-btn case-review-meeting-panel__join' disabled>
             <Video size={16} aria-hidden />
             {joinLabel}
-          </a>
-
-          <a
-            href={meetingLink}
-            target='_blank'
-            rel='noreferrer'
-            className='case-review-meeting-panel__url'
-          >
-            {meetingLink}
-          </a>
-        </>
-      ) : null}
+          </button>
+          <p className='case-review-meeting-panel__countdown' aria-live='polite'>
+            {joinOpensInMs !== null && joinOpensInMs > 0
+              ? `Join opens in ${formatConsultationJoinCountdown(joinOpensInMs)}`
+              : 'Join opens 10 minutes before the appointment'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

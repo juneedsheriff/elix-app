@@ -43,7 +43,10 @@ import {
 } from '../../lib/opinionRequests';
 import { hasConsultationSummary } from '../../lib/consultationWizard';
 import { dataUrlToFile } from '../../lib/imageFiles';
-import { caseDetailsFromRequest } from '../../lib/patientCaseDetails';
+import {
+  caseDetailsFromRequest,
+  formatPastMedicalHistoryFromCaseDetails
+} from '../../lib/patientCaseDetails';
 import type { ConsultationSummary, OpinionRequest } from '../../types/opinionRequest';
 import type { ScreenPageProps } from '../types';
 
@@ -65,7 +68,7 @@ const VITAL_SIGN_FIELDS = [
   { key: 'pulse_rate', label: 'Pulse Rate', placeholder: 'bpm' },
   { key: 'respiratory_rate', label: 'Respiratory Rate', placeholder: 'breaths/min' },
   { key: 'temperature', label: 'Temperature', placeholder: 'C / F' },
-  { key: 'spo2', label: 'SpO₂', placeholder: '%' },
+  { key: 'spo2', label: 'SpO2', placeholder: '%' },
   { key: 'height', label: 'Height', placeholder: 'cm' },
   { key: 'weight', label: 'Weight', placeholder: 'kg' }
 ] as const;
@@ -89,6 +92,7 @@ function normalizeVitalSignLabel(label: string): string {
   return label
     .toLowerCase()
     .replace(/₂/g, '2')
+    .replace(/s\s*p\s*o\s*2?/g, 'spo2')
     .replace(/[^a-z0-9]/g, '');
 }
 
@@ -152,6 +156,10 @@ function stringifyVitalSigns(draft: VitalSignsDraft): string {
 
 function caseDetailsCurrentMedications(request: OpinionRequest): string {
   return caseDetailsFromRequest(request).currentMedications?.trim() ?? '';
+}
+
+function caseDetailsPastMedicalHistory(request: OpinionRequest): string {
+  return formatPastMedicalHistoryFromCaseDetails(caseDetailsFromRequest(request));
 }
 
 function vitalSignsDraftFromCaseDetails(request: OpinionRequest): VitalSignsDraft {
@@ -308,11 +316,14 @@ export default function DoctorConsultationPage({
     setLabOrderEntryMode(summaryRes.data?.lab_order_file_path?.trim() ? 'upload' : 'type');
     const fallbackVitalSigns = stringifyVitalSigns(vitalSignsDraftFromCaseDetails(match));
     const pseMedications = caseDetailsCurrentMedications(match);
+    const psePastMedicalHistory = caseDetailsPastMedicalHistory(match);
     const hasSummary = Object.values(fromSummary).some(Boolean);
     if (hasSummary) {
       setValues({
         ...fromSummary,
         vital_signs: fromSummary.vital_signs.trim() || fallbackVitalSigns,
+        // PSE case-details history prefill when doctor has not entered the field yet.
+        past_medical_history: fromSummary.past_medical_history.trim() || psePastMedicalHistory,
         // PSE current medications prefill Prescription when doctor has not entered one yet.
         prescription: fromSummary.prescription.trim() || pseMedications
       });
@@ -320,6 +331,7 @@ export default function DoctorConsultationPage({
       setValues({
         ...emptyConsultationSummaryValues(),
         vital_signs: fallbackVitalSigns,
+        past_medical_history: psePastMedicalHistory,
         assessment_plan: match.doctor_response.trim(),
         prescription: pseMedications
       });
@@ -327,6 +339,7 @@ export default function DoctorConsultationPage({
       setValues({
         ...emptyConsultationSummaryValues(),
         vital_signs: fallbackVitalSigns,
+        past_medical_history: psePastMedicalHistory,
         prescription: pseMedications
       });
     }

@@ -1037,6 +1037,8 @@
   color: #fff;
   background: linear-gradient(135deg, #4285f4, #1a73e8);
   text-decoration: none;
+  border: none;
+  cursor: pointer;
   box-shadow: 0 4px 12px rgba(26, 115, 232, 0.28);
 }
 
@@ -1050,13 +1052,37 @@
   outline-offset: 2px;
 }
 
+.pmr-card__join--disabled,
+.pmr-card__join:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+
+.pmr-card__join-wrap {
+  display: grid;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  min-width: min(100%, 9.5rem);
+}
+
+.pmr-card__join-countdown {
+  margin: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
 @media (max-width: 420px) {
   .pmr-card__meeting {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .pmr-card__join {
+  .pmr-card__join,
+  .pmr-card__join-wrap {
     width: 100%;
   }
 }

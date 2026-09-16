@@ -511,8 +511,42 @@ export function isHttpsMeetingLink(value: string | null | undefined): boolean {
   return /^https:\/\//i.test(value?.trim() ?? '');
 }
 
-/** Video join is only for active consultations — hide after the request is completed. */
-export function canJoinConsultationMeeting(
+/** Join opens this many ms before scheduled_at. */
+export const CONSULTATION_JOIN_LEAD_MS = 10 * 60 * 1000;
+
+export function isConsultationMeetingJoinWindowOpen(
+  scheduledAt: string | null | undefined,
+  now = Date.now()
+): boolean {
+  if (!scheduledAt?.trim()) return false;
+  const start = new Date(scheduledAt).getTime();
+  if (Number.isNaN(start)) return false;
+  return now >= start - CONSULTATION_JOIN_LEAD_MS;
+}
+
+export function getMillisecondsUntilConsultationJoinOpens(
+  scheduledAt: string | null | undefined,
+  now = Date.now()
+): number | null {
+  if (!scheduledAt?.trim()) return null;
+  const start = new Date(scheduledAt).getTime();
+  if (Number.isNaN(start)) return null;
+  return Math.max(0, start - CONSULTATION_JOIN_LEAD_MS - now);
+}
+
+export function formatConsultationJoinCountdown(remainingMs: number): string {
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/** HTTPS meeting link exists and the consultation is still active (not completed). */
+export function hasActiveConsultationMeetingLink(
   request: Pick<
     OpinionRequest,
     'meeting_link' | 'consultation_stage' | 'doctor_response' | 'status'
@@ -520,6 +554,21 @@ export function canJoinConsultationMeeting(
 ): boolean {
   if (isDoctorWorkspaceRequestCompleted(request)) return false;
   return isHttpsMeetingLink(request.meeting_link);
+}
+
+/**
+ * Video join is enabled only for active consultations, and only starting
+ * 10 minutes before the scheduled appointment time.
+ */
+export function canJoinConsultationMeeting(
+  request: Pick<
+    OpinionRequest,
+    'meeting_link' | 'consultation_stage' | 'doctor_response' | 'status' | 'scheduled_at'
+  >,
+  now = Date.now()
+): boolean {
+  if (!hasActiveConsultationMeetingLink(request)) return false;
+  return isConsultationMeetingJoinWindowOpen(request.scheduled_at, now);
 }
 
 /** Request submitted by patient but not yet assigned by admin. */

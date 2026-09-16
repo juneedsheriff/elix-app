@@ -45,16 +45,87 @@ export function formatDoctorContactPhone(doctor: Doctor): string | null {
   return doctor.mobile_no?.trim() || doctor.phone?.trim() || null;
 }
 
+/** Placeholder clinic labels that must not appear on printed PDFs. */
+export function isPlaceholderClinicLabel(value: string | null | undefined): boolean {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) return true;
+  return /^clinic\s+workspace$/i.test(trimmed);
+}
+
+function normalizeAddressCompareKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[.,;:/\\|_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Deduplicate address lines (exact + contained duplicates) so clinic profile
+ * addresses are not printed repeatedly under the logo.
+ */
+export function uniquePdfAddressLines(lines: Array<string | null | undefined>): string[] {
+  const cleaned = lines
+    .flatMap((line) => String(line ?? '').split(/\r?\n+/))
+    .map((line) => collapseRepeatedAddressText(line.replace(/\s+/g, ' ').trim()))
+    .filter((line) => line && !isPlaceholderClinicLabel(line));
+
+  const unique: string[] = [];
+  for (const line of cleaned) {
+    const key = normalizeAddressCompareKey(line);
+    if (!key) continue;
+    if (unique.some((existing) => normalizeAddressCompareKey(existing) === key)) continue;
+    unique.push(line);
+  }
+
+  // Drop shorter lines that are fully contained in a longer line.
+  return unique.filter((line, index) => {
+    const key = normalizeAddressCompareKey(line);
+    return !unique.some((other, otherIndex) => {
+      if (index === otherIndex) return false;
+      const otherKey = normalizeAddressCompareKey(other);
+      return otherKey.length > key.length && otherKey.includes(key);
+    });
+  });
+}
+
+/** Collapse accidental double-paste of the same address into one line. */
+function collapseRepeatedAddressText(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length < 24) return trimmed;
+
+  const halves = trimmed.split(/\s*[|;]\s*|\s{2,}/).map((part) => part.trim()).filter(Boolean);
+  if (halves.length >= 2) {
+    const firstKey = normalizeAddressCompareKey(halves[0]!);
+    if (firstKey && halves.every((part) => normalizeAddressCompareKey(part) === firstKey)) {
+      return halves[0]!;
+    }
+  }
+
+  const mid = Math.floor(trimmed.length / 2);
+  for (let offset = 0; offset <= 8; offset += 1) {
+    const left = trimmed.slice(0, mid - offset).trim().replace(/[.,;]+$/, '');
+    const right = trimmed.slice(mid - offset).trim().replace(/^[.,;]+/, '').trim();
+    if (left.length < 20 || right.length < 20) continue;
+    if (normalizeAddressCompareKey(left) === normalizeAddressCompareKey(right)) {
+      return left;
+    }
+  }
+
+  return trimmed;
+}
+
 /**
  * Resolve PSE clinic display name for PDFs.
  * Prefers an existing name; otherwise looks up pse_clinics by id.
+ * Returns null instead of the "Clinic workspace" placeholder for print surfaces.
  */
 export async function resolvePdfClinicName(
   clinicId?: string | null,
   clinicName?: string | null
 ): Promise<string | null> {
   const existing = clinicName?.trim() || null;
-  if (existing) return existing;
+  if (existing && !isPlaceholderClinicLabel(existing)) return existing;
   const id = clinicId?.trim();
   if (!id) return null;
 
@@ -63,13 +134,15 @@ export async function resolvePdfClinicName(
     .select('name')
     .eq('id', id)
     .maybeSingle();
-  if (error || !data) return 'Clinic workspace';
-  return (data.name as string | null)?.trim() || 'Clinic workspace';
+  if (error || !data) return null;
+  const name = (data.name as string | null)?.trim() || null;
+  return isPlaceholderClinicLabel(name) ? null : name;
 }
 
 /**
  * Resolve clinic id/name/address for PDF issuer blocks (PSE clinic requests only).
  * Falls back to the doctor's clinic workspace, then the patient's clinic.
+ * Under-logo address prefers the clinic profile location once (no doctor-address merge).
  */
 export async function resolvePdfClinicContext(input: {
   clinicId?: string | null;
@@ -143,24 +216,17 @@ export async function resolvePdfClinicContext(input: {
 
   clinicName = await resolvePdfClinicName(clinicId, clinicName);
 
-  const addressLines: string[] = [];
-  if (clinicName) addressLines.push(clinicName);
-  if (clinicLocation) {
-    for (const line of clinicLocation.split(/\n+/).map((part) => part.trim()).filter(Boolean)) {
-      if (clinicName && line.toLowerCase() === clinicName.toLowerCase()) continue;
-      addressLines.push(line);
-    }
-  }
-  if (input.doctor) {
-    for (const line of formatDoctorClinicStreetAddressLines(input.doctor)) {
-      const normalized = line.trim().toLowerCase();
-      if (!normalized) continue;
-      if (addressLines.some((existing) => existing.trim().toLowerCase() === normalized)) continue;
-      addressLines.push(line);
-    }
-  }
+  // Prefer clinic-profile location as the single under-logo address source.
+  // Only fall back to the doctor's clinic street fields when no branch location exists.
+  const addressSource = clinicLocation?.trim()
+    ? [clinicLocation]
+    : input.doctor
+      ? formatDoctorClinicStreetAddressLines(input.doctor)
+      : [];
 
-  return { clinicId, clinicName, clinicAddressLines: addressLines };
+  const clinicAddressLines = uniquePdfAddressLines(addressSource);
+
+  return { clinicId, clinicName, clinicAddressLines };
 }
 
 /**
@@ -179,21 +245,17 @@ export function resolvePseClinicContactForPdf(input: {
   const pseClinicName = input.clinicName?.trim() || null;
   const doctorClinicName =
     doctor?.clinic_name?.trim() || doctor?.hospital?.trim() || null;
-  const displayName = pseClinicName || doctorClinicName;
+  const displayName =
+    (pseClinicName && !isPlaceholderClinicLabel(pseClinicName) ? pseClinicName : null) ||
+    (doctorClinicName && !isPlaceholderClinicLabel(doctorClinicName) ? doctorClinicName : null);
 
-  const addressLines: string[] = [];
-  if (displayName) addressLines.push(displayName);
-  if (doctor) {
-    for (const line of formatDoctorClinicStreetAddressLines(doctor)) {
-      if (displayName && line.trim().toLowerCase() === displayName.toLowerCase()) continue;
-      addressLines.push(line);
-    }
-  }
+  const addressLines = uniquePdfAddressLines([
+    displayName,
+    ...(doctor ? formatDoctorClinicStreetAddressLines(doctor) : [])
+  ]);
 
-  // Always keep the clinic name line when clinic_id is present, even without street address.
   if (!addressLines.length && !doctor?.clinic_website?.trim()) {
-    if (displayName) return { addressLines: [displayName], website: null };
-    return { addressLines: ['Clinic workspace'], website: null };
+    return null;
   }
 
   const website = doctor?.clinic_website?.trim() || null;
@@ -220,9 +282,7 @@ export function writePdfIssuerContactBlock(
   addLine(ELIX_BRAND.legalName, 11, true, margin, leftColWidth);
   addLine(ELIX_BRAND.tagline, 10, false, margin, leftColWidth);
 
-  const explicitAddress = (options.clinicAddressLines ?? [])
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const explicitAddress = uniquePdfAddressLines(options.clinicAddressLines ?? []);
   if (explicitAddress.length) {
     for (const line of explicitAddress) {
       addLine(line, 10, false, margin, leftColWidth);

@@ -11,12 +11,12 @@ export const CONSULTATION_SUMMARY_FIELDS = [
   { key: 'review_of_systems', label: 'Review of Systems (ROS)' },
   { key: 'vital_signs', label: 'Vital Signs' },
   { key: 'physical_examination', label: 'Physical Examination (PE)' },
+  { key: 'labs_diagnostics', label: 'Lab Order' },
   { key: 'assessment_plan', label: 'Assessment/Plan' },
   { key: 'prescription', label: 'Prescription' },
   { key: 'advise_food_lifestyle', label: 'Advise on Food/Lifestyle' },
   { key: 'refer_to', label: 'Refer To' },
-  { key: 'followup_date', label: 'Follow-up Date' },
-  { key: 'labs_diagnostics', label: 'Lab Order' }
+  { key: 'followup_date', label: 'Follow-up Date' }
 ] as const;
 
 export type ConsultationSummaryFieldKey = (typeof CONSULTATION_SUMMARY_FIELDS)[number]['key'];
@@ -96,13 +96,10 @@ export function consultationSummaryToFormValues(
 export function formatConsultationResponse(values: ConsultationSummaryFormValues): string {
   return CONSULTATION_SUMMARY_FIELDS.map(({ key, label }) => {
     const text = values[key].trim();
-    if (!text) return null;
     if (key === 'followup_date') {
       const formatted = formatConsultationFollowupDate(text);
-      return formatted ? `${label}:\n${formatted}` : null;
+      return `${label}:\n${formatted || '—'}`;
     }
-    return `${label}:\n${text}`;
-  })
-    .filter(Boolean)
-    .join('\n\n');
+    return `${label}:\n${text || '—'}`;
+  }).join('\n\n');
 }

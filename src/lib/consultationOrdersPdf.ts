@@ -122,35 +122,39 @@ async function buildOrderPdf(
 
   const logo = await loadElixLogoDataUrl();
   const logoTop = y;
+  const logoHeight = 32;
   if (logo) {
     try {
-      doc.addImage(logo, 'PNG', margin, y - 6, 96, 32);
-      y += 30;
+      doc.addImage(logo, 'PNG', margin, y - 4, 96, logoHeight);
+      y = logoTop + logoHeight + 14;
     } catch {
       addLine(ELIX_BRAND.legalName, 16, true);
+      y += 4;
     }
   } else {
     addLine(ELIX_BRAND.legalName, 16, true);
+    y += 4;
   }
 
   const clinicAddress = (meta.clinicAddressLines ?? [])
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter((line) => line && !/^clinic\s+workspace$/i.test(line));
   if (clinicAddress.length) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
     for (const line of clinicAddress) {
-      const lines = doc.splitTextToSize(line, contentWidth * 0.55);
+      const lines = doc.splitTextToSize(line, contentWidth * 0.58);
       for (const wrapped of lines) {
         doc.text(wrapped, margin, y);
-        y += 11;
+        y += 12;
       }
     }
     doc.setTextColor(0, 0, 0);
+    y += 4;
   }
 
-  let rightY = logoTop + 8;
+  let rightY = logoTop + 10;
   const writeRight = (text: string, size: number, bold = false) => {
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
     doc.setFontSize(size);
@@ -170,7 +174,7 @@ async function buildOrderPdf(
     writeRight(`Request ID: ${shortId(meta.requestId)}`, 9);
   }
 
-  y = Math.max(y, rightY) + 10;
+  y = Math.max(y, rightY) + 12;
 
   doc.setDrawColor(220, 228, 236);
   doc.line(margin, y, pageWidth - margin, y);

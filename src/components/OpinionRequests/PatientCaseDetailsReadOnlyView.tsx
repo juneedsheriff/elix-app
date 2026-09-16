@@ -92,7 +92,7 @@ export default function PatientCaseDetailsReadOnlyView({
           label='Temperature'
           value={formatCaseDetailValue(details.vitalSigns.temperature)}
         />
-        <DetailField label='SpO₂' value={formatCaseDetailValue(details.vitalSigns.spo2)} />
+        <DetailField label='SpO2' value={formatCaseDetailValue(details.vitalSigns.spo2)} />
         <DetailField label='Height' value={formatCaseDetailValue(details.vitalSigns.height)} />
         <DetailField label='Weight' value={formatCaseDetailValue(details.vitalSigns.weight)} />
         <DetailField

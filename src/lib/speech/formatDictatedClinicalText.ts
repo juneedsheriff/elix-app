@@ -29,7 +29,9 @@ function formatVitalSigns(text: string): string {
     .replace(/\bheart rate\b/gi, 'HR')
     .replace(/\btemp(?:erature)?\b/gi, 'Temp')
     .replace(/\bresp(?:iratory)? rate\b/gi, 'RR')
-    .replace(/\bs p o 2\b|\bspo2\b/gi, 'SpO2')
+    .replace(/SpO[\u2082₂]/gi, 'SpO2')
+    .replace(/\bs\s*p\s*o\s*[\u2082₂2]?\b/gi, 'SpO2')
+    .replace(/\bspo2\b/gi, 'SpO2')
     .replace(/(\d+)\s+over\s+(\d+)/gi, '$1/$2');
 
   return capitalizeSentences(formatted);

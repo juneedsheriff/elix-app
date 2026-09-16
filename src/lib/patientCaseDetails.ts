@@ -225,6 +225,29 @@ export function applyPatientProfileHistoryDefaults(
   });
 }
 
+/**
+ * Combine PSE/patient case-detail history fields for the doctor consultation
+ * "Past Medical/Surgical/Social History" field.
+ */
+export function formatPastMedicalHistoryFromCaseDetails(
+  details: Pick<
+    PatientCaseDetails,
+    'existingMedicalConditions' | 'previousSurgeries' | 'familyHistory' | 'socialHistory'
+  >
+): string {
+  const sections: Array<{ label: string; value: string }> = [
+    { label: 'Past medical history', value: details.existingMedicalConditions.trim() },
+    { label: 'Surgical history', value: details.previousSurgeries.trim() },
+    { label: 'Family history', value: details.familyHistory.trim() },
+    { label: 'Social history', value: details.socialHistory.trim() }
+  ];
+
+  return sections
+    .filter((section) => section.value)
+    .map((section) => `${section.label}:\n${section.value}`)
+    .join('\n\n');
+}
+
 export function hasPatientConsent(details: PatientCaseDetails): boolean {
   return (
     details.consentInformationAccurate === true &&
