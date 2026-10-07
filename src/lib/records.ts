@@ -27,7 +27,8 @@ import {
   completeAsyncOpenInNewTab,
   openBlobInPreparedTab,
   openUrlInNewTab,
-  prepareAsyncOpenInNewTab
+  prepareAsyncOpenInNewTab,
+  updatePreparedTabProgress
 } from './openFileUrl';
 
 /** Cloudflare R2 bucket name (metadata column + worker binding). */
@@ -377,7 +378,9 @@ export async function openMedicalRecordFile(
 
   // Safari only allows a new tab when window.open runs in the click, before await.
   const prepared =
-    options && 'preparedWindow' in options ? options.preparedWindow ?? null : prepareAsyncOpenInNewTab();
+    options && 'preparedWindow' in options
+      ? options.preparedWindow ?? null
+      : prepareAsyncOpenInNewTab(record.file_name);
   if (!prepared) {
     return {
       error: {
@@ -391,15 +394,18 @@ export async function openMedicalRecordFile(
     path.match(/^consultation-summaries\/([^/]+)\//)?.[1] ||
     undefined;
 
-  options?.onProgress?.({ loaded: 0, total: options?.expectedBytes ?? record.file_size_bytes ?? null, percent: 0 });
+  const reportProgress = (progress: { loaded: number; total: number | null; percent: number }) => {
+    updatePreparedTabProgress(prepared, progress.percent, record.file_name);
+    options?.onProgress?.(progress);
+  };
+
+  reportProgress({ loaded: 0, total: options?.expectedBytes ?? record.file_size_bytes ?? null, percent: 0 });
   const { blob, error } = await downloadMedicalRecordBlob(path, {
     ...options,
     expectedBytes: options?.expectedBytes ?? record.file_size_bytes,
     ...(requestId ? { requestId } : {}),
     onProgress: (progress) => {
-      options?.onProgress?.(
-        progress.percent >= 100 ? { ...progress, percent: 99 } : progress
-      );
+      reportProgress(progress.percent >= 100 ? { ...progress, percent: 99 } : progress);
     }
   });
   if (error || !blob) {
@@ -407,7 +413,9 @@ export async function openMedicalRecordFile(
     return { error: error ?? { message: 'Could not open file.' } };
   }
 
-  options?.onProgress?.({ loaded: blob.size, total: blob.size, percent: 100 });
+  reportProgress({ loaded: blob.size, total: blob.size, percent: 100 });
+  // Let the progress modal paint at 100% before the file replaces it.
+  await new Promise((resolve) => window.setTimeout(resolve, 700));
   const opened = openBlobInPreparedTab(prepared, blob, record.file_name);
   if (!opened) {
     return {

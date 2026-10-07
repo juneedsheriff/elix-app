@@ -389,7 +389,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   const onOpenFile = async (record: MedicalRecord) => {
     if (downloadProgress) return;
     // Must run before any await. Safari will not open a tab after the download finishes.
-    const preparedWindow = prepareAsyncOpenInNewTab();
+    const preparedWindow = prepareAsyncOpenInNewTab(record.file_name);
     setOpenMenuId(null);
     if (!preparedWindow) {
       setStatusMessage('Safari blocked the new tab. Allow pop-ups for this site, then try Open again.');
@@ -415,7 +415,7 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
       setStatusMessage(openError.message);
       return;
     }
-    window.setTimeout(() => setDownloadProgress(null), 500);
+    window.setTimeout(() => setDownloadProgress(null), 400);
   };
 
   const requestDelete = (record: MedicalRecord) => {
