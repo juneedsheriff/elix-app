@@ -108,6 +108,10 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   const [filterMenuStyle, setFilterMenuStyle] = useState<CSSProperties>({});
   const [recordPendingDelete, setRecordPendingDelete] = useState<MedicalRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    fileName: string;
+    percent: number;
+  } | null>(null);
 
   const canUpload = Boolean(userId && configured && isR2StorageConfigured());
   const showTabs = !loading && records.length > 0;
@@ -382,11 +386,27 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
   };
 
   const onOpenFile = async (record: MedicalRecord) => {
+    if (downloadProgress) return;
     setOpenMenuId(null);
-    const { error: openError } = await openMedicalRecordFile(record);
-    if (openError) {
-      setStatusMessage(openError.message);
+    if (record.external_url?.trim()) {
+      const { error: openError } = await openMedicalRecordFile(record);
+      if (openError) setStatusMessage(openError.message);
+      return;
     }
+
+    setDownloadProgress({ fileName: record.file_name, percent: 0 });
+    const { error: openError } = await openMedicalRecordFile(record, {
+      expectedBytes: record.file_size_bytes,
+      onProgress: ({ percent }) => {
+        setDownloadProgress({ fileName: record.file_name, percent });
+      }
+    });
+    if (openError) {
+      setDownloadProgress(null);
+      setStatusMessage(openError.message);
+      return;
+    }
+    window.setTimeout(() => setDownloadProgress(null), 500);
   };
 
   const requestDelete = (record: MedicalRecord) => {
@@ -657,22 +677,30 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
 
             return (
               <li key={record.id} className='urv-file-item'>
-                <RecordFileTypeIcon type={fileIcon} size='lg' className='urv-file-item__type-icon' />
-                <div className='urv-file-item__main'>
-                  <p className='urv-file-item__name'>{record.file_name}</p>
-                  <p className='urv-file-item__meta'>
-                    <span className='urv-file-item__category'>{medicalRecordCategoryLabel(category)}</span>
-                    <span>
-                      {record.external_url
-                        ? 'Google Drive link'
-                        : isConsultationSummaryRecord(record)
-                          ? 'From your consultation • ' + relativeUploadLabel(record.uploaded_at)
-                          : formatFileSize(record.file_size_bytes) +
-                            ' • Uploaded ' +
-                            relativeUploadLabel(record.uploaded_at)}
+                <button
+                  type='button'
+                  className='urv-file-item__open'
+                  onClick={() => void onOpenFile(record)}
+                  disabled={Boolean(downloadProgress)}
+                  aria-label={`Open ${record.file_name}`}
+                >
+                  <RecordFileTypeIcon type={fileIcon} size='lg' className='urv-file-item__type-icon' />
+                  <span className='urv-file-item__main'>
+                    <span className='urv-file-item__name'>{record.file_name}</span>
+                    <span className='urv-file-item__meta'>
+                      <span className='urv-file-item__category'>{medicalRecordCategoryLabel(category)}</span>
+                      <span>
+                        {record.external_url
+                          ? 'Google Drive link'
+                          : isConsultationSummaryRecord(record)
+                            ? 'From your consultation • ' + relativeUploadLabel(record.uploaded_at)
+                            : formatFileSize(record.file_size_bytes) +
+                              ' • Uploaded ' +
+                              relativeUploadLabel(record.uploaded_at)}
+                      </span>
                     </span>
-                  </p>
-                </div>
+                  </span>
+                </button>
                 <div className='urv-file-item__menu-wrap'>
                   <button
                     type='button'
@@ -716,6 +744,34 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
 
   return (
     <div className='screen-grid upload-records-vault'>
+      {downloadProgress ? (
+        <div className='urv-download-overlay' role='status' aria-live='polite'>
+          <div className='urv-download-card'>
+            <Loader2 size={28} className='spin' aria-hidden />
+            <p className='urv-download-card__title'>Opening file</p>
+            <p className='urv-download-card__name'>{downloadProgress.fileName}</p>
+            <div
+              className='urv-download-card__track'
+              role='progressbar'
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={downloadProgress.percent}
+              aria-label={`Opening file ${downloadProgress.percent}%`}
+            >
+              <span
+                className='urv-download-card__bar'
+                style={{ width: `${downloadProgress.percent}%` }}
+              />
+            </div>
+            <p className='urv-download-card__percent'>{downloadProgress.percent}%</p>
+            <p className='urv-download-card__hint'>
+              {downloadProgress.percent >= 100
+                ? 'File ready. Opening it in a new tab…'
+                : 'The file is opening in your browser. It will appear in a new tab when ready.'}
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className='urv-shell'>
         {!userId ? (
           <p className='urv-alert urv-alert--error' role='alert'>

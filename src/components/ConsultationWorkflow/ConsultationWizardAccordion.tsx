@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { WizardStepDef, WizardStepState } from '../../lib/consultationWizard';
+import AccordionHeaderButton from './AccordionHeaderButton';
 import './consultation-wizard.css';
 
 const COORDINATION_STEP_ICONS: LucideIcon[] = [
@@ -130,10 +131,9 @@ export default function ConsultationWizardAccordion({
 
                 <article className='patient-wizard-card'>
                   {isAccessible ? (
-                    <button
-                      type='button'
+                    <AccordionHeaderButton
                       className='patient-wizard-card__header'
-                      onClick={() => onToggle(index)}
+                      onToggle={() => onToggle(index)}
                       aria-expanded={isExpanded}
                       aria-controls={`${panelIdPrefix}-panel-${index}`}
                       id={`${panelIdPrefix}-header-${index}`}
@@ -159,7 +159,7 @@ export default function ConsultationWizardAccordion({
                         <span className='patient-wizard-card__subtitle'>{stepDef.subtitle}</span>
                       </span>
                       <ChevronDown size={18} className='patient-wizard-card__chevron' aria-hidden />
-                    </button>
+                    </AccordionHeaderButton>
                   ) : (
                     <div
                       className='patient-wizard-card__header patient-wizard-card__header--locked'

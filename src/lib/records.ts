@@ -23,7 +23,12 @@ import {
   type MedicalRecordDownloadOptions
 } from './r2Storage';
 import { supabase } from './supabase';
-import { completeAsyncOpenInNewTab, openUrlInNewTab, prepareAsyncOpenInNewTab } from './openFileUrl';
+import {
+  completeAsyncOpenInNewTab,
+  openLoadedFileInNewTab,
+  openUrlInNewTab,
+  prepareAsyncOpenInNewTab
+} from './openFileUrl';
 
 /** Cloudflare R2 bucket name (metadata column + worker binding). */
 const BUCKET = 'medical-records';
@@ -352,6 +357,7 @@ export async function openMedicalRecordFile(
   const external = record.external_url?.trim();
   if (external) {
     openUrlInNewTab(external);
+    options?.onProgress?.({ loaded: 0, total: null, percent: 100 });
     return { error: null };
   }
 
@@ -363,17 +369,23 @@ export async function openMedicalRecordFile(
     path.match(/^consultation-summaries\/([^/]+)\//)?.[1] ||
     undefined;
 
-  const prepared = prepareAsyncOpenInNewTab();
-  const { data, error } = await getMedicalRecordDownloadUrl(path, {
+  options?.onProgress?.({ loaded: 0, total: options?.expectedBytes ?? record.file_size_bytes ?? null, percent: 0 });
+  const { blob, error } = await downloadMedicalRecordBlob(path, {
     ...options,
-    ...(requestId ? { requestId } : {})
+    expectedBytes: options?.expectedBytes ?? record.file_size_bytes,
+    ...(requestId ? { requestId } : {}),
+    onProgress: (progress) => {
+      options?.onProgress?.(
+        progress.percent >= 100 ? { ...progress, percent: 99 } : progress
+      );
+    }
   });
-  if (error || !data?.signedUrl) {
-    prepared?.close();
+  if (error || !blob) {
     return { error: error ?? { message: 'Could not open file.' } };
   }
 
-  completeAsyncOpenInNewTab(prepared, data.signedUrl, record.file_name);
+  options?.onProgress?.({ loaded: blob.size, total: blob.size, percent: 100 });
+  openLoadedFileInNewTab(blob, record.file_name);
   return { error: null };
 }
 

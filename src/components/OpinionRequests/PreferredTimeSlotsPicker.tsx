@@ -46,7 +46,7 @@ export default function PreferredTimeSlotsPicker({
       ) : null}
       <ul className='preferred-time-slots__list'>
         {value.map((slot, index) => (
-          <li key={`${slot.date}-${slot.time}-${index}`} className='preferred-time-slots__item'>
+          <li key={index} className='preferred-time-slots__item'>
             <PatientBirthDatePicker
               label='Date'
               value={slot.date}

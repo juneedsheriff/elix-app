@@ -161,7 +161,65 @@ export async function uploadFileToR2(
 export type MedicalRecordDownloadOptions = {
   /** Opinion request id — required for staff/doctor/patient consultation PDFs and payment proof. */
   requestId?: string;
+  /** Used when the response does not expose Content-Length. */
+  expectedBytes?: number | null;
+  onProgress?: (progress: { loaded: number; total: number | null; percent: number }) => void;
 };
+
+function reportDownloadProgress(
+  onProgress: MedicalRecordDownloadOptions['onProgress'],
+  loaded: number,
+  total: number | null,
+  done = false
+) {
+  if (!onProgress) return;
+  const percent = done
+    ? 100
+    : total && total > 0
+      ? Math.min(99, Math.round((loaded / total) * 100))
+      : 0;
+  onProgress({ loaded, total, percent });
+}
+
+async function readResponseBlobWithProgress(
+  response: Response,
+  options?: Pick<MedicalRecordDownloadOptions, 'expectedBytes' | 'onProgress'>
+): Promise<Blob> {
+  const headerTotal = Number(response.headers.get('Content-Length') || '');
+  const expected = options?.expectedBytes ?? null;
+  const total =
+    Number.isFinite(headerTotal) && headerTotal > 0
+      ? headerTotal
+      : expected && expected > 0
+        ? expected
+        : null;
+
+  reportDownloadProgress(options?.onProgress, 0, total);
+
+  const body = response.body;
+  if (!body || typeof body.getReader !== 'function') {
+    const blob = await response.blob();
+    reportDownloadProgress(options?.onProgress, blob.size, blob.size || total, true);
+    return blob;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value?.byteLength) continue;
+    chunks.push(value);
+    loaded += value.byteLength;
+    reportDownloadProgress(options?.onProgress, loaded, total);
+  }
+
+  const type = response.headers.get('Content-Type') || 'application/octet-stream';
+  const blob = new Blob(chunks as BlobPart[], { type });
+  reportDownloadProgress(options?.onProgress, blob.size, blob.size || total, true);
+  return blob;
+}
 
 export async function createConsultationInvoiceUploadUrl(requestId: string, contentLength: number) {
   return r2ApiRequest<{ uploadUrl: string; storagePath: string; storageBucket: string }>(
@@ -329,7 +387,8 @@ export async function downloadMedicalRecordBlob(
         };
       }
 
-      return { blob: await response.blob(), error: null, status: response.status };
+      const blob = await readResponseBlobWithProgress(response, options);
+      return { blob, error: null, status: response.status };
     } catch {
       return {
         blob: null as Blob | null,

@@ -374,6 +374,7 @@ export default function PatientProfileEditSection({
                 value={form.dateOfBirth}
                 onChange={(value) => setField('dateOfBirth', value)}
                 disabled={busy}
+                focusMonth='birth'
               />
             </div>
             <label className='patient-profile-edit__field'>

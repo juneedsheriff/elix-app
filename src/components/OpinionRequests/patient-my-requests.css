@@ -1995,7 +1995,7 @@
 
 .patient-request-detail-view,
 .patient-request-detail-view__card {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .patient-request-detail--chat .patient-request-chat-view {

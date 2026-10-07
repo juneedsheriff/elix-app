@@ -18,6 +18,25 @@ export function openUrlInNewTab(url: string, fileName?: string): void {
   document.body.removeChild(link);
 }
 
+export function mimeTypeForFileName(fileName: string, reported?: string | null): string {
+  const reportedType = reported?.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (reportedType && reportedType !== 'application/octet-stream') return reportedType;
+  const ext = fileName.trim().toLowerCase().split('.').pop() ?? '';
+  const byExt: Record<string, string> = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    txt: 'text/plain',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  };
+  return byExt[ext] || reportedType || 'application/octet-stream';
+}
+
 /** Call synchronously inside a click handler before any await. */
 export function prepareAsyncOpenInNewTab(): Window | null {
   if (typeof window === 'undefined') return null;
@@ -26,6 +45,25 @@ export function prepareAsyncOpenInNewTab(): Window | null {
   } catch {
     return null;
   }
+}
+
+/** Open a file that is already loaded. Call this only after loading finishes. */
+export function openLoadedFileInNewTab(blob: Blob, fileName: string): void {
+  const type = mimeTypeForFileName(fileName, blob.type);
+  const fileBlob = new Blob([blob], { type });
+  const url = URL.createObjectURL(fileBlob);
+  const opened = window.open(url, '_blank');
+  if (!opened) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
 }
 
 export function completeAsyncOpenInNewTab(

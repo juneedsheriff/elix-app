@@ -16,6 +16,7 @@ function corsHeaders(origin: string | null, env: Env): HeadersInit {
     'Access-Control-Allow-Origin': value,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Storage-Path',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Type',
     'Access-Control-Max-Age': '86400'
   };
 }

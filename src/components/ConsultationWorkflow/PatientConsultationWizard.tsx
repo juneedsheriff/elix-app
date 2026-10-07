@@ -73,6 +73,7 @@ import { normalizeConsultationCurrency, formatConsultationFee } from '../../lib/
 import { getTierFeeFromTiers } from '../../lib/consultationTiers';
 import { formatConsultationFeeUsd } from '../../lib/doctors';
 import type { ConsultationSummary, OpinionRequest, OpinionRequestRecommendation } from '../../types/opinionRequest';
+import AccordionHeaderButton from './AccordionHeaderButton';
 import './consultation-wizard.css';
 
 function recommendationFeeLabel(rec: OpinionRequestRecommendation) {
@@ -1137,10 +1138,9 @@ export default function PatientConsultationWizard({
 
                 <article className='patient-wizard-card'>
                   {isAccessible ? (
-                    <button
-                      type='button'
+                    <AccordionHeaderButton
                       className='patient-wizard-card__header'
-                      onClick={() => toggleStep(index)}
+                      onToggle={() => toggleStep(index)}
                       aria-expanded={isExpanded}
                       aria-controls={`consultation-step-panel-${index}`}
                       id={`consultation-step-header-${index}`}
@@ -1166,7 +1166,7 @@ export default function PatientConsultationWizard({
                         <span className='patient-wizard-card__subtitle'>{step.subtitle}</span>
                       </span>
                       <ChevronDown size={18} className='patient-wizard-card__chevron' aria-hidden />
-                    </button>
+                    </AccordionHeaderButton>
                   ) : (
                     <div
                       className='patient-wizard-card__header patient-wizard-card__header--locked'

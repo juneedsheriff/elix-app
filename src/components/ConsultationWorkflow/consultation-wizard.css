@@ -1645,6 +1645,7 @@
   border: 1px solid #e8ecf1;
   box-shadow: var(--patient-wizard-card-shadow);
   overflow: hidden;
+  overflow: clip;
 }
 
 .patient-wizard-timeline__step--current .patient-wizard-card {
@@ -1662,6 +1663,8 @@
 }
 
 .patient-wizard-card__header {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
@@ -1673,6 +1676,8 @@
   text-align: left;
   color: inherit;
   font: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .patient-wizard-card__header--locked {
