@@ -46,6 +46,7 @@ import {
   saveExternalMedicalRecordLink,
   uploadMedicalRecord
 } from '../../lib/records';
+import { prepareAsyncOpenInNewTab } from '../../lib/openFileUrl';
 import type { MedicalRecord } from '../../types/medicalRecord';
 import './upload-records.css';
 
@@ -387,15 +388,23 @@ export default function UploadRecordsVault({ configured, userId, onNavigate }: U
 
   const onOpenFile = async (record: MedicalRecord) => {
     if (downloadProgress) return;
+    // Must run before any await. Safari will not open a tab after the download finishes.
+    const preparedWindow = prepareAsyncOpenInNewTab();
     setOpenMenuId(null);
+    if (!preparedWindow) {
+      setStatusMessage('Safari blocked the new tab. Allow pop-ups for this site, then try Open again.');
+      return;
+    }
+
     if (record.external_url?.trim()) {
-      const { error: openError } = await openMedicalRecordFile(record);
+      const { error: openError } = await openMedicalRecordFile(record, { preparedWindow });
       if (openError) setStatusMessage(openError.message);
       return;
     }
 
     setDownloadProgress({ fileName: record.file_name, percent: 0 });
     const { error: openError } = await openMedicalRecordFile(record, {
+      preparedWindow,
       expectedBytes: record.file_size_bytes,
       onProgress: ({ percent }) => {
         setDownloadProgress({ fileName: record.file_name, percent });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Camera, ClipboardList, FileUp, Loader2, Eraser, Video } from 'lucide-react';
+import { ArrowLeft, Camera, ClipboardList, Eye, FileUp, Loader2, Eraser, Video } from 'lucide-react';
+import DoctorConsultationPreviewModal from './DoctorConsultationPreviewModal';
 import FollowupDatePicker from '../../components/Consultation/FollowupDatePicker';
 import VoiceDictationButton from '../../components/Consultation/VoiceDictationButton';
 import MicrophonePermissionModal from '../../components/Consultation/MicrophonePermissionModal';
@@ -193,6 +194,8 @@ export default function DoctorConsultationPage({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewValues, setPreviewValues] = useState<ConsultationSummaryFormValues | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -383,6 +386,20 @@ export default function DoctorConsultationPage({
     document.body.classList.toggle('doctor-consultation-mic-gate-open', micGateActive);
     return () => document.body.classList.remove('doctor-consultation-mic-gate-open');
   }, [micGateActive]);
+
+  const openPreview = () => {
+    const snapshot = { ...values };
+    if (voiceField) {
+      snapshot[voiceField] = previewDictationText(
+        values[voiceField],
+        voiceSessionText,
+        voiceInterimText
+      );
+    }
+    stopVoice();
+    setPreviewValues(snapshot);
+    setPreviewOpen(true);
+  };
 
   const handleFillSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1118,10 +1135,11 @@ export default function DoctorConsultationPage({
                     <button
                       type='button'
                       className='secondary-btn screen-form-btn'
-                      disabled={submitting}
-                      onClick={goBack}
+                      disabled={submitting || micGateActive}
+                      onClick={openPreview}
                     >
-                      Cancel
+                      <Eye size={16} aria-hidden />
+                      Preview
                     </button>
                     <button
                       type='submit'
@@ -1201,9 +1219,10 @@ export default function DoctorConsultationPage({
                     type='button'
                     className='secondary-btn screen-form-btn'
                     disabled={submitting}
-                    onClick={goBack}
+                    onClick={openPreview}
                   >
-                    Cancel
+                    <Eye size={16} aria-hidden />
+                    Preview
                   </button>
                   <button
                     type='button'
@@ -1244,6 +1263,27 @@ export default function DoctorConsultationPage({
         onClose={() => setCameraOpen(false)}
         onCapture={handleCameraCapture}
       />
+
+      {request && previewValues ? (
+        <DoctorConsultationPreviewModal
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          mode={mode}
+          request={request}
+          doctor={doctorProfile ?? null}
+          values={previewValues}
+          prescriptionEntryMode={prescriptionEntryMode}
+          labOrderEntryMode={labOrderEntryMode}
+          prescriptionFile={prescriptionFile}
+          labOrderFile={labOrderFile}
+          existingPrescriptionPath={summary?.prescription_file_path}
+          existingPrescriptionName={summary?.prescription_file_name}
+          existingLabOrderPath={summary?.lab_order_file_path}
+          existingLabOrderName={summary?.lab_order_file_name}
+          uploadFile={uploadFile}
+          uploadNote={uploadNote}
+        />
+      ) : null}
     </div>
   );
 }

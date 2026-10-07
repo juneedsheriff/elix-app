@@ -25,7 +25,7 @@ import {
 import { supabase } from './supabase';
 import {
   completeAsyncOpenInNewTab,
-  openLoadedFileInNewTab,
+  openBlobInPreparedTab,
   openUrlInNewTab,
   prepareAsyncOpenInNewTab
 } from './openFileUrl';
@@ -352,17 +352,39 @@ export async function getMedicalRecordDownloadUrl(
 
 export async function openMedicalRecordFile(
   record: MedicalRecord,
-  options?: MedicalRecordDownloadOptions
+  options?: MedicalRecordDownloadOptions & { preparedWindow?: Window | null }
 ): Promise<{ error: { message: string } | null }> {
   const external = record.external_url?.trim();
   if (external) {
-    openUrlInNewTab(external);
+    if (options?.preparedWindow && !options.preparedWindow.closed) {
+      try {
+        options.preparedWindow.location.replace(external);
+      } catch {
+        openUrlInNewTab(external);
+      }
+    } else {
+      openUrlInNewTab(external);
+    }
     options?.onProgress?.({ loaded: 0, total: null, percent: 100 });
     return { error: null };
   }
 
   const path = record.storage_path;
-  if (!path) return { error: { message: 'No file to open.' } };
+  if (!path) {
+    options?.preparedWindow?.close();
+    return { error: { message: 'No file to open.' } };
+  }
+
+  // Safari only allows a new tab when window.open runs in the click, before await.
+  const prepared =
+    options && 'preparedWindow' in options ? options.preparedWindow ?? null : prepareAsyncOpenInNewTab();
+  if (!prepared) {
+    return {
+      error: {
+        message: 'Safari blocked the new tab. Allow pop-ups for this site, then try Open again.'
+      }
+    };
+  }
 
   const requestId =
     options?.requestId?.trim() ||
@@ -381,11 +403,19 @@ export async function openMedicalRecordFile(
     }
   });
   if (error || !blob) {
+    if (!prepared.closed) prepared.close();
     return { error: error ?? { message: 'Could not open file.' } };
   }
 
   options?.onProgress?.({ loaded: blob.size, total: blob.size, percent: 100 });
-  openLoadedFileInNewTab(blob, record.file_name);
+  const opened = openBlobInPreparedTab(prepared, blob, record.file_name);
+  if (!opened) {
+    return {
+      error: {
+        message: 'Safari blocked the new tab. Allow pop-ups for this site, then try Open again.'
+      }
+    };
+  }
   return { error: null };
 }
 

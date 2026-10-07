@@ -96,6 +96,7 @@ export type OpinionRequest = {
   clinic_id: string | null;
   clinic_name: string | null;
   patient_email: string | null;
+  patient_phone?: string | null;
   doctor_response: string | null;
   responded_at: string | null;
   assigned_to: string | null;

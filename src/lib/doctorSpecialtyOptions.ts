@@ -13,6 +13,7 @@ export const DOCTOR_SPECIALTY_OPTIONS = [
   'Family Medicine',
   'Gastroenterology',
   'General Medicine',
+  'General Physician',
   'General Surgery',
   'Geriatric Medicine',
   'Gynecology',

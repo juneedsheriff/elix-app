@@ -3,7 +3,7 @@ import { DatePickerInput } from '@mantine/dates';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconCalendar, IconClock } from '@tabler/icons-react';
 import dayjs from 'dayjs';
-import { useMemo } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import {
   formatConsultationTimeSlotLabel,
   getAvailableConsultationTimeSlots,
@@ -43,6 +43,7 @@ export default function AppointmentDateTimePicker({
   intervalMinutes = 30
 }: AppointmentDateTimePickerProps) {
   const isCompact = useMediaQuery('(max-width: 1024px)');
+  const [timeEntryBlocked, setTimeEntryBlocked] = useState(false);
   const todayStart = useMemo(() => dayjs().startOf('day').toDate(), []);
   const dateValue = value ? dayjs(value).startOf('day').toDate() : null;
   const hoursConfigured = hasConfiguredConsultationHours(consultationHours);
@@ -83,6 +84,7 @@ export default function AppointmentDateTimePicker({
   };
 
   const handleDateChange = (date: Date | null) => {
+    setTimeEntryBlocked(false);
     if (!date) {
       onChange(null);
       return;
@@ -105,8 +107,22 @@ export default function AppointmentDateTimePicker({
   };
 
   const handleTimeChange = (raw: string | null) => {
+    setTimeEntryBlocked(false);
     if (!dateValue || !raw) return;
+    if (!availableTimes.includes(raw)) {
+      setTimeEntryBlocked(true);
+      return;
+    }
     onChange(combineDateAndTime(dateValue, raw));
+  };
+
+  const blockTypedTime = (event: KeyboardEvent<HTMLInputElement>) => {
+    const isTyping =
+      event.key.length === 1 || event.key === 'Backspace' || event.key === 'Delete';
+    if (!isTyping || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setTimeEntryBlocked(true);
   };
 
   return (
@@ -147,13 +163,18 @@ export default function AppointmentDateTimePicker({
           data={timeOptions}
           value={selectedTime}
           onChange={handleTimeChange}
+          onKeyDown={blockTypedTime}
           disabled={timeDisabled}
-          searchable
+          searchable={false}
+          allowDeselect={false}
           radius='md'
           size='md'
           leftSection={<IconClock size={16} stroke={1.75} />}
-          nothingFoundMessage='No available times'
+          error={timeEntryBlocked ? 'Not allowed to enter a time. Select one from the list.' : undefined}
+          title='Not allowed to enter a time. Select one from the list.'
           className='appointment-datetime-picker__time'
+          classNames={{ input: 'appointment-datetime-picker__time-input' }}
+          styles={{ input: { cursor: 'not-allowed', caretColor: 'transparent' } }}
           comboboxProps={{ withinPortal: true, zIndex: 400 }}
         />
       </Group>

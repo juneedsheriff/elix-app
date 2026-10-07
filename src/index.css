@@ -623,6 +623,9 @@ select {
 .screen-form-footer-actions .primary-btn,
 .screen-form-footer-actions .secondary-btn,
 .screen-form-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   flex: 1;
   min-height: 48px;
   min-width: 0;

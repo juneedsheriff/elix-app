@@ -40,11 +40,70 @@ export function mimeTypeForFileName(fileName: string, reported?: string | null):
 /** Call synchronously inside a click handler before any await. */
 export function prepareAsyncOpenInNewTab(): Window | null {
   if (typeof window === 'undefined') return null;
+  let popup: Window | null = null;
   try {
-    return window.open('about:blank', '_blank');
+    popup = window.open('', '_blank');
   } catch {
     return null;
   }
+  if (!popup) return null;
+  // Give Safari a real document immediately so it does not discard the tab
+  // while the file downloads.
+  try {
+    popup.document.open();
+    popup.document.write(
+      '<!DOCTYPE html><title>Opening file…</title><p style="font-family:sans-serif;padding:1.25rem">Opening file…</p>'
+    );
+    popup.document.close();
+  } catch {
+    /* The tab is still open; the file URL can replace it after download. */
+  }
+  return popup;
+}
+
+/** Show an already-downloaded file in a tab that was opened during the click. */
+export function openBlobInPreparedTab(
+  preparedWindow: Window | null,
+  blob: Blob,
+  fileName: string
+): boolean {
+  const type = mimeTypeForFileName(fileName, blob.type);
+  const fileBlob = blob.type === type ? blob : new Blob([blob], { type });
+  const url = URL.createObjectURL(fileBlob);
+
+  const navigate = (target: Window) => {
+    try {
+      target.location.replace(url);
+      return true;
+    } catch {
+      try {
+        target.location.href = url;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  if (preparedWindow && !preparedWindow.closed && navigate(preparedWindow)) {
+    window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    return true;
+  }
+
+  if (preparedWindow && !preparedWindow.closed) {
+    try {
+      preparedWindow.close();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const opened = window.open(url, '_blank');
+  if (!opened) {
+    openUrlInNewTab(url);
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+  return Boolean(opened);
 }
 
 /** Open a file that is already loaded. Call this only after loading finishes. */

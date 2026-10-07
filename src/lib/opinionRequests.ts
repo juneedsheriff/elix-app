@@ -1685,7 +1685,13 @@ function mapRequestRow(
   row: RequestListRow,
   patientMap: Map<
     string,
-    { full_name: string; email: string; gender: string | null; avatar_url: string | null }
+    {
+      full_name: string;
+      email: string;
+      phone: string | null;
+      gender: string | null;
+      avatar_url: string | null;
+    }
   >
 ): OpinionRequest {
   const patient = row.patient_id ? patientMap.get(row.patient_id) : undefined;
@@ -1714,6 +1720,7 @@ function mapRequestRow(
     clinic_id: row.clinic_id ?? null,
     clinic_name: null,
     patient_email: patient?.email ?? null,
+    patient_phone: patient?.phone ?? null,
     doctor_response: row.doctor_response,
     responded_at: row.responded_at,
     assigned_to: row.assigned_to ?? null,
@@ -1803,7 +1810,13 @@ export async function submitDoctorOpinionResponse(requestId: string, responseTex
 async function loadPatientEmailMap(authUserIds: string[]) {
   const patientMap = new Map<
     string,
-    { full_name: string; email: string; gender: string | null; avatar_url: string | null }
+    {
+      full_name: string;
+      email: string;
+      phone: string | null;
+      gender: string | null;
+      avatar_url: string | null;
+    }
   >();
   if (!authUserIds.length) return patientMap;
 
@@ -1812,6 +1825,7 @@ async function loadPatientEmailMap(authUserIds: string[]) {
         auth_user_id: string | null;
         full_name: string;
         email: string;
+        phone?: string | null;
         gender: string | null;
         avatar_url?: string | null;
       }>
@@ -1819,13 +1833,13 @@ async function loadPatientEmailMap(authUserIds: string[]) {
 
   const withAvatar = await supabase
     .from('patients')
-    .select('auth_user_id, full_name, email, gender, avatar_url')
+    .select('auth_user_id, full_name, email, phone, gender, avatar_url')
     .in('auth_user_id', authUserIds);
 
   if (withAvatar.error) {
     const withoutAvatar = await supabase
       .from('patients')
-      .select('auth_user_id, full_name, email, gender')
+      .select('auth_user_id, full_name, email, phone, gender')
       .in('auth_user_id', authUserIds);
     if (withoutAvatar.error) throw withoutAvatar.error;
     patients = withoutAvatar.data;
@@ -1838,6 +1852,7 @@ async function loadPatientEmailMap(authUserIds: string[]) {
       patientMap.set(p.auth_user_id, {
         full_name: p.full_name,
         email: p.email,
+        phone: p.phone?.trim() || null,
         gender: p.gender ?? null,
         avatar_url: p.avatar_url ?? null
       });

@@ -12,6 +12,11 @@
   min-width: min(100%, 12rem);
 }
 
+.appointment-datetime-picker__time-input {
+  cursor: not-allowed;
+  caret-color: transparent;
+}
+
 .appointment-datetime-picker__hint {
   line-height: 1.4;
 }

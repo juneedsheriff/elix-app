@@ -85,6 +85,11 @@ export function useRequestsTableColumns({
                       {request.patient_email}
                     </Text>
                   ) : null}
+                  {request.patient_phone ? (
+                    <Text size='xs' c='dimmed' className='doctors-mgmt-muted'>
+                      {request.patient_phone}
+                    </Text>
+                  ) : null}
                 </Stack>
               </Group>
             );

@@ -1,0 +1,80 @@
+.doctor-consultation-preview-modal-root {
+  z-index: 280;
+}
+
+.doctor-consultation-preview-modal {
+  width: min(100%, 960px);
+}
+
+.doctor-consultation-preview-modal .elixhealth-modal-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.doctor-consultation-preview-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.doctor-consultation-preview-modal__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.doctor-consultation-preview-modal__tab {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.doctor-consultation-preview-modal__tab--active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--brand-cyan) 45%, var(--border));
+  background: color-mix(in srgb, var(--brand-cyan) 12%, var(--surface));
+}
+
+.doctor-consultation-preview-modal .react-pdf-document-viewer {
+  min-height: min(62dvh, 640px);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.doctor-consultation-preview-modal__image {
+  display: block;
+  width: 100%;
+  max-height: min(62dvh, 640px);
+  object-fit: contain;
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+
+.doctor-consultation-preview-modal__note {
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.doctor-consultation-preview-modal__note p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.doctor-consultation-preview-modal__note-label {
+  margin-bottom: 0.3rem !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}

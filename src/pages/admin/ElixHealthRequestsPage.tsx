@@ -50,6 +50,7 @@ function matchesSearch(request: OpinionRequest, query: string) {
   const haystack = [
     request.patient_name,
     request.patient_email,
+    request.patient_phone,
     request.doctor_name,
     request.doctor_specialty,
     request.message,
