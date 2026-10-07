@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { ClipboardPlus, X } from 'lucide-react';
+import { ArrowLeft, ClipboardPlus, X } from 'lucide-react';
 import { formatRequestDate } from '../../pages/admin/requests/requestsUtils';
 import {
   canDoctorGiveConsultation,
@@ -23,6 +23,8 @@ type DoctorCaseDetailsModalProps = {
   onNavigate?: (screenId: string) => void;
   returnScreen?: string;
   onOpenError?: (message: string) => void;
+  /** Arrow back control that closes the details and returns to the consultation. */
+  showBackButton?: boolean;
 };
 
 function isLightboxOpen(): boolean {
@@ -36,7 +38,8 @@ export default function DoctorCaseDetailsModal({
   onRequestUpdated,
   onNavigate,
   returnScreen = 'doctor-dashboard',
-  onOpenError
+  onOpenError,
+  showBackButton = false
 }: DoctorCaseDetailsModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -92,22 +95,36 @@ export default function DoctorCaseDetailsModal({
         aria-labelledby='doctor-case-details-modal-title'
       >
         <div className='elixhealth-modal-head'>
-          <div>
-            <h2 id='doctor-case-details-modal-title'>Patient Case Details</h2>
-            <p className='muted'>
-              {patientLabel}
-              {' · '}
-              Submitted {formatRequestDate(request.created_at)}
-            </p>
+          <div className='doctor-case-details-modal__heading'>
+            {showBackButton ? (
+              <button
+                type='button'
+                className='secondary-btn doctor-case-details-modal__back'
+                onClick={onClose}
+                aria-label='Back'
+              >
+                <ArrowLeft size={18} aria-hidden />
+              </button>
+            ) : null}
+            <div>
+              <h2 id='doctor-case-details-modal-title'>Patient Case Details</h2>
+              <p className='muted'>
+                {patientLabel}
+                {' · '}
+                Submitted {formatRequestDate(request.created_at)}
+              </p>
+            </div>
           </div>
-          <button
-            type='button'
-            className='icon-btn elixhealth-modal-close'
-            onClick={onClose}
-            aria-label='Close'
-          >
-            <X size={20} aria-hidden />
-          </button>
+          {showBackButton ? null : (
+            <button
+              type='button'
+              className='icon-btn elixhealth-modal-close'
+              onClick={onClose}
+              aria-label='Close'
+            >
+              <X size={20} aria-hidden />
+            </button>
+          )}
         </div>
 
         <div className='elixhealth-modal-body doctor-case-details-modal__body'>

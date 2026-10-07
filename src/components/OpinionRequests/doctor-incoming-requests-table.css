@@ -214,6 +214,41 @@
   flex: 0 0 10.5rem;
 }
 
+/* App doctor dashboard sits in the phone shell — keep the title intact and
+   place the status dropdown on its own row so it does not collide with Refresh. */
+.mobile-shell .doctor-cases-workspace__head {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0.75rem;
+  column-gap: 0.85rem;
+  overflow: visible;
+  margin-bottom: 20px;
+}
+
+.mobile-shell .doctor-cases-workspace__head-copy {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.mobile-shell .doctor-cases-workspace__head-copy h3 {
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.mobile-shell .doctor-cases-workspace__head-actions {
+  flex: 1 1 100%;
+  width: 100%;
+  margin-left: 0;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.mobile-shell .doctor-cases-workspace__status-filter {
+  width: 11.5rem;
+  flex: 0 1 11.5rem;
+  max-width: calc(100% - 7.5rem);
+}
+
 .doctor-cases-workspace__status-filter .mantine-Input-input {
   min-height: 1.9rem;
   height: 1.9rem;

@@ -1582,13 +1582,16 @@
   grid-template-columns: 2.25rem minmax(0, 1fr);
   gap: 0.65rem;
   align-items: stretch;
+  height: auto;
 }
 
 .patient-wizard-timeline__rail {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 100%;
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
 }
 
 .patient-wizard-timeline__marker {
@@ -1640,12 +1643,13 @@
 
 .patient-wizard-card {
   min-width: 0;
+  align-self: start;
+  height: auto;
   border-radius: 14px;
   background: #fff;
   border: 1px solid #e8ecf1;
   box-shadow: var(--patient-wizard-card-shadow);
   overflow: hidden;
-  overflow: clip;
 }
 
 .patient-wizard-timeline__step--current .patient-wizard-card {
@@ -1807,6 +1811,7 @@
 }
 
 .patient-wizard-card__panel {
+  height: auto;
   padding: 0 1rem 1rem;
 }
 

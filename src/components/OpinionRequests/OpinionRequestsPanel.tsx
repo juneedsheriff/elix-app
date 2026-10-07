@@ -33,6 +33,14 @@ function statusLabel(status: string, view: 'patient' | 'doctor', request?: Opini
   return 'Submitted';
 }
 
+function doctorStatusFilterEmptyHint(filter: DoctorCaseStatusFilter, fallback: string): string {
+  if (filter === 'completed') return 'No completed requests yet.';
+  if (filter === 'pending') {
+    return 'No pending requests. Cases stay here until you complete the consultation, including after the appointment time and when weekly availability is Unavailable.';
+  }
+  return fallback;
+}
+
 function matchesDoctorSearch(request: OpinionRequest, query: string): boolean {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
@@ -86,6 +94,9 @@ export default function OpinionRequestsPanel({
   const location = useLocation();
   const isElixHealthWorkspace =
     view === 'doctor' && location.pathname.startsWith('/elixhealth/workspace');
+  const isAppDoctorDashboard =
+    view === 'doctor' && /^\/app\/(doctor-dashboard|case-review)\/?$/.test(location.pathname);
+  const showDoctorStatusFilter = isElixHealthWorkspace || isAppDoctorDashboard;
 
   const [requests, setRequests] = useState<OpinionRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +121,7 @@ export default function OpinionRequestsPanel({
 
   const visibleRequests = useMemo(() => {
     let list = kindFilteredRequests;
-    if (view === 'doctor' && isElixHealthWorkspace) {
+    if (showDoctorStatusFilter) {
       // Weekly availability (Unavailable days / outside hours) must not hide cases.
       if (doctorStatusFilter === 'completed') {
         list = list.filter(isDoctorWorkspaceRequestCompleted);
@@ -120,7 +131,7 @@ export default function OpinionRequestsPanel({
           .sort(compareDoctorWorkspacePending);
       }
     }
-    if (view === 'doctor' && isElixHealthWorkspace && doctorStatusFilter === 'all') {
+    if (showDoctorStatusFilter && doctorStatusFilter === 'all') {
       list = [...list].sort((a, b) => {
         const aDone = isDoctorWorkspaceRequestCompleted(a) ? 1 : 0;
         const bDone = isDoctorWorkspaceRequestCompleted(b) ? 1 : 0;
@@ -131,7 +142,7 @@ export default function OpinionRequestsPanel({
     }
     if (view !== 'doctor' || !doctorSearch.trim()) return list;
     return list.filter((request) => matchesDoctorSearch(request, doctorSearch));
-  }, [doctorSearch, doctorStatusFilter, isElixHealthWorkspace, kindFilteredRequests, view]);
+  }, [doctorSearch, doctorStatusFilter, showDoctorStatusFilter, kindFilteredRequests, view]);
 
   const doctorConsultationQueue =
     view === 'doctor' ? kindFilteredRequests.filter(canDoctorGiveConsultation) : [];
@@ -257,30 +268,31 @@ export default function OpinionRequestsPanel({
               <ClipboardList size={isElixHealthWorkspace ? 18 : 22} className='inline-icon' aria-hidden />{' '}
               {title}
             </h3>
-            {!isElixHealthWorkspace ? <p>{subtitle}</p> : null}
+            {!showDoctorStatusFilter ? <p>{subtitle}</p> : null}
           </div>
           {view === 'doctor' && canLoad ? (
             <div className='doctor-cases-workspace__head-actions'>
+              {showDoctorStatusFilter ? (
+                <Select
+                  className='doctor-cases-workspace__status-filter'
+                  aria-label='Filter cases'
+                  data={[
+                    { value: 'all', label: `All (${doctorAllCasesCount})` },
+                    { value: 'pending', label: `Pending (${doctorPendingCasesCount})` },
+                    { value: 'completed', label: `Completed (${doctorCompletedCasesCount})` }
+                  ]}
+                  value={doctorStatusFilter}
+                  onChange={(value) =>
+                    setDoctorStatusFilter((value as DoctorCaseStatusFilter) ?? 'pending')
+                  }
+                  allowDeselect={false}
+                  radius='md'
+                  size='xs'
+                  comboboxProps={{ withinPortal: true, zIndex: 460 }}
+                />
+              ) : null}
               {isElixHealthWorkspace ? (
-                <>
-                  <Select
-                    className='doctor-cases-workspace__status-filter'
-                    aria-label='Filter cases'
-                    data={[
-                      { value: 'all', label: `All (${doctorAllCasesCount})` },
-                      { value: 'pending', label: `Pending (${doctorPendingCasesCount})` },
-                      { value: 'completed', label: `Completed (${doctorCompletedCasesCount})` }
-                    ]}
-                    value={doctorStatusFilter}
-                    onChange={(value) =>
-                      setDoctorStatusFilter((value as DoctorCaseStatusFilter) ?? 'pending')
-                    }
-                    allowDeselect={false}
-                    radius='md'
-                    size='xs'
-                    comboboxProps={{ withinPortal: true, zIndex: 460 }}
-                  />
-                  <TextInput
+                <TextInput
                   className='doctor-cases-workspace__search'
                   placeholder='Search patients…'
                   value={doctorSearch}
@@ -292,12 +304,11 @@ export default function OpinionRequestsPanel({
                   size='xs'
                   aria-label='Search patient requests'
                 />
-                </>
               ) : null}
               <Button
                 variant='default'
                 radius='md'
-                size={isElixHealthWorkspace ? 'xs' : 'sm'}
+                size={showDoctorStatusFilter ? 'xs' : 'sm'}
                 leftSection={<RefreshCw size={14} className={refreshing ? 'spin' : undefined} />}
                 loading={refreshing}
                 onClick={handleRefresh}
@@ -345,6 +356,7 @@ export default function OpinionRequestsPanel({
         !loading &&
         !error &&
         !isElixHealthWorkspace &&
+        doctorStatusFilter !== 'completed' &&
         doctorConsultationQueue.length > 0 ? (
           <div className='case-review-consultation-banner'>
             <p className='case-review-consultation-banner__text'>
@@ -376,13 +388,7 @@ export default function OpinionRequestsPanel({
               onSearchChange={setDoctorSearch}
               hasActiveFilters={Boolean(doctorSearch.trim())}
               onClearFilters={() => setDoctorSearch('')}
-                emptyHint={
-                  doctorStatusFilter === 'completed'
-                    ? 'No completed requests yet.'
-                    : doctorStatusFilter === 'pending'
-                      ? 'No pending requests. Cases stay here until you complete the consultation, including after the appointment time and when weekly availability is Unavailable.'
-                      : emptyHint
-                }
+                emptyHint={doctorStatusFilterEmptyHint(doctorStatusFilter, emptyHint)}
               onNavigate={onNavigate}
               returnScreen={doctorReturnScreen}
               onOpenError={showOpenRecordError}
@@ -414,6 +420,11 @@ export default function OpinionRequestsPanel({
               onSearchChange={setDoctorSearch}
               hasActiveFilters={Boolean(doctorSearch.trim())}
               onClearFilters={() => setDoctorSearch('')}
+              emptyHint={
+                showDoctorStatusFilter
+                  ? doctorStatusFilterEmptyHint(doctorStatusFilter, emptyHint)
+                  : emptyHint
+              }
               onNavigate={onNavigate}
               returnScreen={doctorReturnScreen}
               onOpenError={showOpenRecordError}

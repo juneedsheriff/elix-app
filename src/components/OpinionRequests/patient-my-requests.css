@@ -1995,7 +1995,25 @@
 
 .patient-request-detail-view,
 .patient-request-detail-view__card {
+  height: auto;
   overflow-x: clip;
+}
+
+.patient-request-detail-view.screen-grid {
+  align-content: start;
+}
+
+.patient-request-detail-view__card {
+  align-self: start;
+}
+
+.patient-request-detail-view .patient-consultation-wizard,
+.patient-request-detail-view .patient-wizard-timeline,
+.patient-request-detail-view .patient-wizard-timeline__track,
+.patient-request-detail-view .patient-wizard-timeline__step,
+.patient-request-detail-view .patient-wizard-card {
+  height: auto;
+  flex: none;
 }
 
 .patient-request-detail--chat .patient-request-chat-view {

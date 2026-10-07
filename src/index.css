@@ -2526,6 +2526,7 @@ select {
 .patient-request-detail-view__card {
   overflow-x: clip;
   overflow-y: visible;
+  height: auto;
   min-width: 0;
   padding-bottom: 1.25rem;
 }

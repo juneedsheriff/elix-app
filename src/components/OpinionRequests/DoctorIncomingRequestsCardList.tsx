@@ -360,6 +360,7 @@ export default function DoctorIncomingRequestsCardList({
         onNavigate={onNavigate}
         returnScreen={returnScreen}
         onRequestUpdated={handleCaseDetailsUpdated}
+        showBackButton={!isWorkspace}
       />
       <DoctorConsultationNotesModal
         open={Boolean(consultationNotesRequest)}

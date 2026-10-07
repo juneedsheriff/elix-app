@@ -1234,6 +1234,7 @@ export default function DoctorConsultationPage({
           onClose={() => setCaseContextOpen(false)}
           onRequestUpdated={setRequest}
           onOpenError={setError}
+          showBackButton
         />
       ) : null}
 
