@@ -298,6 +298,12 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
           </p>
         ) : null}
 
+        {!caseDetails.consentInformationAccurate ? (
+          <p className='auth-error' role='alert'>
+            Click terms and conditions, then click the Agree button before submitting.
+          </p>
+        ) : null}
+
         <button type='submit' className='primary-btn wide' disabled={submitting || !consentComplete}>
           {submitting ? 'Submitting…' : 'Submit request'}
         </button>
