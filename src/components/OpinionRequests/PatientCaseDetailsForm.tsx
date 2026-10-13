@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import PreferredLanguageMultiSelect from '../patient/PreferredLanguageMultiSelect';
 import PatientBirthDatePicker from '../patient/PatientBirthDatePicker';
 import { calculateBmi, formatBmi } from '../../lib/bmi';
@@ -10,6 +11,7 @@ import {
   type PatientCaseDetails,
   type SecondOpinionQuestion
 } from '../../types/patientCaseDetails';
+import PatientTermsModal from './PatientTermsModal';
 import PreferredTimeSlotsPicker from './PreferredTimeSlotsPicker';
 import './patient-case-details-form.css';
 
@@ -81,6 +83,9 @@ export default function PatientCaseDetailsForm({
 }: PatientCaseDetailsFormProps) {
   const isDisabled = disabled || readOnly;
   const consentDisabled = isDisabled || consentReadOnly;
+  const termsCheckboxId = useId();
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [termsUnlocked, setTermsUnlocked] = useState(value.consentInformationAccurate);
   const showPreferencesSection = sectionsThrough >= 8 && showPreferences;
   const showConsentSection = sectionsThrough >= 8 && showConsent;
   const allSpecialties = specialtyOptionsForValues(specialties, [
@@ -468,12 +473,37 @@ export default function PatientCaseDetailsForm({
               </p>
             ) : null}
             <ul className='patient-case-details-form__checkbox-list'>
+              <li>
+                <div
+                  className={`patient-case-details-form__checkbox-item${
+                    consentReadOnly ? ' patient-case-details-form__checkbox-item--locked' : ''
+                  }`}
+                >
+                  <input
+                    id={termsCheckboxId}
+                    type='checkbox'
+                    checked={value.consentInformationAccurate}
+                    onChange={(event) => {
+                      if (!termsUnlocked && !value.consentInformationAccurate) return;
+                      patch(value, onChange, { consentInformationAccurate: event.target.checked });
+                    }}
+                    disabled={consentDisabled || (!termsUnlocked && !value.consentInformationAccurate)}
+                    aria-readonly={consentReadOnly || undefined}
+                  />
+                  <span>
+                    <label htmlFor={termsCheckboxId}>I agree to the </label>
+                    <button
+                      type='button'
+                      className='patient-case-details-form__terms-link'
+                      onClick={() => setTermsOpen(true)}
+                    >
+                      terms and conditions
+                    </button>
+                  </span>
+                </div>
+              </li>
               {(
                 [
-                  [
-                    'consentInformationAccurate',
-                    'I confirm that the information provided is accurate.'
-                  ],
                   [
                     'consentShareRecords',
                     'I consent to sharing my medical records with the consulting doctor.'
@@ -502,6 +532,19 @@ export default function PatientCaseDetailsForm({
                 </li>
               ))}
             </ul>
+            <PatientTermsModal
+              open={termsOpen}
+              onClose={() => setTermsOpen(false)}
+              onAgree={
+                consentDisabled
+                  ? undefined
+                  : () => {
+                      setTermsUnlocked(true);
+                      patch(value, onChange, { consentInformationAccurate: true });
+                      setTermsOpen(false);
+                    }
+              }
+            />
           </fieldset>
         </>
       ) : null}

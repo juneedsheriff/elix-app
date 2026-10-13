@@ -13,6 +13,7 @@ const PatientDashboardPage = lazy(() => import('./patient/PatientDashboardPage')
 const PaymentsPage = lazy(() => import('./patient/PaymentsPage'));
 const TimelinePage = lazy(() => import('./patient/TimelinePage'));
 const UploadRecordsPage = lazy(() => import('./patient/UploadRecordsPage'));
+const CancellationRefundPolicyPage = lazy(() => import('./patient/CancellationRefundPolicyPage'));
 const SettingsPage = lazy(() => import('./settings/SettingsPage'));
 const EmptyPage = lazy(() => import('./shared/EmptyPage'));
 
@@ -70,6 +71,9 @@ export default function ScreenRouter({ screenId, onNavigate, ...pageProps }: Scr
     case 'cms':
     case 'audit':
       element = <CmsAuditPage />;
+      break;
+    case 'cancellation-refund-policy':
+      element = <CancellationRefundPolicyPage />;
       break;
     case 'settings':
       element = <SettingsPage {...pageProps} />;

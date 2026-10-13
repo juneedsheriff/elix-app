@@ -983,11 +983,14 @@ select {
   align-items: center;
   gap: 0.65rem;
   min-height: 48px;
+  flex-shrink: 0;
   transition: background 180ms ease, color 180ms ease;
 }
 
 .nav-btn span {
   font-size: 14px;
+  line-height: 1.3;
+  white-space: normal;
 }
 
 .nav-btn svg {

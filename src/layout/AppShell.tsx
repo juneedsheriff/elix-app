@@ -18,6 +18,19 @@ import type { BottomTab } from '../lib/navigation/bottomTabs';
 import type { Doctor } from '../types/doctor';
 import type { Patient } from '../types/patient';
 
+const PATIENT_POLICY_NAV = {
+  id: 'cancellation-refund-policy',
+  label: 'Cancellation & Refund Policy'
+} as const;
+
+function withPatientPolicyNav<T extends { id: string; label: string }>(role: Role, items: T[]): T[] {
+  if (role !== 'patient' || items.some((item) => item.id === PATIENT_POLICY_NAV.id)) return items;
+  const settingsIndex = items.findIndex((item) => item.id === 'settings');
+  const policy = PATIENT_POLICY_NAV as T;
+  if (settingsIndex < 0) return [...items, policy];
+  return [...items.slice(0, settingsIndex), policy, ...items.slice(settingsIndex)];
+}
+
 type AppShellProps = {
   role: Role;
   language: Language;
@@ -73,7 +86,7 @@ export default function AppShell({
   onSignOut,
   onRequestProfileSetup
 }: AppShellProps) {
-  const navItems = getNavItems(role, language);
+  const navItems = withPatientPolicyNav(role, getNavItems(role, language));
   const activeNavItem = navItems.find((item) => item.id === activeScreen);
   const hideBottomNav = activeScreen === 'doctor-consultation' || activeScreen === 'my-requests';
   const [clinicDoctors, setClinicDoctors] = useState<Doctor[]>([]);

@@ -93,6 +93,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
         subscriptions: 'Subscriptions',
         timeline: 'Reports Timeline',
         'ai-insights': 'AI Insights',
+        'cancellation-refund-policy': 'Cancellation & Refund Policy',
         settings: 'Settings'
       },
       doctor: {
@@ -165,6 +166,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
         subscriptions: 'Suscripciones',
         timeline: 'Línea de informes',
         'ai-insights': 'Perspectivas IA',
+        'cancellation-refund-policy': 'Política de cancelación y reembolso',
         settings: 'Ajustes'
       },
       doctor: {
@@ -237,6 +239,7 @@ export const TRANSLATIONS: Record<Language, AppCopy> = {
         subscriptions: 'الاشتراكات',
         timeline: 'الجدول الزمني',
         'ai-insights': 'رؤى الذكاء',
+        'cancellation-refund-policy': 'سياسة الإلغاء والاسترداد',
         settings: 'الإعدادات'
       },
       doctor: {
@@ -284,6 +287,7 @@ export const NAV_IDS: Record<Role, string[]> = {
     'subscriptions',
     'timeline',
     'ai-insights',
+    'cancellation-refund-policy',
     'settings'
   ],
   doctor: [
