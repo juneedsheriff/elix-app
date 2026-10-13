@@ -105,3 +105,72 @@
 .policy-page__table tbody th {
   font-weight: 650;
 }
+
+/* Section 2 is four columns. Inside the phone layout, stack each service as a card. */
+.policy-page__table-wrap--cancellation {
+  container-type: inline-size;
+  container-name: cancellation-table;
+}
+
+@container cancellation-table (max-width: 52rem) {
+  .policy-page__table-wrap--cancellation {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .policy-page__table--cancellation {
+    display: block;
+    min-width: 0;
+  }
+
+  .policy-page__table--cancellation thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .policy-page__table--cancellation tbody {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .policy-page__table--cancellation tr {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.8rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--brand-cyan) 5%, var(--surface));
+  }
+
+  .policy-page__table--cancellation td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .policy-page__table--cancellation td:first-child {
+    font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .policy-page__table--cancellation td:not(:first-child)::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.12rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+  }
+}

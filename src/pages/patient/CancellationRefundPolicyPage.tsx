@@ -1,5 +1,12 @@
 import './cancellation-refund-policy.css';
 
+const CANCELLATION_COLUMNS = [
+  'Service',
+  'Cancelled early',
+  'Cancelled late',
+  'After service has started (Less than 24 hrs)'
+] as const;
+
 const CANCELLATION_ROWS = [
   [
     'Doctor video / online consultation',
@@ -92,21 +99,24 @@ export default function CancellationRefundPolicyPage() {
           A patient may cancel from the app or by contacting support. The cancellation time is the time the
           request is received, not the time of the appointment. Refunds follow the windows below.
         </p>
-        <div className='policy-page__table-wrap'>
-          <table className='policy-page__table'>
+        <div className='policy-page__table-wrap policy-page__table-wrap--cancellation'>
+          <table className='policy-page__table policy-page__table--cancellation'>
             <thead>
               <tr>
-                <th scope='col'>Service</th>
-                <th scope='col'>Cancelled early</th>
-                <th scope='col'>Cancelled late</th>
-                <th scope='col'>After service has started (Less than 24 hrs)</th>
+                {CANCELLATION_COLUMNS.map((column) => (
+                  <th key={column} scope='col'>
+                    {column}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {CANCELLATION_ROWS.map((row) => (
                 <tr key={row[0]}>
-                  {row.map((cell) => (
-                    <td key={cell}>{cell}</td>
+                  {row.map((cell, index) => (
+                    <td key={CANCELLATION_COLUMNS[index]} data-label={CANCELLATION_COLUMNS[index]}>
+                      {cell}
+                    </td>
                   ))}
                 </tr>
               ))}
