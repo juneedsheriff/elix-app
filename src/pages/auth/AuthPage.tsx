@@ -1,14 +1,10 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Stethoscope } from 'lucide-react';
 import AuthInstallAppPrompt from '../../components/auth/AuthInstallAppPrompt';
 import ElixLogo from '../../components/ui/ElixLogo';
 import { Lock, Mail } from '../../navIcons';
 import './auth-page.css';
 
-export type LoginMode = 'patient' | 'doctor';
-
 type AuthPageProps = {
-  loginMode: LoginMode;
   configured: boolean;
   passwordRecovery: boolean;
   email: string;
@@ -18,17 +14,12 @@ type AuthPageProps = {
   authBusy: boolean;
   defaultPasswordHint: string;
   copy: {
-    doctorSignIn: string;
     signIn: string;
     connected: string;
-    patientTab: string;
-    doctorTab: string;
-    signInAsDoctor: string;
     signInAsPatient: string;
     createPatientAccount: string;
     fullNamePlaceholder: string;
   };
-  onLoginModeChange: (mode: LoginMode) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onSignIn: () => void;
@@ -57,7 +48,6 @@ function AuthPageShell({ children }: { children: ReactNode }) {
 }
 
 export default function AuthPage({
-  loginMode,
   configured,
   passwordRecovery,
   email,
@@ -66,7 +56,6 @@ export default function AuthPage({
   authSuccess,
   authBusy,
   copy,
-  onLoginModeChange,
   onEmailChange,
   onPasswordChange,
   onSignIn,
@@ -154,7 +143,7 @@ export default function AuthPage({
   return (
     <AuthPageShell>
       <AuthPageLogo />
-      <h1 className='auth-page__title'>{loginMode === 'doctor' ? copy.doctorSignIn : copy.signIn}</h1>
+      <h1 className='auth-page__title'>{copy.signIn}</h1>
       {configured ? (
         <p className='auth-page__status'>{copy.connected}</p>
       ) : (
@@ -164,35 +153,6 @@ export default function AuthPage({
       )}
 
       <AuthInstallAppPrompt />
-
-      <div className='auth-page__tabs' role='tablist' aria-label='Login type'>
-        <button
-          type='button'
-          role='tab'
-          aria-selected={loginMode === 'patient'}
-          className={`auth-page__tab${loginMode === 'patient' ? ' auth-page__tab--active' : ''}`}
-          onClick={() => onLoginModeChange('patient')}
-        >
-          {copy.patientTab}
-        </button>
-        <button
-          type='button'
-          role='tab'
-          aria-selected={loginMode === 'doctor'}
-          className={`auth-page__tab${loginMode === 'doctor' ? ' auth-page__tab--active' : ''}`}
-          onClick={() => onLoginModeChange('doctor')}
-        >
-          <Stethoscope size={16} aria-hidden /> {copy.doctorTab}
-        </button>
-      </div>
-
-      <div className='auth-page__hint-slot' aria-live='polite'>
-        {loginMode === 'doctor' ? (
-          <p className='auth-page__hint'></p>
-        ) : (
-          <span className='auth-page__hint-placeholder' aria-hidden />
-        )}
-      </div>
 
       <form
         className='auth-page__form'
@@ -236,17 +196,10 @@ export default function AuthPage({
         ) : null}
 
         <button type='submit' className='primary-btn auth-page__submit' disabled={authBusy || !configured}>
-          {authBusy ? '…' : loginMode === 'doctor' ? copy.signInAsDoctor : copy.signInAsPatient}
+          {authBusy ? '…' : copy.signInAsPatient}
         </button>
 
-        <button
-          type='button'
-          className={`secondary-btn auth-page__secondary${loginMode === 'patient' ? '' : ' auth-page__secondary--hidden'}`}
-          disabled={authBusy || loginMode !== 'patient'}
-          aria-hidden={loginMode !== 'patient'}
-          tabIndex={loginMode === 'patient' ? 0 : -1}
-          onClick={onShowPatientSignup}
-        >
+        <button type='button' className='secondary-btn auth-page__secondary' disabled={authBusy} onClick={onShowPatientSignup}>
           {copy.createPatientAccount}
         </button>
       </form>
@@ -263,7 +216,7 @@ export default function AuthPage({
         >
           Forgot password?
         </button>
-        {loginMode === 'patient' && showResendConfirmation ? (
+        {showResendConfirmation ? (
           <button type='button' className='text-btn' onClick={onResendConfirmation} disabled={authBusy || !configured}>
             Resend confirmation email
           </button>

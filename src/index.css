@@ -419,6 +419,35 @@ select {
     var(--surface-soft);
 }
 
+.onboarding-top {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.85rem 1rem 0;
+}
+
+.onboarding-doctor-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  padding: 0.5rem 1.05rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #83c847, #6fb03a);
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 22px rgba(131, 200, 71, 0.28);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.onboarding-doctor-login:hover {
+  filter: brightness(1.03);
+}
+
 .onboarding-main {
   flex: 1;
   min-height: 0;
@@ -427,7 +456,7 @@ select {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 2rem 1.35rem 1.25rem;
+  padding: 1.25rem 1.35rem 1.25rem;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -4288,7 +4317,22 @@ body:has(.elixhealth-login),
   letter-spacing: 0.01em;
 }
 
-.elixhealth-login .auth-error {
+.elixhealth-login__forgot {
+  justify-self: start;
+  margin-top: -0.15rem;
+  padding: 0.15rem 0;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--brand-cyan);
+}
+
+.elixhealth-login__forgot:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--brand-cyan) 80%, #000);
+  text-decoration: underline;
+}
+
+.elixhealth-login .auth-error,
+.elixhealth-login .auth-success {
   width: 100%;
 }
 

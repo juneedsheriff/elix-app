@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { ONBOARDING_ICONS } from '../../navIcons';
 import ElixLogo from '../../components/ui/ElixLogo';
 
@@ -22,9 +23,21 @@ export default function OnboardingPage({
   onSkip,
   onContinue
 }: OnboardingPageProps) {
+  const navigate = useNavigate();
+
   return (
     <div className='mobile-shell mobile-shell--stage onboarding-shell'>
       <div className='onboarding-page'>
+        <div className='onboarding-top'>
+          <button
+            type='button'
+            className='onboarding-doctor-login'
+            onClick={() => navigate('/elixhealth/login')}
+          >
+            Login as doctor
+          </button>
+        </div>
+
         <div className='onboarding-main'>
           <header className='onboarding-hero'>
             <ElixLogo className='onboarding-logo' width={200} height={80} />
@@ -38,7 +51,6 @@ export default function OnboardingPage({
               return (
                 <li key={item.title} className='onboarding-step'>
                   <div className='onboarding-step-body'>
-                    
                     <span className='onboard-icon onboarding-step-icon' aria-hidden>
                       <Icon size={20} strokeWidth={2} />
                     </span>

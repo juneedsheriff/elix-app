@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AppShell from './layout/AppShell';
-import AuthPage, { type LoginMode } from './pages/auth/AuthPage';
+import AuthPage from './pages/auth/AuthPage';
 import ChatPatientOnboarding from './components/auth/ChatPatientOnboarding';
 import { completePatientOnboarding } from './lib/patients';
 import { isPatientProfileComplete } from './lib/patientProfileCompleteness';
@@ -61,7 +61,6 @@ function App() {
 
   const [theme, setTheme] = useState<Theme>('light');
   const [role, setRole] = useState<Role>('patient');
-  const [loginMode, setLoginMode] = useState<LoginMode>('patient');
   const [stage, setStage] = useState<Stage>(() => (isPasswordRecoveryCallback() ? 'auth' : 'splash'));
   const [language, setLanguage] = useState<Language>('en');
   const [activeScreen, setActiveScreen] = useState<string>(() =>
@@ -173,7 +172,6 @@ function App() {
     if (stage === 'auth' && authView === 'signup') return;
 
     setRole('patient');
-    setLoginMode('patient');
     if (patientProfile && !isPatientProfileComplete(patientProfile)) {
       setStage('profile-setup');
       return;
@@ -279,15 +277,6 @@ function App() {
     setAuthView('signin');
   };
 
-  const handleLoginModeChange = (mode: LoginMode) => {
-    if (mode === loginMode) return;
-    setLoginMode(mode);
-    setEmail('');
-    setPassword('');
-    setAuthError(null);
-    setAuthSuccess(null);
-  };
-
   const handleSignIn = async () => {
     setAuthError(null);
     setAuthSuccess(null);
@@ -297,16 +286,14 @@ function App() {
     }
     setAuthBusy(true);
     let error: { message: string } | null = null;
-    let doctor: Awaited<ReturnType<typeof signIn>>['doctor'] = null;
     let patient: Awaited<ReturnType<typeof signIn>>['patient'] = null;
     let mustChangePassword = false;
 
     try {
       const result = await signIn(email.trim(), password, {
-        patientLoginOnly: loginMode === 'patient'
+        patientLoginOnly: true
       });
       error = result.error;
-      doctor = result.doctor;
       patient = result.patient;
       mustChangePassword = result.mustChangePassword;
     } catch (signInError) {
@@ -324,22 +311,14 @@ function App() {
       setAuthError(error.message);
       return;
     }
-    if (loginMode === 'doctor' && !doctor) {
-      await signOut();
-      setAuthError('This email is not registered as a doctor.');
-      return;
-    }
-    const nextRole = doctor ? 'doctor' : 'patient';
-    setRole(nextRole);
-    if (nextRole === 'doctor') {
-      setAuthSurface('mobile');
-    }
+
+    setRole('patient');
     const saved = consumeReturnScreen();
     const fromUrl = parseAppScreenPath(location.pathname);
-    const screen = resolveScreenForRole(nextRole, saved ?? fromUrl);
+    const screen = resolveScreenForRole('patient', saved ?? fromUrl);
     setActiveScreen(screen);
 
-    if (nextRole === 'patient' && mustChangePassword) {
+    if (mustChangePassword) {
       setStage('auth');
       setPasswordRecovery(true);
       setForcePasswordChange(true);
@@ -349,7 +328,7 @@ function App() {
       return;
     }
 
-    if (nextRole === 'patient' && patient && !isPatientProfileComplete(patient)) {
+    if (patient && !isPatientProfileComplete(patient)) {
       setStage('profile-setup');
       setAuthError(null);
       return;
@@ -482,7 +461,6 @@ function App() {
     setAuthBusy(false);
     if (error) return { error: error.message };
     setRole('patient');
-    setLoginMode('patient');
     return { error: null };
   };
 
@@ -602,7 +580,6 @@ function App() {
 
       {stage === 'auth' && (authView === 'signin' || passwordRecovery) ? (
         <AuthPage
-          loginMode={loginMode}
           configured={configured}
           passwordRecovery={passwordRecovery}
           email={email}
@@ -612,7 +589,6 @@ function App() {
           authBusy={authBusy}
           defaultPasswordHint={DEFAULT_PASSWORD_HINT}
           copy={copy}
-          onLoginModeChange={handleLoginModeChange}
           onEmailChange={setEmail}
           onPasswordChange={setPassword}
           onSignIn={() => void handleSignIn()}
