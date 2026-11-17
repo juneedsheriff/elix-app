@@ -4,11 +4,9 @@ import { createDoctorForAdmin } from '../../../lib/admins';
 import { emptyAdminDoctorInput, validateAdminDoctorInput } from '../../../lib/doctorProfile';
 import { DOCTOR_SPECIALTY_OPTIONS } from '../../../lib/doctorSpecialtyOptions';
 import {
-  CONSULTATION_CURRENCY_OPTIONS,
-  consultationCurrencySymbol,
-  normalizeConsultationCurrency
-} from '../../../lib/consultationCurrency';
-import { primaryConsultationFeeFromTiers } from '../../../lib/consultationTiers';
+  primaryConsultationFeeFromTiers,
+  tiersFromDualFees
+} from '../../../lib/consultationTiers';
 import { parsePreferredLanguages } from '../../../lib/patientProfileOptions';
 import PreferredLanguageMultiSelect from '../../../components/patient/PreferredLanguageMultiSelect';
 import AdminDoctorProfileImageSection from './AdminDoctorProfileImageSection';
@@ -244,35 +242,35 @@ export default function AdminDoctorCreateForm({ onCreated, onCancel, clinicId = 
                 />
               </label>
               <label className='elixhealth-field'>
-                <span>Consultation currency</span>
-                <select
-                  value={form.consultation_currency}
-                  onChange={(e) =>
-                    setField('consultation_currency', normalizeConsultationCurrency(e.target.value))
-                  }
-                >
-                  {CONSULTATION_CURRENCY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className='elixhealth-field'>
-                <span>
-                  Consultation charge ({consultationCurrencySymbol(form.consultation_currency)})
-                </span>
+                <span>Consultation charge (US Dollar $)</span>
                 <input
                   type='number'
                   min={0}
-                  value={primaryConsultationFeeFromTiers(form.consultation_tiers)}
+                  value={primaryConsultationFeeFromTiers(form.consultation_tiers, 'USD')}
                   onChange={(e) => {
-                    const fee = Math.max(0, Math.round(Number(e.target.value)));
-                    setField(
-                      'consultation_tiers',
-                      form.consultation_tiers.map((item) => ({ ...item, fee_usd: fee }))
-                    );
-                    setField('consultation_fee', fee);
+                    const feeUsd = Math.max(0, Math.round(Number(e.target.value)));
+                    const feeInr = primaryConsultationFeeFromTiers(form.consultation_tiers, 'INR');
+                    const tiers = tiersFromDualFees(feeUsd, feeInr);
+                    setField('consultation_tiers', tiers);
+                    setField('consultation_fee', feeUsd);
+                    setField('consultation_fee_inr', feeInr);
+                    setField('consultation_currency', 'USD');
+                  }}
+                />
+              </label>
+              <label className='elixhealth-field'>
+                <span>Consultation charge (Indian Rupee ₹)</span>
+                <input
+                  type='number'
+                  min={0}
+                  value={primaryConsultationFeeFromTiers(form.consultation_tiers, 'INR')}
+                  onChange={(e) => {
+                    const feeInr = Math.max(0, Math.round(Number(e.target.value)));
+                    const feeUsd = primaryConsultationFeeFromTiers(form.consultation_tiers, 'USD');
+                    const tiers = tiersFromDualFees(feeUsd, feeInr);
+                    setField('consultation_tiers', tiers);
+                    setField('consultation_fee', feeUsd);
+                    setField('consultation_fee_inr', feeInr);
                   }}
                 />
               </label>

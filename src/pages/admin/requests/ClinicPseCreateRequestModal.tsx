@@ -3,6 +3,7 @@ import { Button, Group, Modal, Select, Stack, Text, Textarea } from '@mantine/co
 import { useMediaQuery } from '@mantine/hooks';
 import { IconPlus } from '@tabler/icons-react';
 import ConsultationTierPricingDisplay from '../../../components/Doctors/ConsultationTierPricingDisplay';
+import { useClinicConsultationCurrency } from '../../../hooks/useClinicConsultationCurrency';
 import {
   createClinicPseOpinionRequest,
   createPlatformPseOpinionRequest
@@ -43,6 +44,7 @@ export default function ClinicPseCreateRequestModal({
 }: ClinicPseCreateRequestModalProps) {
   const isCompactViewport = useMediaQuery('(max-width: 1024px)');
   const isClinicWorkspace = Boolean(staff.clinic_id);
+  const displayCurrency = useClinicConsultationCurrency(staff.clinic_id);
   const allowCreatePatientButton = allowCreatePatient ?? isClinicWorkspace;
   const [patientId, setPatientId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
@@ -247,7 +249,11 @@ export default function ClinicPseCreateRequestModal({
             {selectedDoctor ? (
               <div className='elixhealth-field elixhealth-field--full'>
                 <FieldLabel>Consultation charge</FieldLabel>
-                <ConsultationTierPricingDisplay doctor={selectedDoctor} />
+                <ConsultationTierPricingDisplay
+                  doctor={selectedDoctor}
+                  displayCurrency={displayCurrency}
+                  showLabel={false}
+                />
               </div>
             ) : null}
 

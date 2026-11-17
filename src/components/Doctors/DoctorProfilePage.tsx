@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
+import { useClinicConsultationCurrency } from '../../hooks/useClinicConsultationCurrency';
 import { fetchPatientBrowseDoctorById } from '../../lib/doctors';
 import {
   clearPendingOpinionRequest,
@@ -21,6 +22,7 @@ type View = 'profile' | 'opinion';
 export default function DoctorProfilePage({ doctorId, initialDoctor = null, onBack }: DoctorProfilePageProps) {
   const { patientProfile } = useSupabase();
   const patientClinicId = patientProfile?.clinic_id ?? null;
+  const displayCurrency = useClinicConsultationCurrency(patientClinicId);
   const [doctor, setDoctor] = useState<Doctor | null>(initialDoctor);
   const [loading, setLoading] = useState(!initialDoctor);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +94,7 @@ export default function DoctorProfilePage({ doctorId, initialDoctor = null, onBa
         doctor={doctor}
         loading={loading}
         error={error}
+        displayCurrency={displayCurrency}
         footer={
           doctor ? (
             <button type='button' className='primary-btn wide' onClick={() => setView('opinion')}>

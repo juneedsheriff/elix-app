@@ -2,16 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import SectionCard from '../../components/ui/SectionCard';
 import {
-  CONSULTATION_CURRENCY_OPTIONS,
-  consultationCurrencySymbol,
-  normalizeConsultationCurrency
-} from '../../lib/consultationCurrency';
-import {
   ensureStandardConsultationTiers,
-  primaryConsultationFeeFromTiers
+  primaryConsultationFeeFromTiers,
+  tiersFromDualFees
 } from '../../lib/consultationTiers';
 import { updateDoctorConsultationPricing } from '../../lib/doctors';
-import type { ConsultationCurrency, ConsultationTier, Doctor } from '../../types/doctor';
+import type { ConsultationTier, Doctor } from '../../types/doctor';
 import './doctor-pricing.css';
 
 type DoctorConsultationPricingSectionProps = {
@@ -21,23 +17,23 @@ type DoctorConsultationPricingSectionProps = {
   subtitle?: string;
 };
 
-function tiersFromFee(feeUsd: number): ConsultationTier[] {
-  const fee = Math.max(0, Math.round(feeUsd));
-  return ensureStandardConsultationTiers([], fee).map((tier) => ({
-    ...tier,
-    fee_usd: fee
-  }));
-}
-
-function feeFromDoctor(doctor: Doctor | null | undefined): number {
+function feeFromDoctor(
+  doctor: Doctor | null | undefined,
+  currency: 'USD' | 'INR'
+): number {
   if (!doctor) return 0;
   if (doctor.consultation_tiers?.length) {
     return primaryConsultationFeeFromTiers(
       ensureStandardConsultationTiers(
         doctor.consultation_tiers,
-        doctor.consultation_fee ?? doctor.fee_usd ?? 0
-      )
+        doctor.consultation_fee ?? doctor.fee_usd ?? 0,
+        doctor.consultation_fee_inr ?? 0
+      ),
+      currency
     );
+  }
+  if (currency === 'INR') {
+    return Math.max(0, Math.round(doctor.consultation_fee_inr ?? 0));
   }
   return Math.max(0, Math.round(doctor.consultation_fee ?? doctor.fee_usd ?? 0));
 }
@@ -46,19 +42,17 @@ export default function DoctorConsultationPricingSection({
   doctorProfile,
   onUpdated,
   title = 'Consultation pricing',
-  subtitle = 'Set the consultation charge shown on requests and payment steps'
+  subtitle = 'Set US Dollar and Indian Rupee charges. Patients see the fee for their clinic country.'
 }: DoctorConsultationPricingSectionProps) {
-  const [feeUsd, setFeeUsd] = useState(() => feeFromDoctor(doctorProfile));
-  const [currency, setCurrency] = useState<ConsultationCurrency>(() =>
-    normalizeConsultationCurrency(doctorProfile?.consultation_currency)
-  );
+  const [feeUsd, setFeeUsd] = useState(() => feeFromDoctor(doctorProfile, 'USD'));
+  const [feeInr, setFeeInr] = useState(() => feeFromDoctor(doctorProfile, 'INR'));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    setFeeUsd(feeFromDoctor(doctorProfile));
-    setCurrency(normalizeConsultationCurrency(doctorProfile?.consultation_currency));
+    setFeeUsd(feeFromDoctor(doctorProfile, 'USD'));
+    setFeeInr(feeFromDoctor(doctorProfile, 'INR'));
   }, [doctorProfile]);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -66,53 +60,47 @@ export default function DoctorConsultationPricingSection({
     setBusy(true);
     setError(null);
     setSuccess(null);
-    const { data, error: saveError } = await updateDoctorConsultationPricing(
-      tiersFromFee(feeUsd),
-      currency
-    );
+    const tiers: ConsultationTier[] = tiersFromDualFees(feeUsd, feeInr);
+    const { data, error: saveError } = await updateDoctorConsultationPricing(tiers, 'USD');
     setBusy(false);
     if (saveError || !data) {
       setError(saveError?.message ?? 'Could not save consultation pricing.');
       return;
     }
-    setFeeUsd(feeFromDoctor(data));
-    setCurrency(normalizeConsultationCurrency(data.consultation_currency));
+    setFeeUsd(feeFromDoctor(data, 'USD'));
+    setFeeInr(feeFromDoctor(data, 'INR'));
     setSuccess('Consultation pricing updated.');
     onUpdated?.(data);
   };
-
-  const currencySymbol = consultationCurrencySymbol(currency);
 
   return (
     <SectionCard title={title} subtitle={subtitle}>
       <form className='doctor-pricing-form' onSubmit={(e) => void handleSubmit(e)}>
         <p className='muted'>
-          This charge is used for quotes and payment across patient, PSE, admin, and doctor views.
+          Enter both currencies. India clinic patients see Indian Rupees; other PSE countries see US
+          Dollars.
         </p>
 
-        <label className='doctor-pricing-field doctor-pricing-field--currency'>
-          <span>Currency</span>
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(normalizeConsultationCurrency(e.target.value))}
-            disabled={busy}
-          >
-            {CONSULTATION_CURRENCY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
         <label className='doctor-pricing-field'>
-          <span>Consultation charge ({currencySymbol})</span>
+          <span>Consultation charge (US Dollar $)</span>
           <input
             type='number'
             min={0}
             step={1}
             value={feeUsd}
             onChange={(e) => setFeeUsd(Math.max(0, Math.round(Number(e.target.value))))}
+            disabled={busy}
+          />
+        </label>
+
+        <label className='doctor-pricing-field'>
+          <span>Consultation charge (Indian Rupee ₹)</span>
+          <input
+            type='number'
+            min={0}
+            step={1}
+            value={feeInr}
+            onChange={(e) => setFeeInr(Math.max(0, Math.round(Number(e.target.value))))}
             disabled={busy}
           />
         </label>
