@@ -9,8 +9,8 @@ import {
 } from '../../../lib/clinicDoctorRequests';
 import {
   DEFAULT_PSE_COUNTRY,
-  PSE_COUNTRY_OPTIONS,
   normalizePseCountry,
+  PSE_COUNTRY_OPTIONS,
   type PseCountry
 } from '../../../lib/pseCountry';
 import { adminRoleLabel } from '../../../lib/staffPermissions';
@@ -391,8 +391,8 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                     ))}
                   </select>
                   <span className='muted elixhealth-staff-note'>
-                    India clinics show consultation fees in Indian Rupees. Other countries show US Dollars
-                    for patients assigned to this clinic.
+                    India clinics show fees in ₹. Other countries and global (no clinic) patients see
+                    US Dollars.
                   </span>
                 </label>
                 <label className='elixhealth-field elixhealth-field--full'>

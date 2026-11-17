@@ -16,7 +16,7 @@ type ConsultationTierPricingDisplayProps = {
     | 'consultation_currency'
   >;
   className?: string;
-  /** When set (e.g. from patient PSE clinic country), overrides doctor.consultation_currency. */
+  /** When set (from patient/PSE clinic), overrides doctor.consultation_currency. */
   displayCurrency?: ConsultationCurrency | null;
   /** Omit when a parent already labels the fee (e.g. profile grid “Consultation fee”). */
   showLabel?: boolean;

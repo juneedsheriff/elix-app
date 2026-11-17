@@ -34,7 +34,7 @@ export type ConsultationTier = {
   duration_minutes: number;
   /** Consultation charge in US dollars. */
   fee_usd: number;
-  /** Consultation charge in Indian rupees. */
+  /** Indian Rupee amount for the same tier (shown to India PSE patients). */
   fee_inr?: number;
 };
 

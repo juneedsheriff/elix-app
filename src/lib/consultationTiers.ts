@@ -35,8 +35,7 @@ export function tierFeeForCurrency(
 ): number {
   if (!tier) return 0;
   if (currency === 'INR') {
-    const inr = Math.max(0, Math.round(Number(tier.fee_inr ?? 0)));
-    return inr;
+    return Math.max(0, Math.round(Number(tier.fee_inr ?? 0)));
   }
   return Math.max(0, Math.round(Number(tier.fee_usd ?? 0)));
 }

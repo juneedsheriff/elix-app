@@ -77,8 +77,8 @@ export default function DoctorConsultationPricingSection({
     <SectionCard title={title} subtitle={subtitle}>
       <form className='doctor-pricing-form' onSubmit={(e) => void handleSubmit(e)}>
         <p className='muted'>
-          Enter both currencies. India clinic patients see Indian Rupees; other PSE countries see US
-          Dollars.
+          Enter both currencies. India PSE patients see ₹; other PSE countries and global patients
+          see $.
         </p>
 
         <label className='doctor-pricing-field'>

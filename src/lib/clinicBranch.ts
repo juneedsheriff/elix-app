@@ -61,12 +61,17 @@ export function clinicBranchEmail(branch: Pick<PseClinicBranch, 'email'> | null 
   return branch?.email?.trim() || HEAD_OFFICE_EMAIL;
 }
 
-/** India → INR; other / missing clinic → USD fallback only when country is non-India. Default India. */
+/**
+ * Patient-facing consultation currency from clinic assignment.
+ * - No clinic (global patient) → USD
+ * - India PSE → INR
+ * - Other PSE countries → USD
+ */
 export async function consultationCurrencyForClinicId(
   clinicId: string | null | undefined
 ): Promise<ConsultationCurrency> {
   const id = clinicId?.trim();
-  if (!id) return consultationCurrencyForPseCountry(DEFAULT_PSE_COUNTRY);
+  if (!id) return 'USD';
   const { data } = await fetchAssignedClinicBranch(id);
   return consultationCurrencyForPseCountry(data?.country ?? DEFAULT_PSE_COUNTRY);
 }

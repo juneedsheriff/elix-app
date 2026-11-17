@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { consultationCurrencyForClinicId } from '../lib/clinicBranch';
-import { consultationCurrencyForPseCountry, DEFAULT_PSE_COUNTRY } from '../lib/pseCountry';
 import type { ConsultationCurrency } from '../types/doctor';
 
-/** Resolves display currency from a PSE clinic id (India → INR, else USD). Defaults to India/INR. */
+/**
+ * Resolves display currency from a PSE clinic id.
+ * Global patients (no clinic) → USD; India → INR; other PSE countries → USD.
+ */
 export function useClinicConsultationCurrency(clinicId: string | null | undefined) {
   const [displayCurrency, setDisplayCurrency] = useState<ConsultationCurrency>(() =>
-    consultationCurrencyForPseCountry(DEFAULT_PSE_COUNTRY)
+    clinicId?.trim() ? 'INR' : 'USD'
   );
 
   useEffect(() => {

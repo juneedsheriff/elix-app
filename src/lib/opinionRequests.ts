@@ -1328,6 +1328,7 @@ export async function createPlatformPseOpinionRequest(input: CreatePlatformPseOp
   }
 
   const message = input.message.trim() || 'Consultation request';
+  // Platform / global patients (no clinic) always bill in USD.
   const displayCurrency = await consultationCurrencyForClinicId(null);
   const pricing = resolveConsultationPricing(
     doctor,

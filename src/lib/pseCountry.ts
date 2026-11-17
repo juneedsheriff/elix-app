@@ -18,7 +18,11 @@ export function normalizePseCountry(value: unknown): PseCountry {
   return match?.value ?? DEFAULT_PSE_COUNTRY;
 }
 
-/** India clinics bill in INR; every other PSE country bills in USD. */
+/**
+ * Display currency for a PSE clinic country.
+ * India → INR; every other listed country → USD.
+ * Callers with no clinic (global patients) should use USD directly — see consultationCurrencyForClinicId.
+ */
 export function consultationCurrencyForPseCountry(country: unknown): ConsultationCurrency {
   return normalizePseCountry(country) === 'India' ? 'INR' : 'USD';
 }
