@@ -1,3 +1,10 @@
+import type { ConsultationCurrency } from '../types/doctor';
+import {
+  consultationCurrencyForPseCountry,
+  DEFAULT_PSE_COUNTRY,
+  normalizePseCountry,
+  type PseCountry
+} from './pseCountry';
 import { supabase } from './supabase';
 
 export const CLINIC_BRANCH_SERVICES = [
@@ -25,6 +32,7 @@ export type PseClinicBranch = {
   location: string | null;
   email: string | null;
   phone: string | null;
+  country: PseCountry;
 };
 
 function mapBranchRow(row: {
@@ -33,13 +41,15 @@ function mapBranchRow(row: {
   location?: string | null;
   email?: string | null;
   phone?: string | null;
+  country?: string | null;
 }): PseClinicBranch {
   return {
     id: row.id,
     name: row.name?.trim() || 'ElixClinix branch',
     location: row.location?.trim() || null,
     email: row.email?.trim() || null,
-    phone: row.phone?.trim() || null
+    phone: row.phone?.trim() || null,
+    country: normalizePseCountry(row.country ?? DEFAULT_PSE_COUNTRY)
   };
 }
 
@@ -51,24 +61,34 @@ export function clinicBranchEmail(branch: Pick<PseClinicBranch, 'email'> | null 
   return branch?.email?.trim() || HEAD_OFFICE_EMAIL;
 }
 
+/** India → INR; other / missing clinic → USD fallback only when country is non-India. Default India. */
+export async function consultationCurrencyForClinicId(
+  clinicId: string | null | undefined
+): Promise<ConsultationCurrency> {
+  const id = clinicId?.trim();
+  if (!id) return consultationCurrencyForPseCountry(DEFAULT_PSE_COUNTRY);
+  const { data } = await fetchAssignedClinicBranch(id);
+  return consultationCurrencyForPseCountry(data?.country ?? DEFAULT_PSE_COUNTRY);
+}
+
 export async function fetchAssignedClinicBranch(clinicId: string | null | undefined) {
   const id = clinicId?.trim();
   if (!id) return { data: null, error: null };
 
   const withDetails = await supabase
     .from('pse_clinics')
-    .select('id, name, location, email, phone')
+    .select('id, name, location, email, phone, country')
     .eq('id', id)
     .maybeSingle();
 
   if (!withDetails.error) {
     return {
-      data: withDetails.data ? mapBranchRow(withDetails.data as PseClinicBranch) : null,
+      data: withDetails.data ? mapBranchRow(withDetails.data) : null,
       error: null
     };
   }
 
-  if (!/location|email|phone|column/i.test(withDetails.error.message ?? '')) {
+  if (!/location|email|phone|country|column/i.test(withDetails.error.message ?? '')) {
     return { data: null, error: { message: withDetails.error.message } };
   }
 
@@ -86,30 +106,40 @@ export async function fetchAssignedClinicBranch(clinicId: string | null | undefi
 
 export async function updatePseClinicBranchDetails(
   clinicId: string,
-  input: { location?: string | null; email?: string | null; phone?: string | null }
+  input: {
+    location?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    country?: string | null;
+  }
 ) {
   const id = clinicId.trim();
   if (!id) return { data: null, error: { message: 'Clinic id is required.' } };
 
+  const payload: Record<string, unknown> = {
+    location: input.location?.trim() || null,
+    email: input.email?.trim() || null,
+    phone: input.phone?.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+  if (input.country !== undefined) {
+    payload.country = normalizePseCountry(input.country);
+  }
+
   const { data, error } = await supabase
     .from('pse_clinics')
-    .update({
-      location: input.location?.trim() || null,
-      email: input.email?.trim() || null,
-      phone: input.phone?.trim() || null,
-      updated_at: new Date().toISOString()
-    })
+    .update(payload)
     .eq('id', id)
-    .select('id, name, location, email, phone')
+    .select('id, name, location, email, phone, country')
     .maybeSingle();
 
   if (error) {
-    const hint = /location|email|phone|column/i.test(error.message)
-      ? ' Run npm run db:apply-clinic-branch-details (migration 085).'
+    const hint = /location|email|phone|country|column/i.test(error.message)
+      ? ' Run npm run db:apply-clinic-branch-details and npm run db:apply-pse-clinic-country (migrations 085/089).'
       : '';
     return { data: null, error: { message: `${error.message}${hint}` } };
   }
   if (!data) return { data: null, error: { message: 'Clinic workspace not found.' } };
 
-  return { data: mapBranchRow(data as PseClinicBranch), error: null };
+  return { data: mapBranchRow(data), error: null };
 }

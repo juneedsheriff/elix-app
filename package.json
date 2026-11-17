@@ -90,6 +90,7 @@
     "db:apply-doctor-request-visibility": "node scripts/apply-migration.mjs 086_doctor_workspace_request_visibility.sql",
     "db:apply-doctor-workspace-roster": "node scripts/apply-migration.mjs 087_doctor_workspace_clinic_roster.sql",
     "db:apply-consultation-summary-clinical-fields": "node scripts/apply-migration.mjs 088_consultation_summary_clinical_fields.sql",
+    "db:apply-pse-clinic-country": "node scripts/apply-migration.mjs 089_pse_clinic_country.sql",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "db:seed-pse": "node scripts/seed-pse.mjs"
   },

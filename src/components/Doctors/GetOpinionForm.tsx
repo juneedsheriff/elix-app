@@ -7,6 +7,7 @@ import {
   clearPendingOpinionRequest,
   savePendingOpinionRequest
 } from '../../lib/navigation/pendingOpinionRequest';
+import { useClinicConsultationCurrency } from '../../hooks/useClinicConsultationCurrency';
 import ConsultationTierPricingDisplay from './ConsultationTierPricingDisplay';
 import MedicalRecordsChoicePrompt from '../OpinionRequests/MedicalRecordsChoicePrompt';
 import PatientCaseDetailsForm from '../OpinionRequests/PatientCaseDetailsForm';
@@ -35,6 +36,7 @@ const MY_REQUESTS_REDIRECT_MS = 5000;
 export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) {
   const navigate = useNavigate();
   const { user, patientProfile } = useSupabase();
+  const displayCurrency = useClinicConsultationCurrency(patientProfile?.clinic_id);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
   const [recordsError, setRecordsError] = useState<string | null>(null);
@@ -278,7 +280,7 @@ export default function GetOpinionForm({ doctor, onBack }: GetOpinionFormProps) 
 
         {!awaitingRecordsChoice ? (
           <>
-        <ConsultationTierPricingDisplay doctor={doctor} />
+        <ConsultationTierPricingDisplay doctor={doctor} displayCurrency={displayCurrency} />
 
         <PatientCaseDetailsForm
           value={caseDetails}

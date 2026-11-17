@@ -19,6 +19,7 @@ import {
   parseConsultationTiers,
   resolveConsultationPricing
 } from './consultationTiers';
+import { consultationCurrencyForClinicId } from './clinicBranch';
 import { isDoctorAvailableToClinic } from './clinicDoctorRequests';
 import {
   buildHomeCareCaseDetails,
@@ -1012,11 +1013,13 @@ async function resolveNames(
 }
 
 export async function createOpinionRequest(input: CreateOpinionRequestInput) {
+  let patientClinicId: string | null = null;
   if (input.patientId) {
     const { data: patient } = await fetchPatientByAuthUserId(input.patientId);
     if (patient && isPatientLoginBlocked(patient)) {
       return { data: null, error: { message: PATIENT_LOGIN_BLOCKED_MESSAGE } };
     }
+    patientClinicId = patient?.clinic_id ?? null;
   }
 
   const { doctor, error: doctorError } = await resolveDoctorRecord(input.doctorId);
@@ -1025,7 +1028,12 @@ export async function createOpinionRequest(input: CreateOpinionRequestInput) {
   }
 
   const { patientName, doctorName } = await resolveNames(input, doctor);
-  const pricing = resolveConsultationPricing(doctor, input.consultationDurationMinutes);
+  const displayCurrency = await consultationCurrencyForClinicId(patientClinicId);
+  const pricing = resolveConsultationPricing(
+    doctor,
+    input.consultationDurationMinutes,
+    displayCurrency
+  );
   const pricingFields =
     pricing.durationMinutes != null || pricing.feeUsd != null
       ? {
@@ -1178,7 +1186,12 @@ export async function createClinicPseOpinionRequest(input: CreateClinicPseOpinio
   }
 
   const message = input.message.trim() || 'Consultation request';
-  const pricing = resolveConsultationPricing(doctor, input.consultationDurationMinutes);
+  const displayCurrency = await consultationCurrencyForClinicId(input.clinicId);
+  const pricing = resolveConsultationPricing(
+    doctor,
+    input.consultationDurationMinutes,
+    displayCurrency
+  );
 
   const pricingFields =
     pricing.durationMinutes != null || pricing.feeUsd != null
@@ -1315,7 +1328,12 @@ export async function createPlatformPseOpinionRequest(input: CreatePlatformPseOp
   }
 
   const message = input.message.trim() || 'Consultation request';
-  const pricing = resolveConsultationPricing(doctor, input.consultationDurationMinutes);
+  const displayCurrency = await consultationCurrencyForClinicId(null);
+  const pricing = resolveConsultationPricing(
+    doctor,
+    input.consultationDurationMinutes,
+    displayCurrency
+  );
 
   const pricingFields =
     pricing.durationMinutes != null || pricing.feeUsd != null
@@ -3635,6 +3653,17 @@ export async function markRecommendationsShared(
   return { data, error: null };
 }
 
+async function displayCurrencyForRequestId(requestId: string) {
+  const { data } = await supabase
+    .from('opinion_requests')
+    .select('clinic_id')
+    .eq('id', requestId)
+    .maybeSingle();
+  return consultationCurrencyForClinicId(
+    data && typeof data === 'object' ? (data as { clinic_id?: string | null }).clinic_id : null
+  );
+}
+
 export async function patientSelectRecommendedDoctor(
   requestId: string,
   doctorId: string,
@@ -3652,7 +3681,8 @@ export async function patientSelectRecommendedDoctor(
   }
 
   const durationMinutes = input?.consultationDurationMinutes ?? null;
-  const pricing = resolveConsultationPricing(doctor, durationMinutes);
+  const displayCurrency = await displayCurrencyForRequestId(requestId);
+  const pricing = resolveConsultationPricing(doctor, durationMinutes, displayCurrency);
 
   const { data, error } = await supabase
     .from('opinion_requests')
@@ -3698,7 +3728,8 @@ export async function patientSelectDoctorWithAvailability(
   }
 
   const durationMinutes = input?.consultationDurationMinutes ?? null;
-  const pricing = resolveConsultationPricing(doctor, durationMinutes);
+  const displayCurrency = await displayCurrencyForRequestId(requestId);
+  const pricing = resolveConsultationPricing(doctor, durationMinutes, displayCurrency);
 
   const payload = {
     selected_doctor_id: doctor.id,
@@ -3852,7 +3883,8 @@ export async function pseAssignAndApproveDoctor(
   }
 
   const durationMinutes = input?.consultationDurationMinutes ?? null;
-  const pricing = resolveConsultationPricing(doctor, durationMinutes);
+  const displayCurrency = await displayCurrencyForRequestId(requestId);
+  const pricing = resolveConsultationPricing(doctor, durationMinutes, displayCurrency);
   const confirmedAt = new Date().toISOString();
 
   const payload = {

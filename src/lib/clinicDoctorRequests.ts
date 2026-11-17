@@ -296,12 +296,13 @@ export type PseClinicAdminRow = {
   location: string | null;
   email: string | null;
   phone: string | null;
+  country: string;
 };
 
 export async function fetchPseClinicsForAdmin() {
   const withBranch = await supabase
     .from('pse_clinics')
-    .select('id, name, home_care_enabled, location, email, phone')
+    .select('id, name, home_care_enabled, location, email, phone, country')
     .order('name', { ascending: true });
 
   if (!withBranch.error) {
@@ -313,7 +314,8 @@ export async function fetchPseClinicsForAdmin() {
           typeof row.home_care_enabled === 'boolean' ? row.home_care_enabled : true,
         location: typeof row.location === 'string' ? row.location : null,
         email: typeof row.email === 'string' ? row.email : null,
-        phone: typeof row.phone === 'string' ? row.phone : null
+        phone: typeof row.phone === 'string' ? row.phone : null,
+        country: typeof row.country === 'string' && row.country.trim() ? row.country.trim() : 'India'
       })) satisfies PseClinicAdminRow[],
       error: null
     };
@@ -333,7 +335,8 @@ export async function fetchPseClinicsForAdmin() {
           typeof row.home_care_enabled === 'boolean' ? row.home_care_enabled : true,
         location: null,
         email: null,
-        phone: null
+        phone: null,
+        country: 'India'
       })) satisfies PseClinicAdminRow[],
       error: null
     };
@@ -356,7 +359,8 @@ export async function fetchPseClinicsForAdmin() {
       home_care_enabled: true,
       location: null,
       email: null,
-      phone: null
+      phone: null,
+      country: 'India'
     })) satisfies PseClinicAdminRow[],
     error: null
   };

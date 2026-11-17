@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { Loader2, Search, Star } from 'lucide-react';
 import { useSupabase } from '../../context/SupabaseProvider';
+import { useClinicConsultationCurrency } from '../../hooks/useClinicConsultationCurrency';
 import { formatConsultationTiersSummary } from '../../lib/consultationTiers';
 import { fetchDoctors } from '../../lib/doctors';
-import type { Doctor } from '../../types/doctor';
+import type { ConsultationCurrency, Doctor } from '../../types/doctor';
 
-function DoctorCard({ doctor, onSelect }: { doctor: Doctor; onSelect: (doctor: Doctor) => void }) {
+function DoctorCard({
+  doctor,
+  onSelect,
+  displayCurrency
+}: {
+  doctor: Doctor;
+  onSelect: (doctor: Doctor) => void;
+  displayCurrency: ConsultationCurrency;
+}) {
   const openProfile = () => onSelect(doctor);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -43,7 +52,7 @@ function DoctorCard({ doctor, onSelect }: { doctor: Doctor; onSelect: (doctor: D
         <div className='tag-row'>
           <span className='tag'>{doctor.rating.toFixed(1)} rating</span>
           <span className='tag'>{doctor.languages}</span>
-          <span className='tag'>{formatConsultationTiersSummary(doctor)}</span>
+          <span className='tag'>{formatConsultationTiersSummary(doctor, displayCurrency)}</span>
         </div>
         <span className='text-btn doctor-view-btn'>View profile</span>
       </div>
@@ -58,6 +67,7 @@ type DoctorsListProps = {
 export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
   const { patientProfile } = useSupabase();
   const patientClinicId = patientProfile?.clinic_id ?? null;
+  const displayCurrency = useClinicConsultationCurrency(patientClinicId);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,9 +108,9 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
         d.country.toLowerCase().includes(q) ||
         d.languages.toLowerCase().includes(q) ||
         String(d.fee_usd).includes(q) ||
-        formatConsultationTiersSummary(d).toLowerCase().includes(q)
+        formatConsultationTiersSummary(d, displayCurrency).toLowerCase().includes(q)
     );
-  }, [doctors, query]);
+  }, [doctors, query, displayCurrency]);
 
   return (
     <div className='doctors-screen'>
@@ -155,7 +165,12 @@ export default function DoctorsList({ onViewProfile }: DoctorsListProps) {
 
         <div className='doctor-grid'>
           {filtered.map((doctor) => (
-            <DoctorCard key={doctor.id} doctor={doctor} onSelect={onViewProfile} />
+            <DoctorCard
+              key={doctor.id}
+              doctor={doctor}
+              onSelect={onViewProfile}
+              displayCurrency={displayCurrency}
+            />
           ))}
         </div>
       </section>

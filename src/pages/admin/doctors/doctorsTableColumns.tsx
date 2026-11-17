@@ -270,13 +270,16 @@ export function useDoctorsTableColumns({
       {
         id: 'fee',
         header: 'Fee',
-        accessorFn: (row) =>
-          formatConsultationFeeUsd(
-            row.consultation_fee ?? row.fee_usd,
-            row.consultation_currency ?? 'USD'
-          ),
-        size: 110,
-        minSize: 100,
+        accessorFn: (row) => {
+          const usd = formatConsultationFeeUsd(row.consultation_fee ?? row.fee_usd, 'USD');
+          const inrAmount = Number(row.consultation_fee_inr ?? 0);
+          if (inrAmount > 0) {
+            return `${usd} / ${formatConsultationFeeUsd(inrAmount, 'INR')}`;
+          }
+          return usd;
+        },
+        size: 160,
+        minSize: 120,
         enableGlobalFilter: false,
         Cell: ({ cell }) => (
           <Paper radius='md' px='sm' py={6} className='doctors-mgmt-fee'>

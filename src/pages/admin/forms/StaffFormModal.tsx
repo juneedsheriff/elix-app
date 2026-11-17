@@ -7,6 +7,12 @@ import {
   updatePseClinicHomeCareEnabled,
   type PseClinicAdminRow
 } from '../../../lib/clinicDoctorRequests';
+import {
+  DEFAULT_PSE_COUNTRY,
+  PSE_COUNTRY_OPTIONS,
+  normalizePseCountry,
+  type PseCountry
+} from '../../../lib/pseCountry';
 import { adminRoleLabel } from '../../../lib/staffPermissions';
 import type { Admin, AdminRole } from '../../../types/admin';
 
@@ -34,6 +40,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
   const [clinicLocation, setClinicLocation] = useState('');
   const [clinicEmail, setClinicEmail] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
+  const [clinicCountry, setClinicCountry] = useState<PseCountry>(DEFAULT_PSE_COUNTRY);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -56,6 +63,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
     setClinicLocation('');
     setClinicEmail('');
     setClinicPhone('');
+    setClinicCountry(DEFAULT_PSE_COUNTRY);
     setPassword('');
     setConfirmPassword('');
     setError(null);
@@ -81,6 +89,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
           setClinicLocation(match.location ?? '');
           setClinicEmail(match.email ?? '');
           setClinicPhone(match.phone ?? '');
+          setClinicCountry(normalizePseCountry(match.country));
         }
       } else if (!isEdit && options.length) {
         setClinicSelection((prev) => {
@@ -93,6 +102,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
         setClinicLocation(selected.location ?? '');
         setClinicEmail(selected.email ?? '');
         setClinicPhone(selected.phone ?? '');
+        setClinicCountry(normalizePseCountry(selected.country));
       }
     });
 
@@ -107,6 +117,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
       setClinicLocation('');
       setClinicEmail('');
       setClinicPhone('');
+      setClinicCountry(DEFAULT_PSE_COUNTRY);
       return;
     }
     const match = clinicOptions.find((clinic) => clinic.id === clinicSelection);
@@ -115,6 +126,7 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
       setClinicLocation(match.location ?? '');
       setClinicEmail(match.email ?? '');
       setClinicPhone(match.phone ?? '');
+      setClinicCountry(normalizePseCountry(match.country));
     }
   }, [clinicSelection, clinicOptions, isClinicRole, usesNewClinic]);
 
@@ -258,7 +270,8 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
       const { error: branchError } = await updatePseClinicBranchDetails(resolvedClinicId, {
         location: clinicLocation,
         email: clinicEmail,
-        phone: clinicPhone
+        phone: clinicPhone,
+        country: clinicCountry
       });
       if (branchError) {
         setBusy(false);
@@ -364,6 +377,24 @@ export default function StaffFormModal({ open, mode, staff, onClose, onSaved }: 
                     />
                   </label>
                 ) : null}
+                <label className='elixhealth-field elixhealth-field--full'>
+                  <span>Country</span>
+                  <select
+                    value={clinicCountry}
+                    onChange={(e) => setClinicCountry(normalizePseCountry(e.target.value))}
+                    disabled={busy}
+                  >
+                    {PSE_COUNTRY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className='muted elixhealth-staff-note'>
+                    India clinics show consultation fees in Indian Rupees. Other countries show US Dollars
+                    for patients assigned to this clinic.
+                  </span>
+                </label>
                 <label className='elixhealth-field elixhealth-field--full'>
                   <span>Branch location</span>
                   <input

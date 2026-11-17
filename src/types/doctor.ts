@@ -32,7 +32,10 @@ export type ConsultationCurrency = 'USD' | 'INR';
 
 export type ConsultationTier = {
   duration_minutes: number;
+  /** Consultation charge in US dollars. */
   fee_usd: number;
+  /** Consultation charge in Indian rupees. */
+  fee_inr?: number;
 };
 
 export type Doctor = {
@@ -63,6 +66,8 @@ export type Doctor = {
   scheduler_effect_from: string | null;
   scheduler_time_interval: number | null;
   consultation_fee: number | null;
+  /** Primary INR consultation charge (mirrors 30-min fee_inr when dual pricing is set). */
+  consultation_fee_inr?: number | null;
   consultation_tiers?: ConsultationTier[];
   consultation_currency?: ConsultationCurrency;
   elix_patient_priority: boolean;
@@ -120,6 +125,7 @@ export type AdminDoctorUpdateInput = {
   scheduler_effect_from: string | null;
   scheduler_time_interval: number | null;
   consultation_fee: number;
+  consultation_fee_inr?: number;
   consultation_tiers: ConsultationTier[];
   consultation_currency: ConsultationCurrency;
   elix_patient_priority: boolean;

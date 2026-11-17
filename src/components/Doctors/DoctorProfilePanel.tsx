@@ -2,16 +2,23 @@ import { Loader2, Star } from 'lucide-react';
 import type { ReactNode } from 'react';
 import ConsultationTierPricingDisplay from './ConsultationTierPricingDisplay';
 import { formatConsultationTiersSummary } from '../../lib/consultationTiers';
-import type { Doctor } from '../../types/doctor';
+import type { ConsultationCurrency, Doctor } from '../../types/doctor';
 
 type DoctorProfilePanelProps = {
   doctor: Doctor | null;
   loading: boolean;
   error: string | null;
   footer?: ReactNode;
+  displayCurrency?: ConsultationCurrency | null;
 };
 
-export default function DoctorProfilePanel({ doctor, loading, error, footer }: DoctorProfilePanelProps) {
+export default function DoctorProfilePanel({
+  doctor,
+  loading,
+  error,
+  footer,
+  displayCurrency = null
+}: DoctorProfilePanelProps) {
   return (
     <section className='section-card doctor-profile-panel' aria-labelledby='doctor-profile-title'>
       <div className='section-head'>
@@ -47,7 +54,7 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
               <div className='tag-row'>
                 <span className='tag'>{doctor.country}</span>
                 <span className='tag'>{doctor.languages}</span>
-                <span className='tag'>{formatConsultationTiersSummary(doctor)}</span>
+                <span className='tag'>{formatConsultationTiersSummary(doctor, displayCurrency)}</span>
               </div>
             </div>
           </div>
@@ -76,7 +83,11 @@ export default function DoctorProfilePanel({ doctor, loading, error, footer }: D
             <div>
               <dt>Consultation fee</dt>
               <dd>
-                <ConsultationTierPricingDisplay doctor={doctor} />
+                <ConsultationTierPricingDisplay
+                  doctor={doctor}
+                  displayCurrency={displayCurrency}
+                  showLabel={false}
+                />
               </dd>
             </div>
             <div>
